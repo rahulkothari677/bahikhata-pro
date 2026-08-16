@@ -897,3 +897,39 @@ enough of those.
 
 The other three Royal checks do discriminate: they assert text only those
 blocks emit.
+
+---
+
+## 🐛 Every design was printing an ordinary bill on two pages (16 Aug)
+
+Found by rendering a Royal bill and **looking at it** — five items, and it came
+out as a page of empty ruled rows followed by a nearly blank second page
+carrying the totals. No test failed. Every existing guard checks that things
+are DRAWN and that nothing falls off the paper; a second page satisfies both.
+
+Two causes, both the same shape — **a distance guessed in one place and
+consumed in another**:
+
+1. **The padder reserved `min(90, 30%)` for the footer.** Royal's footer is
+   about 165mm on A4 — ruled totals, grand-total box, paid and balance lines,
+   amount in words, terms, bank details, signature.
+2. **The bottom block asked `newPageIfNeeded(y, 70)`**, where 70mm is how far
+   above the bottom edge it is ANCHORED, not what it needs. It consumes 38.
+   And `newPageIfNeeded` keeps a further 25mm clear for flowing content —
+   right for flowing content, wrong for a block deliberately anchored into
+   that strip.
+
+### The fix
+
+`src/lib/invoice-footer-room.ts` — the footer's size computed ONCE, from the
+blocks that will actually be drawn, with every constant copied from the draw
+call that consumes it. The padder asks it. Two guessed constants replaced by
+one measurement, because two things describing one thing will disagree
+(CLAUDE.md, Cause 2) and a better guess is still two guesses.
+
+### It affected all ten designs, not just Royal
+
+The guard renders an ordinary five-item bill through every layout and counts
+the pages. **Proved both ways:** with the old check restored, 10 of 10 fail.
+Without it, 10 of 10 pass. This is not a padded-layout bug — any shop with
+terms, bank details and a signature was getting two pages.

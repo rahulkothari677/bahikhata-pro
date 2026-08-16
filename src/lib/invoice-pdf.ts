@@ -16,6 +16,7 @@
  */
 
 import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
+import { footerRoomMm, padStopY, bottomBlockNeedMm } from './invoice-footer-room'
 import { paletteFor } from './pdf/palette'
 import { getInvoiceLayout } from './invoice-layouts'
 import { getInvoiceStyle, DENSITY_METRICS } from './invoice-styles'
@@ -846,8 +847,46 @@ export async function generateInvoicePDF(
    * the shopkeeper pays for that paper.
    */
   if (layout.tableFill === 'pad') {
-    const reserveForFooter = Math.min(90, pageHeight * 0.30)
-    const roomLeft = (pageHeight - reserveForFooter) - y
+    /*
+     * 🐛 2026-08-16 — A FIVE-ITEM BILL CAME OUT ON TWO PAGES.
+     *
+     * This reserved `min(90, 30% of the sheet)` for everything below the
+     * table — a number I chose while looking at one bill. Royal's footer is
+     * about 165mm on A4, so the padding ran the rows down to 208mm, the
+     * footer would not fit, and the shopkeeper got a page of empty ruled
+     * rows followed by a nearly blank second page carrying the totals.
+     *
+     * Now it asks how big the footer ACTUALLY is, from the blocks that will
+     * actually be drawn. See invoice-footer-room.ts for why that lives in a
+     * file of its own rather than as a better constant here.
+     */
+    const termsLineCount = (() => {
+      if (!invoice.shop.terms) return 0
+      // splitTextToSize measures at the CURRENT font size, so ask at the size
+      // the terms block will use, then put the size back.
+      const was = doc.getFontSize()
+      doc.setFontSize(metrics.smallPt)
+      const n: number = doc.splitTextToSize(invoice.shop.terms, tableWidth * 0.62).length
+      doc.setFontSize(was)
+      return n
+    })()
+    const bankLineCount = [
+      invoice.shop.bank?.name, invoice.shop.bank?.accountName,
+      invoice.shop.bank?.accountNumber, invoice.shop.bank?.ifsc,
+    ].filter(Boolean).length
+
+    const reserveForFooter = footerRoomMm({
+      totalsRowCount:
+        2 // Subtotal and Taxable Value always print
+        + (invoice.discount > 0 ? 1 : 0)
+        + (invoice.cgst > 0 ? 1 : 0) + (invoice.sgst > 0 ? 1 : 0) + (invoice.igst > 0 ? 1 : 0)
+        + (invoice.roundOff && Math.abs(invoice.roundOff) >= 0.005 ? 1 : 0),
+      ruledTotals: layout.totals === 'ruled',
+      hasDue: invoice.due > 0,
+      hasPartyBalance: !!invoice.partyBalanceLabel,
+      termsLineCount, bankLineCount, pageHeight,
+    })
+    const roomLeft = padStopY(pageHeight, reserveForFooter) - y
     const blanks = Math.max(0, Math.floor(roomLeft / baseRowHeight))
     for (let n = 0; n < blanks; n++) {
       if (style.zebra && (invoice.items.length + n) % 2 === 1) {
@@ -1098,7 +1137,35 @@ export async function generateInvoicePDF(
    * sheet rather than a number chosen while looking at one size of paper.
    */
   const bottomBlockMm = Math.min(70, pageHeight * 0.24)
-  y = newPageIfNeeded(doc, y, bottomBlockMm, undefined, pageHeight)
+  /*
+   * Ask for what the block CONSUMES, not for where it is anchored.
+   *
+   * 🐛 2026-08-16: this asked for the full `bottomBlockMm`, which is the
+   * distance the block sits above the bottom edge. A five-item Royal bill
+   * with terms and bank details had `y` inside that band, so it took a new
+   * page — and printed a page of empty ruled rows followed by a nearly blank
+   * second page. See bottomBlockNeedMm.
+   */
+  const bottomNeed = bottomBlockNeedMm({
+    hasQr: !!(invoice.shop.paymentQrUrl || invoice.shop.upiId) && dueAmount > 0,
+    wantsSignature: invoice.shop.showSignatureBox !== false || !!invoice.shop.signatureUrl,
+    wantsReceiverSignature: !!invoice.shop.showReceiverSignature,
+  })
+  /*
+   * Checked against the SHEET, not through `newPageIfNeeded`.
+   *
+   * That helper keeps a 25mm strip clear at the bottom, which is right for
+   * flowing content and wrong here: this block is deliberately anchored INTO
+   * that strip, at `pageHeight - bottomBlockMm`. Asking the helper meant a
+   * block that plainly fits — anchored at 227mm on A4 and ending by 293 —
+   * was told there was no room, and took a page of its own.
+   *
+   * 6mm is the frame line, so nothing is drawn over it.
+   */
+  if (y + 5 + bottomNeed > pageHeight - 6) {
+    doc.addPage()
+    y = 25
+  }
   const bottomY = Math.max(y + 5, pageHeight - bottomBlockMm)
 
   /*

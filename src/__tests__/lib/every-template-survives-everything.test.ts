@@ -176,6 +176,33 @@ describe.each(INVOICE_LAYOUTS.map(t => [t.id, t.name] as [string, string]))(
   },
 )
 
+/** Read a rendered PDF back as a binary string so its operators can be inspected. */
+const readBlob = (blob: Blob) => new Promise<string>((res, rej) => {
+  const r = new FileReader()
+  r.onload = () => res(String(r.result))
+  r.onerror = () => rej(new Error('could not read the PDF'))
+  r.readAsBinaryString(blob)
+})
+
+/**
+ * A perfectly ordinary bill: five items, a shop with terms and bank details.
+ * Nothing hostile about it — which is the point. The maximal invoice proves
+ * nothing falls off the paper; this proves an ordinary sale does not sprawl.
+ */
+const FIVE_ITEM_BILL: InvoiceSource = {
+  invoiceNo: 'RKS/2026-27/0512', date: '2026-08-16',
+  party: {
+    name: 'M/s. Shekhawat Royal Boutique', gstin: '08BCCPS9012M1Z4',
+    state: 'Rajasthan', address: 'C-Scheme, Jaipur, Rajasthan - 302001',
+  },
+  items: Array.from({ length: 5 }, (_, n) => ({
+    productName: `Pure Banarasi Katan Silk Saree ${n + 1}`, quantity: 4,
+    unitPrice: 18500, gstRate: 5, total: 73815, unit: 'Pcs', hsn: '5007',
+  })),
+  subtotal: 202740, discountAmount: 0, cgst: 7343.5, sgst: 7343.5, igst: 0,
+  totalAmount: 217427, paidAmount: 0, paymentMode: 'credit',
+}
+
 describe('the column fallback is real, not decorative', () => {
   /*
    * The rule that makes "works with all the fields" true: a template asks for
@@ -333,4 +360,41 @@ describe('Royal Gold draws every block it promises', () => {
    * The three tests above DO discriminate — they check text that only the
    * Royal blocks emit.
    */
+})
+
+
+describe('a bill that fits on one page comes out on one page', () => {
+  /*
+   * 🐛 2026-08-16. Royal printed a FIVE-ITEM bill on two pages: a page of
+   * empty ruled rows, then a nearly blank second page carrying the totals.
+   * Two separate causes, both the same shape — a distance guessed in one
+   * place and consumed in another.
+   *
+   *   1. The padder reserved `min(90, 30%)` for the footer. Royal's footer
+   *      is about 165mm on A4.
+   *   2. The bottom block asked `newPageIfNeeded(y, 70)`, where 70mm is how
+   *      far above the bottom edge it is ANCHORED — not what it needs. It
+   *      consumes 38.
+   *
+   * Nothing failed. Every existing guard checks that things are DRAWN and
+   * that nothing falls off the paper; a second page satisfies both. I found
+   * it by rendering the bill and looking at it, which is the only reason it
+   * is fixed rather than reported by Rahul.
+   *
+   * PROVED BOTH WAYS: with `bottomBlockNeedMm` swapped back to the anchor
+   * distance this test reports 2 pages and fails. It is a guard, not a
+   * comment with a green tick beside it (CLAUDE.md, Cause 7).
+   */
+  const pageCount = (pdf: string) => (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length
+
+  it.each(INVOICE_LAYOUTS.map(l => [l.id] as const))(
+    "%s keeps a five-item bill on one sheet",
+    async layoutId => {
+      const blob = await generateInvoicePDF(
+        buildInvoiceDocument(FIVE_ITEM_BILL, LOADED_SHOP),
+        { templateId: layoutId, themeId: 'royal' },
+      )
+      const pdf = await readBlob(blob)
+      expect({ layoutId, pages: pageCount(pdf) }).toEqual({ layoutId, pages: 1 })
+    }, 90000)
 })
