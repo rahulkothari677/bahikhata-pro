@@ -90,7 +90,7 @@ is scoped. The current half-state is the dangerous one.
 ---
 
 ## D-04 · Compensation cess is unsupported end to end
-**Status:** OPEN **Severity:** High (compliance) **Found:** Phase 1
+**Status:** SUPERSEDED by D-23 (cess abolished 1 Feb 2026) **Found:** Phase 1
 
 There is no cess **rate** field anywhere. `TransactionItem` stores `csamt` (an amount) with
 nothing to divide it by, and nothing in the app ever writes a non-zero value. The code says
@@ -511,7 +511,69 @@ hiding a question saves a shopkeeper's time on every product they ever add.
 
 ---
 
+## D-23 · The app cannot bill at 40% — the slab that replaced cess in Feb 2026
+**Status:** OPEN **Severity:** CRITICAL (live compliance) **Found:** Phase 5, reproduced live
+
+Compensation cess was discontinued for most goods on 22 Sep 2025 and **abolished entirely on
+1 Feb 2026**. It was replaced by a **40% GST slab** for tobacco, pan masala, gutkha, chewing
+tobacco and aerated drinks.
+
+The app's rate picker stops at 28%:
+
+```
+src/components/inventory/ProductDialog.tsx:23   const GST_RATES = [0, 5, 12, 18, 28]
+src/components/ledger/TransactionDetail.tsx:1588        [0, 5, 12, 18, 28]
+src/components/ledger/TransactionEntry.tsx:1947         [0, 5, 12, 18, 28]
+src/components/reports/Reports.tsx:808, 842             [0, 5, 12, 18, 28]
+```
+
+**Reproduced live.** The API and the tax engine are correct — `POST /api/products` with
+`gstRate: 40` stored 40, and a ₹100 sale produced CGST ₹20 + SGST ₹20 = ₹140. Only the
+**picker** cannot offer it.
+
+**Why it matters:** a paan shop, a general store selling cigarettes, or anyone stocking cold
+drinks cannot select the legally correct rate through the UI. The nearest option is 28%, so
+they under-charge tax by 12 points and under-report it on GSTR-1 and GSTR-3B. Every such bill
+is wrong, and the shortfall is the shop's liability.
+
+**Suggested fix:** add 40 to the list — and move the list to ONE place. It is duplicated in
+five files, so a rate change is five edits, and this defect is the proof that they drift.
+
+---
+
+## D-24 · Specific (per-quantity) duty cannot be expressed at all
+**Status:** OPEN **Severity:** Medium (segment-blocking) **Found:** Phase 5, from research
+
+From 1 Feb 2026, cigarettes additionally attract an excise duty of roughly **₹2,050–₹8,500 per
+1,000 sticks**, varying by length. This is a *specific* duty — charged per quantity, not as a
+percentage of value.
+
+Every tax path in this app is **ad valorem**: `calculateGst` multiplies a taxable value by a
+rate. There is no way to express "₹X per 1,000 units", so a tobacco retailer's bill cannot be
+assembled correctly even if D-23 is fixed.
+
+**Note on scope:** this affects a narrow set of goods, but it is a *shape* of tax the model
+cannot represent, not a missing number. Worth knowing before someone adds a "cess amount"
+field and assumes it generalises.
+
+---
+
+## D-25 · The GST rate list is duplicated in five files
+**Status:** OPEN **Severity:** Medium (structural) **Found:** Phase 5
+
+`[0, 5, 12, 18, 28]` is written out in five separate components. There is no shared constant.
+
+D-23 is the consequence: the statutory slab changed and five places would each have needed
+editing, so none were. Any future rate change has the same shape. GST slabs have changed
+materially twice in the last year.
+
+**Suggested fix:** one exported constant, with the rate list treated as data that changes —
+and a test that fails if a component hard-codes a rate array.
+
+---
+
 ## Cross-reference
+
 
 
 The programme rulebook is `docs/entry-model/RULEBOOK.md`. Section 9 there carries a summary

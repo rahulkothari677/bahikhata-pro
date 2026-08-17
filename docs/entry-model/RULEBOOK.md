@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 4 complete, 17 Aug 2026**
+Last verified: **Phase 5 complete, 17 Aug 2026**
 
 ---
 
@@ -172,7 +172,12 @@ Four dimensions the model needs, none of which exist today:
 3. **The supplied bills are AI-generated, not real invoices.** The founder confirmed this
    after I described them as "six genuine Indian invoices". Conclusions that rest only on
    those images must be re-grounded independently — see §5a.
-4. **"Stock goes to −23" was wrong.** `box`/`packet`/`bag` have no conversion by design
+4. **Cess is ABOLISHED, not merely unsupported.** Discontinued for most goods 22 Sep 2025 and
+   abolished entirely 1 Feb 2026, replaced by a 40% GST slab. D-04 asked for a cess model;
+   building it would have been building for a dead tax. The real defect is that no rate picker
+   offers 40% (D-23). Lesson: **check whether the requirement still exists before designing
+   for it.**
+5. **"Stock goes to −23" was wrong.** `box`/`packet`/`bag` have no conversion by design
    (the factor is per-product). Buying 1 box of 24 raises stock by **1** — under-counted,
    not negative.
 
@@ -198,6 +203,29 @@ generated specimens. Grounds Phase 3.)*
 - **Pharma HSN spans 3003, 3004 and 3006**, each with different GST rates — so tax must be
   captured per line, never averaged across the invoice.
 - Lost batch data prevents expiry-driven compliance traces and **expired-stock ITC reversals**.
+
+## 5c. COMPLIANCE THAT ALREADY EXISTS (verified Phase 5 — do not rebuild)
+
+| Feature | State | Where |
+|---|---|---|
+| Reverse charge (RCM) | **Complete end to end** | UI checkbox → zod → `Transaction.isReverseCharge` → GSTR-3B 3.1(d) |
+| E-way bill | **Complete** | `eway-bill.ts`, Rs 50,000 threshold, `ewayBillNeed()` |
+| Composition scheme | **Complete** | rates incl. restaurant 5%, state limits, CMP-08, bill of supply |
+| Advance tax | **Complete** | GSTR-1 11A/11B and 3B from one shared function |
+| Blocked ITC | Present | `itcBlockedReason` on the transaction |
+| E-invoice applicability | **Complete** | Rs 5 crore, "once crossed it stays" |
+
+The compliance surface is **strong with a few sharp holes** — not thin. The remaining gaps are
+the 40% slab, the pack ladder, UQC at entry, and a decision on specific duty.
+
+### The pack ladder decision (Phase 5)
+
+Compared three models. **Marg ERP** (the Indian pharmacy standard) uses TWO units plus a
+conversion factor plus an explicit "allow loose/decimal" flag — not an arbitrary ladder.
+**ERP UoM groups** (SAP/BC) add the insight that stock is held in a BASE unit with separate
+purchase and sales units. **Chosen: base unit + one named pack, stock always in the base**,
+with a box→pack factor asked once at purchase and remembered per supplier. An N-level ladder
+was rejected as over-built: every extra level is somewhere a wrong factor can hide.
 
 ## 5b. A WORKING METHOD, EARNED THE HARD WAY
 
@@ -248,7 +276,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | 02 | Five trades, five catalogues | ▶ In progress — kirana account open, first-run captured |
 | 03 | Catalogue acquisition (bill/PDF/Excel/barcode) | ✅ Complete — design done; real-photo accuracy still unmeasured |
 | 04 | The relevance engine (purpose + field switches) | Complete |
-| 05 | Units, cess and CA-grade compliance completeness | Pending |
+| 05 | Units, cess and CA-grade compliance completeness | Complete |
 | 06 | The entry surface, benchmarked | Pending |
 | 07 | Purchase → inventory → sale as one motion | Pending |
 | 08 | Mobile interaction design (real device) | Pending |
@@ -274,6 +302,9 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | Scan cost per document is unbounded (usage limits count scans, not size) | LOGGED |
 | Unregistered shop still asked HSN / GST rate / GST treatment | LOGGED |
 | Field visibility exists for the printed bill, not the entry form | LOGGED |
+| **40% slab missing from every rate picker — live under-charging** | LOGGED |
+| Specific (per-quantity) duty cannot be expressed at all | LOGGED |
+| GST rate list duplicated in five files | LOGGED |
 | **Part-pack sale deducts whole packs — 15x stock error, silent** | LOGGED |
 | Batch/expiry cannot attach to stock; no FEFO, no expiry guard | LOGGED |
 | Sizes sort alphabetically (L, M, S, XL, XXL) | LOGGED |
