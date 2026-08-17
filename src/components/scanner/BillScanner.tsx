@@ -23,6 +23,7 @@ import { Capacitor } from '@capacitor/core'
 import { resolveEnteredQuantity, convertQuantity, UNIT_OPTIONS } from '@/lib/units'
 import { roundMoney } from '@/lib/money'
 import { computeLineItems } from '@/lib/line-items'
+import { GST_RATES } from '@/lib/gst-rates'
 
 /**
  * takePhotoNative — uses Capacitor Camera plugin on native (Android app)
@@ -1046,7 +1047,7 @@ export function BillScanner() {
                             onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
                             className="w-full bg-background border border-border rounded focus:ring-1 focus:ring-primary text-sm px-1 py-1"
                           >
-                            {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                            {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
                           </select>
                         </div>
                       </div>

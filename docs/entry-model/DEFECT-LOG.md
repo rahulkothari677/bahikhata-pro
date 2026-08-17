@@ -511,8 +511,8 @@ hiding a question saves a shopkeeper's time on every product they ever add.
 
 ---
 
-## D-23 · The app cannot bill at 40% — the slab that replaced cess in Feb 2026
-**Status:** OPEN **Severity:** CRITICAL (live compliance) **Found:** Phase 5, reproduced live
+## D-23 · The app cannot bill at 40% — the slab that replaced cess
+**Status:** FIXED 2026-08-17, verified live **Severity:** CRITICAL (live compliance) **Found:** Phase 5, reproduced live
 
 **Instrument:** Notification 09/2025-Central Tax (Rate) dated 17 Sep 2025, as amended (the
 09/2025–16/2025 series), following the 56th GST Council meeting. Compensation cess is set to
@@ -553,8 +553,18 @@ is wrong, and the shortfall is the shop's liability.
 Note that **bidi needs no new rate** — 18% already exists in the picker. The missing value is
 40%, and it is missing for the two commonest kirana lines there are: cold drinks and cigarettes.
 
-**Suggested fix:** add 40 to the list — and move the list to ONE place. It is duplicated in
-five files, so a rate change is five edits, and this defect is the proof that they drift.
+**FIXED 2026-08-17.** It was duplicated in **seven** files, not five — the sweep found two more
+(`BillScanner.tsx` and `csv-export.ts`). All seven now import `GST_RATES` from the new
+`src/lib/gst-rates.ts`, which carries the notification reference in its header.
+
+Slabs are now `[0, 3, 5, 12, 18, 28, 40]`. **3% was also missing** — gold, silver and
+jewellery sit there, so a jeweller could not bill correctly either. Found by sweeping the
+class (R4) rather than fixing only the reported number.
+
+Guarded by `gst-rates-single-source.test.ts`, which fails the build if any file outside
+`lib/gst-rates.ts` declares its own rate array, and if any picker stops importing the shared
+one. Break-verified four ways: removing 40, removing 3, a component reintroducing a local
+copy, and a picker dropping the import each fail the suite.
 
 ---
 
@@ -575,8 +585,8 @@ field and assumes it generalises.
 
 ---
 
-## D-25 · The GST rate list is duplicated in five files
-**Status:** OPEN **Severity:** Medium (structural) **Found:** Phase 5
+## D-25 · The GST rate list is duplicated in seven files
+**Status:** FIXED 2026-08-17 (one constant + a guard test) **Severity:** Medium (structural) **Found:** Phase 5
 
 `[0, 5, 12, 18, 28]` is written out in five separate components. There is no shared constant.
 

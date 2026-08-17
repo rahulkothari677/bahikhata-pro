@@ -42,6 +42,7 @@ import { TrialBalance } from '@/components/reports/TrialBalance'
 import { ItemWiseProfit } from '@/components/reports/ItemWiseProfit'
 import { ReportsHub } from '@/components/reports/ReportsHub'
 import { EmptyState } from '@/components/common/EmptyState'
+import { GST_RATES } from '@/lib/gst-rates'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
@@ -805,7 +806,7 @@ function GSTReport({ data }: { data: any }) {
                   </tr>
                 </thead>
               <tbody>
-                {[0, 5, 12, 18, 28].map(rate => {
+                {GST_RATES.map(rate => {
                   const o = outputSales.bySlab.find((s: any) => s.rate === rate)
                   const i = inputPurchases.bySlab.find((s: any) => s.rate === rate)
                   const out = o ? o.cgst + o.sgst + o.igst : 0
@@ -839,7 +840,7 @@ function GSTReport({ data }: { data: any }) {
             /* Chart view — grouped bar chart of output tax vs input tax by slab */
             <ResponsiveContainer width="100%" height={280}>
               <BarChart
-                data={[0, 5, 12, 18, 28].map(rate => {
+                data={GST_RATES.map(rate => {
                   const o = outputSales.bySlab.find((s: any) => s.rate === rate)
                   const i = inputPurchases.bySlab.find((s: any) => s.rate === rate)
                   return {

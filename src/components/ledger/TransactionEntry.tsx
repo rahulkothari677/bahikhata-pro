@@ -55,6 +55,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
+import { GST_RATES } from '@/lib/gst-rates'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -1944,7 +1945,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {[0, 5, 12, 18, 28].map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                              {GST_RATES.map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </div>

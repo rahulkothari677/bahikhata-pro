@@ -19,8 +19,9 @@ import { formatINR } from '@/lib/utils'
 import { readError } from '@/lib/read-error'
 import { useSetting } from '@/hooks/use-setting'
 import { defaultTracksInventory } from '@/lib/inventory-tracking'
+import { GST_RATES } from '@/lib/gst-rates'
 
-const GST_RATES = [0, 5, 12, 18, 28]
+
 const UNITS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'm', 'box', 'dozen', 'packet']
 // 🔒 V17 Audit §4.2: GST treatment options for GSTR-3B 3.1(c) breakdown
 const GST_TREATMENTS = [

@@ -43,6 +43,7 @@ import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { NumberField } from '@/components/ui/number-field'
 import { deriveInterStateFromStates } from '@/lib/gst-states'
+import { GST_RATES } from '@/lib/gst-rates'
 
 /**
  * Sentinel values for the party <Select> in the edit dialog.
@@ -1585,7 +1586,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                         <Select value={String(item.gstRate)} onValueChange={(v) => updateItem(i, 'gstRate', parseFloat(v))}>
                           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {[0, 5, 12, 18, 28].map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                            {GST_RATES.map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>

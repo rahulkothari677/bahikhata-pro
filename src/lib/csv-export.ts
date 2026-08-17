@@ -5,6 +5,7 @@
  */
 
 import { Capacitor } from '@capacitor/core'
+import { GST_RATES } from '@/lib/gst-rates'
 
 function escapeCSV(value: any): string {
   if (value === null || value === undefined) return ''
@@ -106,7 +107,7 @@ export async function exportPLReportCSV(data: any, periodLabel: string) {
 export async function exportGSTReportCSV(data: any, periodLabel: string) {
   const { outputSales, inputPurchases, netGSTPayable, totalInvoices } = data
   const headers = ['GST Slab (%)', 'Sales Taxable', 'CGST', 'SGST', 'IGST', 'Purchase Taxable', 'Input CGST', 'Input SGST', 'Input IGST']
-  const slabs = [0, 5, 12, 18, 28]
+  const slabs = GST_RATES
   const rows: (string | number)[][] = [
     ['GST Summary Report', ''],
     ['Period', periodLabel],
