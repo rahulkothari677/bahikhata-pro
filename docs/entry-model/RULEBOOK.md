@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 2 — restaurant, chemist, cloth complete + 6 real bills analysed, 17 Aug 2026**
+Last verified: **Phase 2 complete + pharma-invoice domain research, 17 Aug 2026**
 
 ---
 
@@ -48,6 +48,8 @@ added must be drivable by a command on the day it ships.
 | R9 | **Correct my own errors plainly** and keep going. | Four corrections now; all mattered. |
 | R10 | **Never assert a defect without reproducing it.** | I claimed the party picker was broken; it is not. Being right by luck is not a process. |
 | R11 | **Record where every fact came from** — measured in the app, read in the code, or supplied. Supplied material is a hypothesis until grounded. | Six supplied bills were AI-generated; I had described them as genuine. |
+| R12 | **End every task with a paste-back prompt** for the next task, which re-arms these rules. | The founder's mechanism against drift over a long programme. Format in §12. |
+| R13 | **Re-read the phase outline (§8) at the start and end of every phase**, and IMPROVE it with what was just learned. The plan is a living document, not a contract. | "That's how great product is built" — founder, Phase 2 review. |
 
 ### My own hard lines (not negotiable, even on demo data)
 
@@ -176,6 +178,27 @@ Four dimensions the model needs, none of which exist today:
 
 ---
 
+## 5a. DOMAIN KNOWLEDGE — Indian pharma distributor invoices
+*(Source: published industry analysis of invoice extraction, Aug 2026. Independent of the
+generated specimens. Grounds Phase 3.)*
+
+- **PTR (Price to Retailer)** is the actual taxable base — **not MRP**. Confusing the two is
+  the classic failure, and it cascades: wrong GST base → wrong purchase value → **inflated
+  input tax credit claim → GSTR-2B mismatch**. That is a tax exposure, not a cosmetic error.
+- **PTS (Price to Stockist)** exists alongside PTR; a distributor bill may show both.
+- **Free goods carry NO GST** — free units are "not consideration" under GST. Tools that
+  attribute tax to scheme quantities inflate the taxable base. My own earlier note on free
+  goods covered the *costing* side and missed this *tax* side.
+- **Schemes (10+1) are represented three different ways, with no standard:** a dedicated Free
+  Quantity column; a separate zero-rate line below the paid line; or buried in the description
+  text. An importer must handle all three.
+- **9–12 columns per line** is normal.
+- **Description collapse** is the main OCR failure: HSN, batch, mfg and expiry sit in the same
+  horizontal band as a dense description, so generic extractors merge them into one blob.
+- **Pharma HSN spans 3003, 3004 and 3006**, each with different GST rates — so tax must be
+  captured per line, never averaged across the invoice.
+- Lost batch data prevents expiry-driven compliance traces and **expired-stock ITC reversals**.
+
 ## 6. THE FOUR PROBLEMS, IN ORDER
 
 Phase 1 established that this is not one problem. Solving them out of order wastes the work.
@@ -241,6 +264,18 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 
 ---
 
+## 9a. IMPROVEMENTS ADDED TO THE PLAN (R13 — record each one)
+
+| Phase | Improvement | Why, and when it was learned |
+|---|---|---|
+| 3 | Import must handle **three different scheme representations**, not one | Phase 2 research: no standard exists across distributors |
+| 3 | Import must compute **landed cost** (free goods + apportioned scheme discount), never raw rate | Free goods make stock right and cost wrong, or vice versa |
+| 3 | Import must read **PTR, not MRP**, as the taxable base | The classic failure; leads to inflated ITC and GSTR-2B mismatch |
+| 3 | Accuracy must be measured on a **creased, skewed photo**, not a clean render | Every specimen so far is machine-perfect; the first real bill will not be |
+| 5 | Add **PTR/PTS** to the price model alongside cost/MRP/sale | Three prices exist in pharma, the app models two |
+| 5 | Free goods must be recorded as **zero-consideration**, no GST attributed | Free units are not consideration under GST |
+| 9 | Copy `PartySelect`'s truncation pattern to `ProductPicker` rather than designing one | The correct pattern already exists in the codebase |
+
 ## 10. THE PRE-PHASE CHECK (run this before starting any phase)
 
 1. Does the phase serve §1's sentence? If not, why am I doing it?
@@ -259,3 +294,26 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 3. Record any correction I had to issue in §5.
 4. Ask: has the purpose in §1 drifted? If the last two phases did not move that sentence,
    say so out loud rather than continuing.
+5. **Improve the plan (R13).** What did this phase teach that changes a LATER phase? Record it
+   in §9a and edit §8. A phase that taught nothing about the phases after it was probably too
+   shallow.
+6. **Write the paste-back prompt (R12)** for the next task, in the §12 format.
+
+---
+
+## 12. THE PASTE-BACK PROMPT FORMAT (R12)
+
+Every task ends by handing the founder a block they can paste back to start the next one. It
+must contain, in this order:
+
+1. **The task** — one specific instruction, not a menu.
+2. **What I must produce** — the deliverable, so "done" is unambiguous.
+3. **The re-arming line**, verbatim:
+
+> *Before you start: read `docs/entry-model/RULEBOOK.md`, run the §10 pre-phase check, and
+> follow every rule in §2 — especially R6 (no shortcuts), R10 (never assert a defect without
+> reproducing it) and R11 (record where every fact came from). Improve the phase plan per R13
+> before you finish.*
+
+The point is that the founder does not have to remember what I promised. The prompt carries
+it.
