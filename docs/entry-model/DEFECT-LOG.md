@@ -514,9 +514,23 @@ hiding a question saves a shopkeeper's time on every product they ever add.
 ## D-23 · The app cannot bill at 40% — the slab that replaced cess in Feb 2026
 **Status:** OPEN **Severity:** CRITICAL (live compliance) **Found:** Phase 5, reproduced live
 
-Compensation cess was discontinued for most goods on 22 Sep 2025 and **abolished entirely on
-1 Feb 2026**. It was replaced by a **40% GST slab** for tobacco, pan masala, gutkha, chewing
-tobacco and aerated drinks.
+**Instrument:** Notification 09/2025-Central Tax (Rate) dated 17 Sep 2025, as amended (the
+09/2025–16/2025 series), following the 56th GST Council meeting. Compensation cess is set to
+**Nil** against the specified serial numbers in Chapters 21 and 24.
+
+Two different effective dates, which matters for how long this has been wrong:
+
+| Goods | Rate | Effective |
+|---|---|---|
+| Aerated / sweetened beverages (HSN 2202) — cola, flavoured, sugar-free | **40%** | **22 Sep 2025** |
+| Pan masala, gutkha, chewing tobacco, cigarettes, nicotine inhalation | **40%** | **1 Feb 2026** |
+| **Bidi** | **18%** (reduced from 28%) | 1 Feb 2026 |
+
+The tobacco date was deferred because compensation-cess loan obligations had to be discharged
+first; beverages moved immediately.
+
+**So the gap is ~11 months old, not 7.** Any kirana selling cold drinks has been billing at
+28% since September 2025.
 
 The app's rate picker stops at 28%:
 
@@ -535,6 +549,9 @@ src/components/reports/Reports.tsx:808, 842             [0, 5, 12, 18, 28]
 drinks cannot select the legally correct rate through the UI. The nearest option is 28%, so
 they under-charge tax by 12 points and under-report it on GSTR-1 and GSTR-3B. Every such bill
 is wrong, and the shortfall is the shop's liability.
+
+Note that **bidi needs no new rate** — 18% already exists in the picker. The missing value is
+40%, and it is missing for the two commonest kirana lines there are: cold drinks and cigarettes.
 
 **Suggested fix:** add 40 to the list — and move the list to ONE place. It is duplicated in
 five files, so a rate change is five edits, and this defect is the proof that they drift.

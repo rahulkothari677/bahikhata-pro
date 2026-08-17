@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 5 complete, 17 Aug 2026**
+Last verified: **Phase 5 complete + primary-source correction, 17 Aug 2026**
 
 ---
 
@@ -49,6 +49,7 @@ added must be drivable by a command on the day it ships.
 | R10 | **Never assert a defect without reproducing it.** | I claimed the party picker was broken; it is not. Being right by luck is not a process. |
 | R11 | **Record where every fact came from** — measured in the app, read in the code, or supplied. Supplied material is a hypothesis until grounded. | Six supplied bills were AI-generated; I had described them as genuine. |
 | R12 | **End every task with a paste-back prompt** for the next task, which re-arms these rules. | The founder's mechanism against drift over a long programme. Format in §12. |
+| R14 | **For anything statutory, cite the notification — never a blog.** Rate, threshold, due date and effective date all come from the primary instrument. | I dated the 40% slab to Feb 2026 for all goods; beverages actually moved in Sep 2025, and bidi went DOWN to 18%. Secondary sources blurred three different changes into one. |
 | R13 | **Re-read the phase outline (§8) at the start and end of every phase**, and IMPROVE it with what was just learned. The plan is a living document, not a contract. | "That's how great product is built" — founder, Phase 2 review. |
 
 ### My own hard lines (not negotiable, even on demo data)
@@ -172,6 +173,11 @@ Four dimensions the model needs, none of which exist today:
 3. **The supplied bills are AI-generated, not real invoices.** The founder confirmed this
    after I described them as "six genuine Indian invoices". Conclusions that rest only on
    those images must be re-grounded independently — see §5a.
+6. **The 40% slab has TWO effective dates, and one rate went DOWN.** I wrote that tobacco,
+   pan masala and aerated drinks all moved to 40% on 1 Feb 2026. Wrong on two counts:
+   beverages (HSN 2202) moved on **22 Sep 2025** — so the gap is ~11 months old, not 7 — and
+   **bidi went to 18%**, not 40%. Found only by going to Notification 09/2025-Central Tax
+   (Rate) instead of trusting summaries. This is why R14 exists.
 4. **Cess is ABOLISHED, not merely unsupported.** Discontinued for most goods 22 Sep 2025 and
    abolished entirely 1 Feb 2026, replaced by a 40% GST slab. D-04 asked for a cess model;
    building it would have been building for a dead tax. The real defect is that no rate picker
