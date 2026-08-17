@@ -405,6 +405,45 @@ one.
 
 ---
 
+## D-19 · Bill extraction cannot capture the fields a purchase bill carries
+**Status:** OPEN **Severity:** High (blocks acquisition) **Found:** Phase 3, from source
+
+`/api/scan-bill` asks the model for exactly seven values per line:
+
+```
+[name, quantity, unit, unitPrice, gstRate, total, confidence]
+```
+
+Absent, and therefore unrecoverable even from a perfect reading: **HSN, batch, expiry, MRP,
+PTR, pack size, free quantity, scheme discount.** Phase 2 established every one of these as
+essential to at least one trade.
+
+The route is well built for what it was designed to do — a handwritten kirana note, where
+there is no invoice number, no GSTIN and no tax lines. It was never designed to read a
+distributor invoice, and the field list is the proof.
+
+**Note:** this is a scope gap, not a coding error. Recorded so it is not mistaken for a bug
+in the extraction quality, which is good.
+
+---
+
+## D-20 · "Scan a bill" spends real money with no cost ceiling per document
+**Status:** OPEN **Severity:** Medium (cost) **Found:** Phase 3
+
+`checkUsage(userId, 'aiScans')` limits the NUMBER of scans, not their size. The prompt was
+tuned and priced for a handwritten note; the comments record careful work getting input down
+to ~1,500 characters and switching items to positional arrays because output is priced 6x
+input.
+
+A 20-line distributor invoice with 12 columns is several times that output, and a shop
+importing a year of purchases is many such documents. Nothing currently bounds the cost of a
+single scan.
+
+**Why it matters:** bill import is the feature that makes this urgent, and per-document cost
+is currently unowned. Worth measuring before building, not after.
+
+---
+
 ## Cross-reference
 
 The programme rulebook is `docs/entry-model/RULEBOOK.md`. Section 9 there carries a summary

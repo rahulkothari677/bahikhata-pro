@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 2 complete + pharma-invoice domain research, 17 Aug 2026**
+Last verified: **Phase 3 complete, 17 Aug 2026**
 
 ---
 
@@ -232,7 +232,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 |---|---|---|
 | 01 | Field study at scale & standards research | ✅ Complete |
 | 02 | Five trades, five catalogues | ▶ In progress — kirana account open, first-run captured |
-| 03 | Catalogue acquisition (bill/PDF/Excel/barcode) | Blocked on supplier bill |
+| 03 | Catalogue acquisition (bill/PDF/Excel/barcode) | ✅ Complete — design done; real-photo accuracy still unmeasured |
 | 04 | The relevance engine (purpose + field switches) | Pending |
 | 05 | Units, cess and CA-grade compliance completeness | Pending |
 | 06 | The entry surface, benchmarked | Pending |
@@ -256,6 +256,8 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | **No bulk product import exists at all** (~17h to type 2,000) | LOGGED |
 | **Made goods cannot be sold correctly** — no recipe/BOM model | LOGGED |
 | Unit field accepts any text; UQC degrades to NOS | LOGGED |
+| Bill extraction asks for 7 fields; HSN/batch/expiry/MRP/PTR/pack/free absent | LOGGED |
+| Scan cost per document is unbounded (usage limits count scans, not size) | LOGGED |
 | **Part-pack sale deducts whole packs — 15x stock error, silent** | LOGGED |
 | Batch/expiry cannot attach to stock; no FEFO, no expiry guard | LOGGED |
 | Sizes sort alphabetically (L, M, S, XL, XXL) | LOGGED |
@@ -275,6 +277,10 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | 5 | Add **PTR/PTS** to the price model alongside cost/MRP/sale | Three prices exist in pharma, the app models two |
 | 5 | Free goods must be recorded as **zero-consideration**, no GST attributed | Free units are not consideration under GST |
 | 9 | Copy `PartySelect`'s truncation pattern to `ProductPicker` rather than designing one | The correct pattern already exists in the codebase |
+| 4 | Field visibility must switch per DOCUMENT TYPE too, not only per trade | A pharma import needs batch/expiry even if the sale screen hides them |
+| 7 | Purchase → stock → payable is not a later integration; the import IS that motion | Phase 7 extends it rather than building it |
+| 9 | Batch import requires **batch undo** | Fixing 2,000 wrong rows cannot be 2,000 taps |
+| **NEW** | **Add a phase for AI cost & rate-limit economics** | Currently unowned; bill import makes it urgent (D-20) |
 
 ## 10. THE PRE-PHASE CHECK (run this before starting any phase)
 
