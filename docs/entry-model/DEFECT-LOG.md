@@ -672,7 +672,69 @@ day. A tea shop at 7am and the same shop at 6pm sell different things.
 
 ---
 
+## D-28 · A shop can sell below cost indefinitely and never be told
+**Status:** OPEN **Severity:** High (money) **Found:** Phase 7, reproduced live
+
+A purchase updates the product's cost. Nothing ever revisits the sale price, and nothing
+compares the two.
+
+**Reproduced live, end to end:**
+
+```
+product          cost ₹20, sells ₹30          (margin 33%)
+purchase 50 @ ₹24  → cost becomes ₹24        (margin 20%, no warning)
+purchase 10 @ ₹40  → cost becomes ₹40        (BELOW the ₹30 sale price)
+
+warning on purchase   []          none
+sale of 1 @ ₹30       200 OK      accepted
+grossProfit recorded  −10         the loss IS calculated
+warning on sale       []          none
+```
+
+**The app computes the loss and never mentions it.** `grossProfit: −10` is written to the
+row. It is not a detection problem — the number is right there — it is that the number is
+never promoted to a signal, at either moment it would matter: when the cost is recorded, or
+when the loss-making sale is rung up.
+
+The shopkeeper finds out by opening a profit report later, if they ever do. Until then every
+unit sold loses money, and selling more makes it worse.
+
+**The warning that exists watches something else.** `buildPriceWarnings()` fires when an
+entered price is >5× or <0.2× the catalogue price — a typo detector for ₹300 typed as ₹3,000.
+₹40 against ₹30 is a ratio of 0.8, inside the band, so it stays silent.
+
+**Suggested fix:** at the moment cost changes, ask — *"Dolo now costs ₹24, up from ₹20. You
+sell at ₹30 — margin 20%, was 33%. Keep ₹30, or change it?"* One line, one tap, while the
+supplier's bill is still in front of them. Never reprice automatically: pricing carries
+competitor rates, customer relationships and MRP ceilings the app cannot see. But a sale price
+**below landed cost** is not a judgement call and deserves a confirmation (P4).
+
+**Dependency:** this must be built on **landed** cost, not the raw line rate. See D-29.
+
+---
+
+## D-29 · `updateProductCosts` writes the line rate, not the landed cost
+**Status:** OPEN **Severity:** Medium (correctness) **Found:** Phase 7, from source + Phase 3 arithmetic
+
+The cost update is otherwise carefully built — it runs inside the same database transaction
+as the stock change, uses the taxable ex-GST price per the product's own unit, and documents
+why the last line wins when a product appears twice.
+
+But it writes `item.unitPrice`: the rate on the line. For a simple bill that is correct. For
+any distributor bill carrying free goods or scheme discounts it is not.
+
+Phase 3's worked example: 100 supplied + 10 free at ₹26.50, 10% line discount, ₹120
+apportioned scheme = **110 units at a landed ₹20.59**. Writing ₹26.50 overstates cost by
+**29%**.
+
+**Why it matters now:** D-28 proposes prompting the shopkeeper about margin at the moment
+cost changes. A prompt computed from an overstated cost is confidently wrong, which is worse
+than no prompt. **Landed cost first, price review second.**
+
+---
+
 ## Cross-reference
+
 
 
 

@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 6 complete, 17 Aug 2026**
+Last verified: **Phase 7 complete, 17 Aug 2026**
 
 ---
 
@@ -147,6 +147,22 @@ no GST must see an app that looks built for them.
 - **Units offered: 10** (`pcs kg gm ltr ml m cm box dozen packet`). Missing every
   trade-critical unit: strip, than, sq ft, running foot, bundle, quintal, bottle, pair.
 
+### What a purchase ALREADY does (Phase 7, verified live — do not rebuild)
+
+Recorded a real credit purchase, 50 units at Rs 24, against a product below its low-stock
+threshold. Four of five links work:
+
+| Link | Result |
+|---|---|
+| Stock | 2 -> 52 |
+| Cost | Rs 20 -> Rs 24 |
+| Low-stock alert | cleared itself |
+| Supplier payable | -Rs 1,416 (50 x 24 + 18%) |
+| **Sale price** | **never moves** |
+
+The cost update is careful work: same DB transaction as the stock change, taxable ex-GST
+basis per the product unit, last-line-wins with the reasoning written down.
+
 ### The entry bottleneck, measured (Phase 6)
 
 **It is characters typed, not taps.** For a 42-SKU garment catalogue the median product needs
@@ -250,6 +266,19 @@ purchase and sales units. **Chosen: base unit + one named pack, stock always in 
 with a box→pack factor asked once at purchase and remembered per supplier. An N-level ladder
 was rejected as over-built: every extra level is somewhere a wrong factor can hide.
 
+## 5d. THE RECURRING FLAW: computed, then never used as a signal
+
+Twice now, in two different phases, the app has held the right number and never turned it
+into a prompt:
+
+| Phase | It knows | It never |
+|---|---|---|
+| 4 | gstin, composition, turnover | uses them to decide what to ASK on the entry form |
+| 7 | grossProfit (records -10 on a loss-making sale) | warns that the shop is selling below cost |
+
+This is a category, not two coincidences. **Phase 9 should sweep for every computed-but-unused
+number** rather than wait to trip over the third.
+
 ## 5b. A WORKING METHOD, EARNED THE HARD WAY
 
 **Before designing a rule, look for where this codebase already solved it.** Three times now
@@ -301,7 +330,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | 04 | The relevance engine (purpose + field switches) | Complete |
 | 05 | Units, cess and CA-grade compliance completeness | Complete |
 | 06 | The entry surface, benchmarked | Complete — head-to-head timing still owed |
-| 07 | Purchase → inventory → sale as one motion | Pending |
+| 07 | Purchase → inventory → sale as one motion | Complete |
 | 08 | Mobile interaction design (real device) | Pending |
 | 09 | The connected surfaces (parties, payments, reports) | Pending |
 | 10 | Synthesis and migration | Pending |
@@ -329,6 +358,8 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | Specific (per-quantity) duty cannot be expressed at all | LOGGED |
 | Barcode path paywalled on free AND 0% coverage on paid | LOGGED |
 | Quick-pick: 8 items, localStorage, lost on new phone | LOGGED |
+| **Shop can sell below cost indefinitely, never told (loss IS computed)** | LOGGED |
+| updateProductCosts writes the line rate, not landed cost | LOGGED |
 | GST rate list duplicated in seven files | **FIXED + guard test** |
 | **Part-pack sale deducts whole packs — 15x stock error, silent** | LOGGED |
 | Batch/expiry cannot attach to stock; no FEFO, no expiry guard | LOGGED |
