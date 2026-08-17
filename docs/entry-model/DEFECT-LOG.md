@@ -281,6 +281,74 @@ Flexibility here is right — the fixed list is too small (D-05). But it needs t
 
 ---
 
+## D-15 · Selling part of a pack deducts WHOLE packs — 15× stock error, silently
+**Status:** OPEN **Severity:** Critical **Found:** Phase 2, chemist account, confirmed live
+
+`src/lib/units.ts` converts only within a fixed family (gm↔kg, ml↔ltr, cm↔m, dozen→pcs).
+Pack units — `strip`, `box`, `packet`, `bag`, `bottle` — have no conversion, so a quantity
+entered in a sub-unit is used **as if it were the pack unit**.
+
+**Reproduced live.** A customer asks for 4 tablets from a strip of 15:
+
+| | |
+|---|---|
+| Sold | 4 tablets |
+| Sale result | **200 OK** — no warning of any kind |
+| Strips before → after | **40 → 36** |
+| Strips actually deducted | **4** |
+| Strips that should have been deducted | 4/15 = **0.27** |
+| Error | **15× too much stock removed** |
+
+**Why this is the worst one found so far.** The *money* is correct — 4 × ₹2.07 ≈ ₹8.28 is
+what the customer pays, so the bill looks perfect. Only the stock is wrong, and nothing
+reports it. For a chemist, loose-tablet sales are most sales, so the error compounds every
+hour of trading. Within a week the shop is told it has run out of a drug it holds 30 strips
+of, and the stock valuation on the balance sheet is fiction.
+
+It also silently *hides* the real problem: the app cannot express "1 strip = 15 tablets",
+because the factor is per-product and no per-product factor exists (see D-09 — same root
+cause, far more acute here).
+
+**Suggested fix:** a per-product pack factor, plus a hard refusal to accept a quantity in a
+unit the product cannot convert from. Guessing is what produces the 15×.
+
+---
+
+## D-16 · A chemist cannot record batch or expiry against stock at all
+**Status:** OPEN **Severity:** High (legal) **Found:** Phase 2, chemist account, confirmed live
+
+`POST /api/products` with `batchNo` and `expiryDate` is **rejected**:
+
+> `Unknown field — this request contains fields this endpoint does not understand:
+> "batchNo", "expiryDate"`
+
+(The honest rejection is itself good — it comes from earlier audit work. The gap is that the
+fields do not exist.)
+
+**What does exist, and why it is not enough.** `CustomFieldDef` supports
+`entity = 'party' | 'invoice' | 'item'` — **not `product`**. Custom values are stored on
+`Party.customFields`, `Transaction.customFields` and `TransactionItem.customCols`. So a
+chemist can type a batch number and expiry onto an *invoice line* and print it on the bill,
+but:
+
+- batch and expiry cannot be attached to **stock**;
+- stock is one number per product, never per batch, so "how much of batch B2291 is left?" is
+  unanswerable;
+- there is **no FEFO** (first-expiry-first-out) picking — confirmed, no such logic exists;
+- **nothing prevents selling expired stock**, and there are no expiry alerts;
+- the batch on each bill is retyped by hand from memory, unvalidated, every time.
+
+**Why it matters:** the bill can look compliant while the shop cannot manage the thing the
+law actually cares about. Selling expired medicine is a serious offence, and a recall cannot
+be answered at all.
+
+**Not only chemists.** Every trade needing per-lot attributes hits this: dairy and packaged
+food (expiry), electronics and mobiles (serial / IMEI), jewellery (hallmark), paint (batch
+shade). Per-lot tracking is a missing dimension of the inventory model, not a chemist
+feature.
+
+---
+
 ## Cross-reference
 
 The programme rulebook is `docs/entry-model/RULEBOOK.md`. Section 9 there carries a summary

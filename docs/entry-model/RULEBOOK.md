@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 2, restaurant trade complete, 17 Aug 2026**
+Last verified: **Phase 2 — restaurant + chemist complete, 17 Aug 2026**
 
 ---
 
@@ -172,7 +172,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | Trade | The case it forces out |
 |---|---|
 | Kirana / general store | Volume, barcodes, pack sizes, cess, mixed GST rates |
-| Chemist / pharmacy | Strips, **batch + expiry**, drug licence — the regulated data model |
+| Chemist / pharmacy | Strips, **batch + expiry**, drug licence — **DONE, see D-15/D-16** |
 | Cloth / garment | Metre and *than*, no barcodes, size×colour, the ₹1,000 rate split |
 | Hardware / electrical | Sq ft, running foot, bundle, coil; loose and by weight |
 | Restaurant / sweet shop | Recipes consuming raw stock; inventory ≠ what is sold — **DONE, see D-13** |
@@ -209,6 +209,8 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | **No bulk product import exists at all** (~17h to type 2,000) | LOGGED |
 | **Made goods cannot be sold correctly** — no recipe/BOM model | LOGGED |
 | Unit field accepts any text; UQC degrades to NOS | LOGGED |
+| **Part-pack sale deducts whole packs — 15x stock error, silent** | LOGGED |
+| Batch/expiry cannot attach to stock; no FEFO, no expiry guard | LOGGED |
 | Category is free text, producing junk categories | LOGGED |
 
 ---
