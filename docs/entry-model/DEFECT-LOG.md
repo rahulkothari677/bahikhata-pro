@@ -349,6 +349,47 @@ feature.
 
 ---
 
+## D-17 · Ordered vocabularies sort alphabetically — sizes as well as pack sizes
+**Status:** OPEN **Severity:** Medium **Found:** Phase 2, cloth account, confirmed live
+
+Size lives inside the product name as free text, so a garment shop's sizes come out in
+alphabetical order:
+
+```
+Men's Cotton Shirt L Blue
+Men's Cotton Shirt M Blue
+Men's Cotton Shirt S Blue
+Men's Cotton Shirt XL Blue
+Men's Cotton Shirt XXL Blue
+```
+
+`L, M, S, XL, XXL` — the same disease as `1kg` sorting before `100g` (D-08), now on a
+different ordered vocabulary. Real bills carry three size vocabularies at once: letters
+(`L`), waist numbers (`32`), child ages (`8-9 Y`) and `Free`.
+
+**Scale measured live:** 3 garment designs produced **42 products**; one shirt design alone
+is 20 rows. A shop with 200 designs holds roughly 4,000 rows, with no way to ask for
+"blue, medium".
+
+---
+
+## D-18 · Mixed-unit bills produce a meaningless "total quantity"
+**Status:** OPEN **Severity:** Low (but printed on a tax invoice) **Found:** Phase 2, from a real bill
+
+The Shree Durga Hardware invoice prints:
+
+> **Total Quantity: 710.00 (Various Units)**
+
+That is 10 bags plus 50 kg plus 500 pieces plus 20 cft plus 90 metres added together. The
+shop's own software insisted on a total, so it produced one by adding quantities that share
+no dimension — and printed it on a tax invoice.
+
+Recorded because the app will face the same pressure: any bill spanning several unit
+families must either omit a total quantity or break it down per unit. It must not invent
+one.
+
+---
+
 ## Cross-reference
 
 The programme rulebook is `docs/entry-model/RULEBOOK.md`. Section 9 there carries a summary

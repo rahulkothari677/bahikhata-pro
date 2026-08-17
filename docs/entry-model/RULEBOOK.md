@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 2 — restaurant + chemist complete, 17 Aug 2026**
+Last verified: **Phase 2 — restaurant, chemist, cloth complete + 6 real bills analysed, 17 Aug 2026**
 
 ---
 
@@ -142,6 +142,22 @@ no GST must see an app that looks built for them.
 - **Units offered: 10** (`pcs kg gm ltr ml m cm box dozen packet`). Missing every
   trade-critical unit: strip, than, sq ft, running foot, bundle, quintal, bottle, pair.
 
+### The central finding (Phase 2, from six real bills)
+
+**Every real Indian bill puts the PACK inside the unit column.** `Strip (15 Tab)`,
+`Bag (50 kg)`, `Sachet (21.8 gm)`, `250 g`, `Tin`. A shopkeeper does not think "15 tablets",
+they think "one strip, which is fifteen". The app has one free-text unit string and a global
+conversion table that refuses pack units because the factor is per-product.
+
+**A per-product pack definition is the primitive to build.** The 15x chemist error, the box
+that adds 1 instead of 24, and the pack sizes that sort as text are all this one gap.
+
+Four dimensions the model needs, none of which exist today:
+1. **Pack** — 1 strip = 15 tablets; stock always held in the base unit
+2. **Lot** — batch/expiry on STOCK (also serial/IMEI, hallmark); enables FEFO and recall
+3. **Attributes** — size/colour as ordered typed values, not words in a name
+4. **Composition** — what a made item consumes (dish, sweet, stitched garment)
+
 ### Corrections I have already issued (do not repeat the original error)
 
 1. **Unit conversion DOES exist** — `src/lib/units.ts` converts gm↔kg, ml↔ltr, cm↔m,
@@ -173,7 +189,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 |---|---|
 | Kirana / general store | Volume, barcodes, pack sizes, cess, mixed GST rates |
 | Chemist / pharmacy | Strips, **batch + expiry**, drug licence — **DONE, see D-15/D-16** |
-| Cloth / garment | Metre and *than*, no barcodes, size×colour, the ₹1,000 rate split |
+| Cloth / garment | Metre and *than*, no barcodes, size×colour, the ₹1,000 rate split — **DONE, see D-17** |
 | Hardware / electrical | Sq ft, running foot, bundle, coil; loose and by weight |
 | Restaurant / sweet shop | Recipes consuming raw stock; inventory ≠ what is sold — **DONE, see D-13** |
 
@@ -211,6 +227,8 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | Unit field accepts any text; UQC degrades to NOS | LOGGED |
 | **Part-pack sale deducts whole packs — 15x stock error, silent** | LOGGED |
 | Batch/expiry cannot attach to stock; no FEFO, no expiry guard | LOGGED |
+| Sizes sort alphabetically (L, M, S, XL, XXL) | LOGGED |
+| Mixed-unit bills print a meaningless total quantity | LOGGED |
 | Category is free text, producing junk categories | LOGGED |
 
 ---
