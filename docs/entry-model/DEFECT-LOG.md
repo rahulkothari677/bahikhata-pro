@@ -221,6 +221,66 @@ improvement in this programme is downstream of fixing it.
 
 ---
 
+## D-13 · Anything MADE from other stock cannot be sold correctly
+**Status:** OPEN **Severity:** High (whole trades unusable) **Found:** Phase 2, restaurant account, confirmed live
+
+There is no recipe, bill-of-materials or component model anywhere — confirmed against the
+schema. A product can only consume *itself*. So a shop that makes what it sells has two
+options, and both are wrong.
+
+**Reproduced end to end in the restaurant account:**
+
+| Step | Result |
+|---|---|
+| Sell 2 plates of a dish with `tracksInventory: true` | **400 — refused** |
+| The message the cook is shown | *"Paneer Butter Masala: have 0, selling 2, would go to −2. Record a purchase first, or enable Allow overselling in Settings."* |
+| Set the dish to `tracksInventory: false`, sell again | 200 — accepted |
+| Raw stock afterwards | Paneer **10 → 10**, Onion **30 → 30**, Oil **15 → 15** |
+
+**Path A** — leave stock tracking on: the sale is blocked, and the app instructs the cook to
+*record a purchase of a cooked dish from a supplier*. Nobody buys Paneer Butter Masala
+wholesale. The only shop-wide escape is disabling overselling protection, which is exactly
+the guard the raw materials need.
+
+**Path B** — mark every dish a service: billing works, and **nothing is ever consumed**. The
+kitchen shows 10 kg of paneer forever. Consequences: stock reports permanently wrong,
+reorder alerts never fire, food cost and per-dish margin cannot be computed at all, and
+closing stock on the balance sheet is fiction.
+
+**Why it matters — this is not only restaurants.** It is every shop that makes or assembles:
+sweet shops, bakeries, a tailor consuming cloth, hardware assembling a fitting, a mobile
+shop using spares. The app can take the money and file the GST, but cannot run the
+business.
+
+**Note on the near-miss:** the codebase already fixed the *service* case — `tracksInventory`
+was added because a tailor selling "Blouse stitching" hit this same wall. Manufactured goods
+are a third case that was never separated: they DO consume stock, just not their own.
+
+**Suggested direction:** a component list per product (item → consumes N of another item),
+applied on sale inside the same transaction that already maintains `currentStock`.
+
+---
+
+## D-14 · The unit field accepts any text, so UQC and reporting silently degrade
+**Status:** OPEN **Severity:** Medium **Found:** Phase 2, confirmed live
+
+The 10-unit list is a **UI dropdown only**. `POST /api/products` accepted `unit: "plate"`
+without complaint and stored it.
+
+**Why it matters:** two ways.
+
+1. `mapUnitToNicUqc()` falls back to `NOS` for anything it does not recognise, so `plate`,
+   `strip`, `than` and every typo are all reported to GSTN as `NOS`. The GSTR-1 HSN summary
+   aggregates by UQC, so genuinely different units merge into one row under a unit that is
+   not any of them.
+2. It is the same free-text chaos as `category` (D-07) — `pcs`, `Pcs`, `piece`, `pieces` and
+   `nos` become five different units that never aggregate.
+
+Flexibility here is right — the fixed list is too small (D-05). But it needs to be a
+*chosen* value from an extensible list mapped to a UQC, not an open text field.
+
+---
+
 ## Cross-reference
 
 The programme rulebook is `docs/entry-model/RULEBOOK.md`. Section 9 there carries a summary
