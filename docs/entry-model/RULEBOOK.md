@@ -45,7 +45,9 @@ added must be drivable by a command on the day it ships.
 | R6 | **No shortcuts in verification.** A check needs a control that would differ on failure. | A shortcut check produced a false "deploy landed" this session. |
 | R7 | **Test on fresh data, not old rows.** | Old rows hide the bug that only new data triggers. |
 | R8 | **Surface blockers immediately.** Do not wait silently. | A silent wait reads as being stuck; the founder can often clear it in seconds. |
-| R9 | **Correct my own errors plainly** and keep going. | Two corrections already; both mattered. |
+| R9 | **Correct my own errors plainly** and keep going. | Four corrections now; all mattered. |
+| R10 | **Never assert a defect without reproducing it.** | I claimed the party picker was broken; it is not. Being right by luck is not a process. |
+| R11 | **Record where every fact came from** — measured in the app, read in the code, or supplied. Supplied material is a hypothesis until grounded. | Six supplied bills were AI-generated; I had described them as genuine. |
 
 ### My own hard lines (not negotiable, even on demo data)
 
@@ -162,7 +164,13 @@ Four dimensions the model needs, none of which exist today:
 
 1. **Unit conversion DOES exist** — `src/lib/units.ts` converts gm↔kg, ml↔ltr, cm↔m,
    dozen→pcs and normalises to the product's unit before money and stock maths.
-2. **"Stock goes to −23" was wrong.** `box`/`packet`/`bag` have no conversion by design
+2. **The party picker is NOT broken.** I asserted it had the same truncation bug as the
+   product picker, without checking. It does not — `PartySelect.tsx:210` already prints
+   "Showing 20 of N — keep typing to narrow it down." It is the MODEL to copy, not a defect.
+3. **The supplied bills are AI-generated, not real invoices.** The founder confirmed this
+   after I described them as "six genuine Indian invoices". Conclusions that rest only on
+   those images must be re-grounded independently — see §5a.
+4. **"Stock goes to −23" was wrong.** `box`/`packet`/`bag` have no conversion by design
    (the factor is per-product). Buying 1 box of 24 raises stock by **1** — under-counted,
    not negative.
 

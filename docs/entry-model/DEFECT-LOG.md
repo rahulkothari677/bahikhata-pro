@@ -25,8 +25,23 @@ again by hand — which creates D-02, splitting the stock of a product they alre
 This is the same class as the backup that kept 200 of 307 invoices: silent truncation that
 looks like a complete answer.
 
-**Suggested fix:** show the count and the remainder whenever the list is cut. Better, move
-the search server-side (see D-06) and return a total alongside the page.
+**Suggested fix — THE PATTERN ALREADY EXISTS IN THIS CODEBASE.**
+`src/components/common/PartySelect.tsx` solves exactly this, correctly:
+
+```
+line 177   "{N} matches"                              — live count while searching
+line 210   filteredParties.length > 20 && (
+line 212     "Showing 20 of {N} — keep typing to narrow it down."
+```
+
+So the product picker does not need a new design. It needs the treatment its sibling
+already has. Better still, move search server-side (D-06) and return a total with the page.
+
+> **Correction (2026-08-17).** An earlier draft of the rulebook asserted that the party
+> picker "has the same truncation bug". That was false — I wrote it without checking.
+> Verified: PartySelect handles truncation properly. Recorded because the error is
+> instructive twice over: I asserted without evidence, and the thing I dismissed turned out
+> to be the model to copy.
 
 ---
 
