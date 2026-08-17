@@ -8,9 +8,27 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 9 complete, 17 Aug 2026**
+Last verified: **PROGRAMME COMPLETE, 17 Aug 2026** — all 10 phases closed
 
 ---
+
+## 0. STATUS — the programme is complete
+
+All ten phases closed on 17 Aug 2026. Reports are Artifacts; findings are in DEFECT-LOG.md.
+
+| | |
+|---|---|
+| Defects logged | **35** (1 critical, 11 high, 19 medium, 2 low) |
+| Fixed + verified live | **8** |
+| Corrections I issued on my own work | **7** |
+| Standing rules | **14** (four born from a mistake) |
+
+**The migration, in one line:** Wave 0 shipped (15x stock, 40% slab, rate list) → Wave 1 cheap
+signals, days, no schema change → Wave 2 server-side search then Item/Variant, the 20-to-1 win,
+highest risk → Wave 3 trade profile + pack ladder → Wave 4 acquisition → Wave 5 lot + composition.
+
+**Still outstanding and worth more than another phase:** one shopkeeper, one busy hour, one
+cheap phone. Also a real distributor bill photo, and a head-to-head benchmark on one device.
 
 ## 1. THE PURPOSE (never lose this)
 
@@ -360,7 +378,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | 07 | Purchase → inventory → sale as one motion | Complete |
 | 08 | Mobile interaction design | Complete — real-device session still owed |
 | 09 | The connected surfaces | Complete — 4 surfaces swept, not the whole app |
-| 10 | Synthesis and migration | Pending |
+| 10 | Synthesis and migration | Complete — programme closed |
 
 ---
 
