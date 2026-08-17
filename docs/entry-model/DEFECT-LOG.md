@@ -466,7 +466,53 @@ is currently unowned. Worth measuring before building, not after.
 
 ---
 
+## D-21 · A shop with no GSTIN is still asked for HSN, GST rate and GST treatment
+**Status:** OPEN **Severity:** High (adoption) **Found:** Phase 4, reproduced live
+
+Reproduced in the cloth account, whose settings carry `gstin: null`, `state: null`,
+`compositionCategory: null` — an unregistered shop by every signal the app holds.
+
+Opening **Add Product** renders 15 labels and 17 input controls. Four of them are GST:
+
+```
+HSN/SAC Code
+GST Rate (%)
+GST Treatment
+Sale price includes GST (MRP)
+```
+
+The only conditional rendering in the whole form is the profit-margin preview, gated on
+`hideProfit`. Nothing else is ever hidden.
+
+**Why it matters:** this is the first screen a new shop meets after the theme picker (D-10).
+A tailor or a cloth merchant doing plain udhaar is asked four tax questions they have no
+answer to, before they have sold anything. Research on Bharat-facing fintech is consistent
+that an overwhelming first screen does not merely annoy — the task is abandoned.
+
+**The app already knows enough to decide.** `Setting` holds `gstin`, `state`,
+`compositionCategory` and `priorFyTurnover`; `einvoice-applicability.ts` already reasons
+about the ₹5 crore threshold; `BillOfSupplyNotice` already gates UI on `compositionCategory`.
+The signals exist and are used on the **output** side. Nothing uses them on the **entry** side.
+
+---
+
+## D-22 · Field visibility exists for the printed bill, but not for the entry form
+**Status:** OPEN **Severity:** Medium **Found:** Phase 4, from source
+
+`Setting` carries a family of visibility switches — `showSignatureBox`,
+`showReceiverSignature`, `showPartyBalance`, `showItemDescription`, `showAlternateUnit`,
+`showInvoiceTime`, `docShareLink`. Every one governs what appears on the **printed document**.
+
+There is no equivalent for what the shopkeeper is **asked to fill in**. The output side is
+configurable; the input side is fixed.
+
+**Why it matters:** the burden is on the input side. Hiding a column on a bill saves ink;
+hiding a question saves a shopkeeper's time on every product they ever add.
+
+---
+
 ## Cross-reference
+
 
 The programme rulebook is `docs/entry-model/RULEBOOK.md`. Section 9 there carries a summary
 of this file; this file is the detail.

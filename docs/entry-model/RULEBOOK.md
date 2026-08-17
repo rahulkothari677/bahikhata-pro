@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 3 complete, 17 Aug 2026**
+Last verified: **Phase 4 complete, 17 Aug 2026**
 
 ---
 
@@ -199,6 +199,20 @@ generated specimens. Grounds Phase 3.)*
   captured per line, never averaged across the invoice.
 - Lost batch data prevents expiry-driven compliance traces and **expired-stock ITC reversals**.
 
+## 5b. A WORKING METHOD, EARNED THE HARD WAY
+
+**Before designing a rule, look for where this codebase already solved it.** Three times now
+the correct pattern was one file away from the broken one:
+
+| Problem | Where the answer already lived |
+|---|---|
+| Silent list truncation | `PartySelect.tsx` — "Showing 20 of N — keep typing to narrow it down." |
+| Extracted money must tie to the header | restore's quarantine of rows whose totals disagree with their items |
+| What happens to a switched-off field | `api/custom-fields` DELETE — soft retire, values kept, re-create revives |
+
+Checking first is cheaper than designing, and it keeps the app internally consistent — which
+is worth more than any individual clever answer.
+
 ## 6. THE FOUR PROBLEMS, IN ORDER
 
 Phase 1 established that this is not one problem. Solving them out of order wastes the work.
@@ -233,7 +247,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | 01 | Field study at scale & standards research | ✅ Complete |
 | 02 | Five trades, five catalogues | ▶ In progress — kirana account open, first-run captured |
 | 03 | Catalogue acquisition (bill/PDF/Excel/barcode) | ✅ Complete — design done; real-photo accuracy still unmeasured |
-| 04 | The relevance engine (purpose + field switches) | Pending |
+| 04 | The relevance engine (purpose + field switches) | Complete |
 | 05 | Units, cess and CA-grade compliance completeness | Pending |
 | 06 | The entry surface, benchmarked | Pending |
 | 07 | Purchase → inventory → sale as one motion | Pending |
@@ -258,6 +272,8 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | Unit field accepts any text; UQC degrades to NOS | LOGGED |
 | Bill extraction asks for 7 fields; HSN/batch/expiry/MRP/PTR/pack/free absent | LOGGED |
 | Scan cost per document is unbounded (usage limits count scans, not size) | LOGGED |
+| Unregistered shop still asked HSN / GST rate / GST treatment | LOGGED |
+| Field visibility exists for the printed bill, not the entry form | LOGGED |
 | **Part-pack sale deducts whole packs — 15x stock error, silent** | LOGGED |
 | Batch/expiry cannot attach to stock; no FEFO, no expiry guard | LOGGED |
 | Sizes sort alphabetically (L, M, S, XL, XXL) | LOGGED |
@@ -281,6 +297,12 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | 7 | Purchase → stock → payable is not a later integration; the import IS that motion | Phase 7 extends it rather than building it |
 | 9 | Batch import requires **batch undo** | Fixing 2,000 wrong rows cannot be 2,000 taps |
 | **NEW** | **Add a phase for AI cost & rate-limit economics** | Currently unowned; bill import makes it urgent (D-20) |
+| 3 | The trade tile also selects the STARTER CATALOGUE — acquisition and relevance are one decision | Phase 4 |
+| 5 | The trade tile selects the UNIT SET and pack vocabulary; units are per-trade, not global | Phase 4 |
+| 5 | Cess visibility driven by WHAT IS STOCKED, not by a switch | Phase 4 |
+| 6 | The entry surface must read fieldState() rather than hard-coding columns | Phase 4 |
+| 9 | Reports and GSTR-1 must read HIDDEN values too | Phase 4 |
+| **NEW** | **Add a phase for vernacular / language** — trade tiles are where it first bites | Phase 4 |
 
 ## 10. THE PRE-PHASE CHECK (run this before starting any phase)
 
