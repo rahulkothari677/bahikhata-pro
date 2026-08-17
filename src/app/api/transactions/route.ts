@@ -13,7 +13,7 @@ import { apiError } from '@/lib/api-error'
 import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
 import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
-import { normalizeToUnit } from '@/lib/units'
+import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
 import { tracksStock, stockAffectingLines } from '@/lib/inventory-tracking'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
@@ -509,6 +509,7 @@ export async function POST(req: NextRequest) {
       // each line passes (5-3=2), but the actual total is 5-6=-1 (should warn).
       // Now: sum quantities per product first, then check the combined total.
       const qtyByProduct = new Map<string, number>()
+      const unitConflicts: { productName: string; productUnit: string; enteredUnit: string; quantity: number }[] = []
       for (const item of items) {
         if (!item.productId) continue
         const product = productMap.get(item.productId)
@@ -518,12 +519,56 @@ export async function POST(req: NextRequest) {
         // at currentStock = 0, every sale reads as overselling, and the
         // default 'block' policy refuses the invoice outright.
         if (!tracksStock(product)) continue
-        const requestedQty = normalizeToUnit(
+        const norm = normalizeToUnit(
           Number(item.quantity) || 0,
           item.unit || product.unit,
           product.unit,
-        ).quantity
-        qtyByProduct.set(item.productId, (qtyByProduct.get(item.productId) || 0) + requestedQty)
+        )
+        /*
+         * 🔒 2026-08-17: REFUSE RATHER THAN INVENT A CONVERSION.
+         *
+         * Reproduced live in a chemist account: selling 4 tablets from a strip
+         * of 15 returned 200 OK and took FOUR STRIPS off the shelf — fifteen
+         * times too much. normalizeToUnit could not convert `tablet` into
+         * `strip`, so it handed the number back untouched and this line spent
+         * it as strips. The money was right, so the bill looked perfect and
+         * nothing reported it.
+         *
+         * We do not know how many tablets make a strip; that factor is
+         * per-product and does not exist yet. Guessing is what produced the
+         * 15x, so the honest move is to say so and stop — the same principle
+         * as refusing a backup that would be silently short.
+         */
+        if (norm.incompatible) {
+          unitConflicts.push({
+            productName: product.name,
+            productUnit: product.unit,
+            enteredUnit: normalizeUnitName(item.unit || product.unit),
+            quantity: Number(item.quantity) || 0,
+          })
+          continue
+        }
+        qtyByProduct.set(item.productId, (qtyByProduct.get(item.productId) || 0) + norm.quantity)
+      }
+
+      /*
+       * A unit we cannot convert is not a warning, it is a stop. Letting the
+       * sale through "and sorting the stock out later" is exactly how the
+       * chemist's shelf ended up fifteen times wrong with a correct-looking
+       * bill behind it.
+       */
+      if (unitConflicts.length > 0) {
+        const lines = unitConflicts.map(c =>
+          `• ${c.productName} is measured in ${c.productUnit}, but this line says ${c.quantity} ${c.enteredUnit}. ` +
+          `The app does not know how many ${c.enteredUnit} make one ${c.productUnit}.`,
+        ).join('\n')
+        return NextResponse.json({
+          error: 'Unit mismatch',
+          message:
+            `This entry was not saved, because the stock change would have been wrong:\n\n${lines}\n\n` +
+            `Enter the quantity in ${unitConflicts[0].productUnit}, or change the product's unit to match how you sell it.`,
+          unitConflicts,
+        }, { status: 400 })
       }
 
       for (const [productId, totalQty] of qtyByProduct.entries()) {

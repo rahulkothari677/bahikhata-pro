@@ -8,7 +8,8 @@ import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { computeLineItems } from '@/lib/line-items'
-import { normalizeToUnit } from '@/lib/units'
+import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
+import { UnitMismatchError } from '@/lib/unit-mismatch-error'
 import { tracksStock, stockAffectingLines, tracksStockForReversal } from '@/lib/inventory-tracking'
 import { apiError } from '@/lib/api-error'
 import { describeEditConflict } from '@/lib/edit-conflict'
@@ -430,6 +431,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // Only check if either old or new transaction affects stock
     if ((existingAffectsStock || shouldAffectStock) && !body.confirmOversell) {
       const netChangeMap = new Map<string, number>()
+      const editUnitConflicts: { productName: string; productUnit: string; enteredUnit: string; quantity: number }[] = []
 
       // Old items: reverse their stock impact
       if (existingAffectsStock) {
@@ -455,16 +457,51 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           const product = productMap.get(item.productId)
           if (!product) continue
           if (!tracksStock(product)) continue
-          const newQty = normalizeToUnit(
+          const normNew = normalizeToUnit(
             Number(item.quantity) || 0,
             item.unit || product.unit,
             product.unit,
-          ).quantity
+          )
+          /*
+           * 🔒 2026-08-17: same refusal as the create path — see the long note
+           * in POST /api/transactions. An unconvertible unit is a stop, not a
+           * warning, because guessing the factor is what took four strips off
+           * the shelf when four tablets were sold.
+           *
+           * NOTE the asymmetry with the reversal loop above, which is
+           * deliberate: reversing an OLD line must undo exactly what was
+           * applied at the time, incompatible unit and all. Refusing there
+           * would make historical transactions uneditable — and would leave
+           * stock double-counted, since the reversal is half of a pair.
+           */
+          if (normNew.incompatible) {
+            editUnitConflicts.push({
+              productName: product.name,
+              productUnit: product.unit,
+              enteredUnit: normalizeUnitName(item.unit || product.unit),
+              quantity: Number(item.quantity) || 0,
+            })
+            continue
+          }
+          const newQty = normNew.quantity
           // If new transaction DECREMENTS stock (sale/debit-note), subtract (-)
           // If new transaction INCREMENTS stock (purchase/credit-note), add (+)
           const newSign = shouldDecrementStock ? -1 : 1
           netChangeMap.set(item.productId, (netChangeMap.get(item.productId) || 0) + (newQty * newSign))
         }
+      }
+
+      // An unconvertible unit stops the edit, for the reason in the note above.
+      if (editUnitConflicts.length > 0) {
+        const lines = editUnitConflicts.map(c =>
+          `• ${c.productName} is measured in ${c.productUnit}, but this line says ${c.quantity} ${c.enteredUnit}. ` +
+          `The app does not know how many ${c.enteredUnit} make one ${c.productUnit}.`,
+        ).join('\n')
+        throw new UnitMismatchError(
+          `This edit was not saved, because the stock change would have been wrong:\n\n${lines}\n\n` +
+          `Enter the quantity in ${editUnitConflicts[0].productUnit}, or change the product's unit to match how you sell it.`,
+          editUnitConflicts,
+        )
       }
 
       // Check each affected product
@@ -916,6 +953,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     return NextResponse.json({ transaction, warning, conflictWarning })
   } catch (error: any) {
+    /*
+     * 🔒 2026-08-17: an unconvertible unit rolls the edit back and reports why.
+     * Thrown inside the interactive transaction, so it arrives here rather than
+     * as a return value. See src/lib/unit-mismatch-error.ts.
+     */
+    if (error instanceof UnitMismatchError) {
+      return NextResponse.json({
+        error: 'Unit mismatch',
+        message: error.message,
+        unitConflicts: error.conflicts,
+      }, { status: 400 })
+    }
     // 🔒 FIX H1: Catch the STOCK_BLOCK error from inside the $transaction.
     if (error?.code === 'STOCK_BLOCK') {
       // 🔒 AUDIT PASS-1 M1 (follow-up): report what is LEFT, not what was asked

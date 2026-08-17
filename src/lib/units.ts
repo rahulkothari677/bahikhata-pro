@@ -63,6 +63,24 @@ export function normalizeUnitName(unit: string | null | undefined): string {
     kilograms: 'kg', litre: 'ltr', litres: 'ltr', liter: 'ltr', liters: 'ltr',
     piece: 'pcs', pieces: 'pcs', pc: 'pcs', nos: 'pcs', no: 'pcs',
     meter: 'm', metre: 'm', meters: 'm', dz: 'dozen', doz: 'dozen',
+    /*
+     * 🔒 2026-08-17: the plurals this function's own docstring promised.
+     *
+     * It says "strip trailing 's'" and never did — only the alias map was
+     * consulted. So `packets` did not equal `packet`, and `boxes` did not equal
+     * `box`. Harmless while unmatched units were silently tolerated; NOT
+     * harmless now that an unconvertible unit refuses the write (see
+     * normalizeToUnit), because a supplier bill saying "2 Packets" would be
+     * rejected against a product measured in `packet`.
+     *
+     * Listed explicitly rather than stripping the 's' in code: `pcs` would
+     * become `pc`, and a blanket rule on unit names is the kind of cleverness
+     * that produces a different bug in a year.
+     */
+    packets: 'packet', pkt: 'packet', pkts: 'packet', pack: 'packet', packs: 'packet',
+    boxes: 'box', bx: 'box', bags: 'bag', dozens: 'dozen',
+    bottles: 'bottle', strips: 'strip', tubes: 'tube', tins: 'tin',
+    sachets: 'sachet', jars: 'jar', cans: 'can', rolls: 'roll',
   }
   return aliases[u] || u
 }
@@ -127,7 +145,7 @@ export function normalizeToUnit(
   quantity: number,
   fromUnit: string,
   toUnit: string,
-): { quantity: number; unit: string; converted: boolean } {
+): { quantity: number; unit: string; converted: boolean; incompatible: boolean } {
   const from = normalizeUnitName(fromUnit)
   const to = normalizeUnitName(toUnit)
   if (from === to) {
@@ -139,14 +157,34 @@ export function normalizeToUnit(
           `[units] Discrete-unit rounding discarded fractional part: ${quantity} ${to} → ${rounded} ${to}`,
         )
       }
-      return { quantity: rounded, unit: to, converted: false }
+      return { quantity: rounded, unit: to, converted: false, incompatible: false }
     }
-    return { quantity, unit: to, converted: false }
+    return { quantity, unit: to, converted: false, incompatible: false }
   }
   const converted = convertQuantity(quantity, from, to)
   if (converted === null) {
-    // Not convertible — leave as entered (guardrail will flag if implausible)
-    return { quantity, unit: from, converted: false }
+    /*
+     * 🔒 2026-08-17: THE 15x STOCK BUG LIVED ON THIS LINE.
+     *
+     * It used to read: "Not convertible — leave as entered (guardrail will flag
+     * if implausible)", returning the quantity untouched. The caller then spent
+     * it as though it were already in the PRODUCT's unit.
+     *
+     * Reproduced live in a chemist account. A customer asks for 4 tablets from
+     * a strip of 15. The sale returned 200 OK and stock went 40 -> 36: four
+     * whole STRIPS deducted where 0.27 was correct. Fifteen times too much. The
+     * money was right (4 x Rs 2.07), so the bill looked perfect and nothing
+     * reported it. For a chemist, loose-tablet sales are most sales.
+     *
+     * The promised guardrail never covered this: it watches for implausible
+     * MONEY, and here the money is exactly right.
+     *
+     * We genuinely do not know how many tablets are in a strip — that factor is
+     * per-product and no per-product factor exists yet. So the honest answer is
+     * to say so, not to guess. `incompatible` lets every stock-writing caller
+     * refuse instead of silently inventing a conversion.
+     */
+    return { quantity, unit: from, converted: false, incompatible: true }
   }
   // 🔒 DI-2: round to integer when the target unit is discrete.
   if (isCountUnit(to)) {
@@ -156,9 +194,9 @@ export function normalizeToUnit(
         `[units] Discrete-unit rounding discarded fractional part: ${quantity} ${from} → ${converted} ${to} → ${rounded} ${to}`,
       )
     }
-    return { quantity: rounded, unit: to, converted: true }
+    return { quantity: rounded, unit: to, converted: true, incompatible: false }
   }
-  return { quantity: converted, unit: to, converted: true }
+  return { quantity: converted, unit: to, converted: true, incompatible: false }
 }
 
 /** All units offered in pickers, grouped for the UI. */
@@ -181,11 +219,11 @@ export function resolveEnteredQuantity(
   quantity: number,
   enteredUnit: string | null | undefined,
   productUnit?: string | null,
-): { quantity: number; unit: string; converted: boolean } {
+): { quantity: number; unit: string; converted: boolean; incompatible: boolean } {
   const from = normalizeUnitName(enteredUnit)
   if (productUnit) return normalizeToUnit(quantity, from, productUnit)
   if (isSubUnit(from)) return normalizeToUnit(quantity, from, baseUnitOf(from))
-  return { quantity, unit: from, converted: false }
+  return { quantity, unit: from, converted: false, incompatible: false }
 }
 
 /** Sub-units the quantity picker should offer for a given base unit. */

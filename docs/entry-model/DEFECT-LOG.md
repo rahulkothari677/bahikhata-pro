@@ -297,7 +297,7 @@ Flexibility here is right — the fixed list is too small (D-05). But it needs t
 ---
 
 ## D-15 · Selling part of a pack deducts WHOLE packs — 15× stock error, silently
-**Status:** OPEN **Severity:** Critical **Found:** Phase 2, chemist account, confirmed live
+**Status:** FIXED 2026-08-17 (corruption stopped; pack factor still to come) **Severity:** Critical **Found:** Phase 2, chemist account, confirmed live
 
 `src/lib/units.ts` converts only within a fixed family (gm↔kg, ml↔ltr, cm↔m, dozen→pcs).
 Pack units — `strip`, `box`, `packet`, `bag`, `bottle` — have no conversion, so a quantity
@@ -324,8 +324,30 @@ It also silently *hides* the real problem: the app cannot express "1 strip = 15 
 because the factor is per-product and no per-product factor exists (see D-09 — same root
 cause, far more acute here).
 
-**Suggested fix:** a per-product pack factor, plus a hard refusal to accept a quantity in a
-unit the product cannot convert from. Guessing is what produces the 15×.
+**FIXED 2026-08-17 — the refusal half.** `normalizeToUnit` now returns `incompatible: true`
+when the units cannot be reconciled, and both write paths refuse instead of guessing:
+
+- `POST /api/transactions` collects the conflicts and returns 400 without touching stock.
+- `PUT /api/transactions/[id]` throws `UnitMismatchError` INSIDE the interactive
+  transaction so the edit rolls back, and the route turns it into a 400.
+- The reversal path in the edit route is deliberately left lenient: undoing an old line must
+  reverse exactly what was applied, incompatible unit and all. Guarding it would make
+  historical bills uneditable and would leave stock double-counted, since the reversal is one
+  half of a pair.
+
+The message names the product and both units: *“Dolo 650 is measured in strip, but this line
+says 4 tablet. The app does not know how many tablet make one strip.”*
+
+Also fixed on the way: `normalizeUnitName`’s docstring promised it stripped a trailing “s”
+and it never did, so `packets` ≠ `packet`. Harmless while mismatches were tolerated; it would
+have produced FALSE refusals now. Plural and abbreviation aliases added explicitly.
+
+Break-verified five ways: restoring the original leniency, ignoring the flag on each write
+path, removing the plural aliases, and wrongly guarding the reversal path each fail the suite.
+
+**STILL OPEN — the enabling half.** A chemist still cannot sell 4 tablets, because there is
+no per-product pack factor (“1 strip = 15 tablets”). The corruption is stopped; the
+capability is Phase 5. Tracked as D-09/D-15-B.
 
 ---
 
