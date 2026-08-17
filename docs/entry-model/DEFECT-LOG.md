@@ -599,7 +599,81 @@ and a test that fails if a component hard-codes a rate array.
 
 ---
 
+## D-26 · The fastest entry path is paywalled AND has no data
+**Status:** OPEN **Severity:** High (adoption) **Found:** Phase 6, traced in source + verified live
+
+Every competitor names barcode scanning as their primary speed mechanism. This app has it —
+and a free shop cannot reach it, while a paid shop has nothing to scan.
+
+**Traced in source, not inferred from the DOM:**
+
+```
+src/app/api/subscription/status/route.ts:134   barcodeScanner: false    ← free
+src/app/api/subscription/status/route.ts:165   barcodeScanner: true     ← paid
+src/app/api/subscription/status/route.ts:196   barcodeScanner: true     ← paid
+
+gated in three places:
+  components/common/ProductPicker.tsx:162      {features?.barcodeScanner && (
+  components/inventory/Inventory.tsx:241       {features?.barcodeScanner && (
+  components/ledger/TransactionEntry.tsx:1524  {features?.barcodeScanner && (
+```
+
+**Verified live:** the founder's account reports `plan: "free"`, and the barcode button does
+not render. The only scan control visible is **Scan Bill** — the AI bill scanner, a different
+feature that shares the same `ScanLine` icon.
+
+> **Correction (2026-08-17).** An earlier draft of this entry claimed the sales page has a
+> "dedicated Scan barcode button", read from a DOM `aria-label`. On a free plan it does not
+> exist. The founder caught it and told me to check the code rather than assume — which is
+> R10, and I had skipped it. Recorded because the *shape* of the mistake matters: a DOM
+> attribute told me a feature existed that the plan gate removes.
+
+**The two failures compound:**
+
+| | |
+|---|---|
+| Free plan | button never renders — the fast path is invisible |
+| Paid plan | button renders, and **0 of 42 products carry a barcode** |
+
+A barcode reaches a product one of two ways: someone types thirteen digits into the Add
+Product form, or it arrives in bulk from a supplier bill or catalogue. There is no bulk import
+(D-12), and nobody types thirteen digits two thousand times. So even after paying, the
+scanner points at an empty column.
+
+**Why it matters:** the entry bottleneck measured this phase is **20 typed characters per
+line**. Scanning removes all of them. Putting the one mechanism that eliminates the measured
+bottleneck behind a paywall means free users experience the app at its slowest — which is
+precisely the experience that decides whether they ever pay.
+
+**Suggested direction:** this is a pricing decision, not only an engineering one. Barcode
+scanning is what makes a 2,000-SKU shop viable at all; gating it may be selling the wrong
+thing. Separately, and regardless of the pricing call: make barcode capture a first-class
+goal of bill import, and ship starter catalogues **with** barcodes for branded packaged goods,
+so the column is populated before anyone reaches for the scanner.
+
+---
+
+## D-27 · Quick-pick remembers 8 items, on one device, for 30 days
+**Status:** OPEN **Severity:** Medium **Found:** Phase 6, verified live
+
+`recent-products.ts` caps at **8** entries with a 30-day expiry, stored in `localStorage`. Its
+own comment is explicit that this is deliberate: *"we don't need a server-side table — it's a
+per-device UX nicety"*.
+
+That was a fair call when written. Measured against the entry cost established this phase — a
+median of **20 typed characters per line** — it is the cheapest available fix, and it is
+currently a *device* fact where it should be a *shop* fact: a new phone, a cleared cache or a
+second till starts from zero.
+
+It is also the only fast path a **free** user has, given D-26.
+
+**Suggested fix:** compute it server-side from real sales, weighted by recency and time of
+day. A tea shop at 7am and the same shop at 6pm sell different things.
+
+---
+
 ## Cross-reference
+
 
 
 

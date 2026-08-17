@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 5 complete + primary-source correction, 17 Aug 2026**
+Last verified: **Phase 6 complete, 17 Aug 2026**
 
 ---
 
@@ -147,6 +147,18 @@ no GST must see an app that looks built for them.
 - **Units offered: 10** (`pcs kg gm ltr ml m cm box dozen packet`). Missing every
   trade-critical unit: strip, than, sq ft, running foot, bundle, quintal, bottle, pair.
 
+### The entry bottleneck, measured (Phase 6)
+
+**It is characters typed, not taps.** For a 42-SKU garment catalogue the median product needs
+**20 characters** before 3 or fewer candidates remain (p90 23, worst 24). Grouped into its 3
+real items: **1 character**.
+
+Cause: the discriminating text (size, colour, pack) sits at the END of the name, so there is
+no shorter unique prefix. One line cost 2 interactions and 19 typed characters.
+
+My hypothesis going in was that taps were the bottleneck. They are not. Q6 of the pre-phase
+check is what caught it.
+
 ### The central finding (Phase 2, from six real bills)
 
 **Every real Indian bill puts the PACK inside the unit column.** `Strip (15 Tab)`,
@@ -183,6 +195,11 @@ Four dimensions the model needs, none of which exist today:
    building it would have been building for a dead tax. The real defect is that no rate picker
    offers 40% (D-23). Lesson: **check whether the requirement still exists before designing
    for it.**
+7. **I claimed a "dedicated Scan barcode button" from a DOM aria-label.** On the free plan it
+   does not render at all — `barcodeScanner` is false for free in
+   `api/subscription/status`, and three components gate on it. The founder caught it and told
+   me to check the code rather than assume. A DOM attribute told me a feature existed that
+   the plan gate removes. R10 applies to features, not only to defects.
 5. **"Stock goes to −23" was wrong.** `box`/`packet`/`bag` have no conversion by design
    (the factor is per-product). Buying 1 box of 24 raises stock by **1** — under-counted,
    not negative.
@@ -283,7 +300,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | 03 | Catalogue acquisition (bill/PDF/Excel/barcode) | ✅ Complete — design done; real-photo accuracy still unmeasured |
 | 04 | The relevance engine (purpose + field switches) | Complete |
 | 05 | Units, cess and CA-grade compliance completeness | Complete |
-| 06 | The entry surface, benchmarked | Pending |
+| 06 | The entry surface, benchmarked | Complete — head-to-head timing still owed |
 | 07 | Purchase → inventory → sale as one motion | Pending |
 | 08 | Mobile interaction design (real device) | Pending |
 | 09 | The connected surfaces (parties, payments, reports) | Pending |
@@ -308,9 +325,11 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | Scan cost per document is unbounded (usage limits count scans, not size) | LOGGED |
 | Unregistered shop still asked HSN / GST rate / GST treatment | LOGGED |
 | Field visibility exists for the printed bill, not the entry form | LOGGED |
-| **40% slab missing from every rate picker — live under-charging** | LOGGED |
+| **40% slab missing from every rate picker** | **FIXED, verified live: 5 options to 7** |
 | Specific (per-quantity) duty cannot be expressed at all | LOGGED |
-| GST rate list duplicated in five files | LOGGED |
+| Barcode path paywalled on free AND 0% coverage on paid | LOGGED |
+| Quick-pick: 8 items, localStorage, lost on new phone | LOGGED |
+| GST rate list duplicated in seven files | **FIXED + guard test** |
 | **Part-pack sale deducts whole packs — 15x stock error, silent** | LOGGED |
 | Batch/expiry cannot attach to stock; no FEFO, no expiry guard | LOGGED |
 | Sizes sort alphabetically (L, M, S, XL, XXL) | LOGGED |
