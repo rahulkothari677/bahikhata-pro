@@ -733,7 +733,69 @@ than no prompt. **Landed cost first, price review second.**
 
 ---
 
+## D-30 · 38 tap targets are below the 44px minimum
+**Status:** OPEN **Severity:** Low **Found:** Phase 8, measured at 375×812
+
+Measured on the sale screen at a mobile viewport: **38 visible controls** are smaller than
+44px in at least one dimension. Most are navigation rows at **264×38** — six pixels short of
+Apple's 44pt guidance and ten short of Android's 48dp.
+
+**Why it is only Low:** they are navigation, where a mis-tap costs a moment rather than a
+wrong number, and the two controls that matter most are correct — `Save` and `Cancel` sit at
+y=742 of 812 with a 44px height, bottom-anchored and reachable one-handed.
+
+**Not measurable here:** whether 38px actually produces mis-taps. A mouse cursor is one pixel;
+a thumb is roughly 10mm and lands off-centre. This needs a real device, not a smaller
+viewport.
+
+---
+
+## D-31 · The entry form is dense enough that the keyboard becomes the screen
+**Status:** OPEN **Severity:** Medium **Found:** Phase 8, measured
+
+**34 interactive elements** are visible in one screen of the sale form at 375×812. That is
+defensible for a form on its own.
+
+It stops being defensible next to the Phase 6 measurement: **a median of 20 typed characters
+per line**. Typing 20 characters raises the on-screen keyboard, which occupies roughly half
+the display — so the shopkeeper is typing a long string into a dense form through a letterbox,
+with the running total likely hidden.
+
+**The fix is not a mobile fix.** Grouping products so the median drops to 1 character removes
+the keyboard from most lines entirely. The best thing that can be done for the phone is to
+stop needing the keyboard.
+
+**Explicitly unmeasured:** whether the total is actually occluded. An emulated viewport does
+not raise a real IME.
+
+---
+
+## NOT A DEFECT · The offline write path works end to end
+**Status:** VERIFIED GOOD **Found:** Phase 8
+
+Recorded here deliberately, because most of this log is failures and this one is not.
+
+Drove the full round trip: added a line, killed the connection, pressed Save, restored the
+connection.
+
+```
+baseline        pending 0   dead-letter 0   service worker registered
+signal lost     banner: "You're offline. Changes will sync when you reconnect."
+press Save      pending 0 → 1     bill accepted
+signal returns  pending 1 → 0     dead-letter 0
+result          sale landed EXACTLY ONCE, stock 100 → 99
+```
+
+IndexedDB queue, dead-letter store, idempotent mutation IDs so a replay cannot double-post,
+and an honest banner. The sale arrived once rather than twice, which is the worse failure.
+
+**This is the model to copy** — it is the one place in the app where partial failure is
+handled end to end and reported plainly. Cited in the rulebook rather than left buried here.
+
+---
+
 ## Cross-reference
+
 
 
 

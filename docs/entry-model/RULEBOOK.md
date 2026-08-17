@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 7 complete, 17 Aug 2026**
+Last verified: **Phase 8 complete, 17 Aug 2026**
 
 ---
 
@@ -266,6 +266,16 @@ purchase and sales units. **Chosen: base unit + one named pack, stock always in 
 with a box→pack factor asked once at purchase and remembered per supplier. An N-level ladder
 was rejected as over-built: every extra level is somewhere a wrong factor can hide.
 
+### VERIFIED GOOD — the offline write path (Phase 8, do not rebuild)
+
+Drove the full round trip live: added a line, killed the connection, pressed Save, restored
+it. Pending 0 to 1 to 0, dead-letter 0, sale landed EXACTLY ONCE, stock 100 to 99, and the
+banner said "You are offline. Changes will sync when you reconnect."
+
+IndexedDB queue, dead-letter store, idempotent mutation IDs so a replay cannot double-post.
+**This is the model to copy** — the one place in the app where partial failure is handled end
+to end and reported honestly.
+
 ## 5d. THE RECURRING FLAW: computed, then never used as a signal
 
 Twice now, in two different phases, the app has held the right number and never turned it
@@ -331,7 +341,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | 05 | Units, cess and CA-grade compliance completeness | Complete |
 | 06 | The entry surface, benchmarked | Complete — head-to-head timing still owed |
 | 07 | Purchase → inventory → sale as one motion | Complete |
-| 08 | Mobile interaction design (real device) | Pending |
+| 08 | Mobile interaction design | Complete — real-device session still owed |
 | 09 | The connected surfaces (parties, payments, reports) | Pending |
 | 10 | Synthesis and migration | Pending |
 
@@ -360,6 +370,8 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | Quick-pick: 8 items, localStorage, lost on new phone | LOGGED |
 | **Shop can sell below cost indefinitely, never told (loss IS computed)** | LOGGED |
 | updateProductCosts writes the line rate, not landed cost | LOGGED |
+| 38 tap targets below 44px (nav rows, 264x38) | LOGGED |
+| Entry form density + 20-char typing = keyboard covers the screen | LOGGED |
 | GST rate list duplicated in seven files | **FIXED + guard test** |
 | **Part-pack sale deducts whole packs — 15x stock error, silent** | LOGGED |
 | Batch/expiry cannot attach to stock; no FEFO, no expiry guard | LOGGED |
