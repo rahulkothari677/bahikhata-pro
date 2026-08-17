@@ -184,7 +184,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | # | Phase | State |
 |---|---|---|
 | 01 | Field study at scale & standards research | ✅ Complete |
-| 02 | Five trades, five catalogues | ▶ In progress |
+| 02 | Five trades, five catalogues | ▶ In progress — kirana account open, first-run captured |
 | 03 | Catalogue acquisition (bill/PDF/Excel/barcode) | Blocked on supplier bill |
 | 04 | The relevance engine (purpose + field switches) | Pending |
 | 05 | Units, cess and CA-grade compliance completeness | Pending |
@@ -204,6 +204,9 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | Duplicate products permitted, splitting stock silently | LOGGED |
 | Multi-shop unscoped — two shops share one catalog and ledger | LOGGED |
 | Cess unsupported end to end | LOGGED |
+| First run asks theme before trade; trade never asked | LOGGED |
+| "Scan bill — auto-fill everything" never creates products | LOGGED |
+| **No bulk product import exists at all** (~17h to type 2,000) | LOGGED |
 | Category is free text, producing junk categories | LOGGED |
 
 ---

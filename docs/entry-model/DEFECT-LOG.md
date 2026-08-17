@@ -168,6 +168,59 @@ pieces — the factor is per-product and no per-product factor exists.
 
 ---
 
+## D-10 · First run asks for a colour theme before anything useful, and never asks the trade
+**Status:** OPEN **Severity:** Medium (UX) **Found:** Phase 2, fresh account
+
+Observed in a brand-new account with zero products. The first decision the app puts in front
+of a shopkeeper is a **theme picker** — Saffron, Emerald, Ocean Blue, Royal Violet, Rose
+Pink, Teal Cyan, then Light/Dark, then "Confirm Theme".
+
+The app **never asks what the shop sells**. Checked directly: no trade, business-type or
+purpose question appears anywhere in first run.
+
+**Why it matters:** the trade answer is the single most useful thing the app could learn in
+the first ten seconds — it determines the units, the categories, the tax fields and which of
+the 16 product fields are even relevant. Instead the first question is cosmetic, and the
+most valuable one is never asked.
+
+---
+
+## D-11 · "Scan a bill with AI — we'll auto-fill everything" never touches the catalog
+**Status:** OPEN **Severity:** Medium (misleading) **Found:** Phase 2
+
+The first-run screen offers: *"Or: Scan a bill with AI — Snap a photo, we'll auto-fill
+everything."* `POST /api/scan-bill` returns line items as tuples for filling a
+**transaction**:
+
+```
+{"items":[["Rice",2,"kg",50,0,100,0.9]]}
+```
+
+It never calls `db.product.create`. The scanned lines do not become products.
+
+**Why it matters:** on a first run with an empty catalog, this is the one control that looks
+like it solves the real problem — getting a shop's goods into the app. It does not, and the
+copy says "everything".
+
+---
+
+## D-12 · There is no bulk product import anywhere in the app
+**Status:** OPEN **Severity:** High (adoption) **Found:** Phase 2
+
+`product.createMany` does not appear anywhere in the codebase. The only bulk inserts are for
+bank reconciliation and payments. There is no Excel import, no CSV, no bill-to-catalog, no
+starter catalog.
+
+**Effect:** every product must be entered by hand through a 16-field form, one at a time. A
+shop with 2,000 products faces roughly **17 hours** of continuous data entry at 30 seconds
+each — before the first bill can be raised.
+
+**Why it matters:** this is the arithmetic behind "the shopkeeper prefers pen and paper". It
+is not a preference; it is the only rational choice given the alternative. Every other
+improvement in this programme is downstream of fixing it.
+
+---
+
 ## Cross-reference
 
 The programme rulebook is `docs/entry-model/RULEBOOK.md`. Section 9 there carries a summary
