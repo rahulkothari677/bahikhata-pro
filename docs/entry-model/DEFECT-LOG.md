@@ -794,7 +794,95 @@ handled end to end and reported plainly. Cited in the rulebook rather than left 
 
 ---
 
+## D-32 · Debt ageing is degraded by a comment that stopped being true
+**Status:** OPEN **Severity:** High (it is the udhaar app's core judgement) **Found:** Phase 9, source
+
+`DebtAgingReport.tsx` ages a customer's **whole balance** by the date of their oldest unpaid
+invoice, and explains why:
+
+> *"…labeled approximate — true per-invoice aging needs payment-to-invoice allocation, which
+> this app's single Payment stream doesn't record."*
+
+**That premise is no longer true.** Verified in source:
+
+| | |
+|---|---|
+| `PaymentAllocation` model | exists (`prisma/schema.prisma:515`) |
+| Allocations created on payment | `paymentAllocation.createMany` via `planAllocationOldestFirst` |
+| Already used for per-invoice due | `due = totalAmount − paidAmount − Σ(allocations)` |
+
+The report was honest when written and has not been revisited since the limitation was
+removed.
+
+**What the approximation costs** — read directly off the arithmetic
+(`if (days > 90) buckets.critical = due`, the whole balance):
+
+```
+customer owes ₹10,000 →  ₹9,500 raised 3 days ago
+                         ₹500   raised 100 days ago
+report shows   ₹10,000 in "critical 90+"
+truth          ₹500 critical · ₹9,500 current
+overstated by  ₹9,500
+```
+
+**Why it matters:** deciding who to chase is the primary job of a udhaar app, and the error
+runs in the direction that wastes the shopkeeper's scarcest resource — the goodwill spent
+asking a good customer for money.
+
+**Suggested fix:** age each unpaid invoice by its own date using the allocations already
+recorded. This is a report change, not a data change.
+
+---
+
+## D-33 · Compliance notices appear only AFTER the bill is saved
+**Status:** OPEN **Severity:** Medium (legal exposure) **Found:** Phase 9, source
+
+`EwayBillNotice` and `BillOfSupplyNotice` are mounted **only** in `TransactionDetail.tsx`
+(lines 706, 708) — the screen shown when an already-saved bill is opened. Neither appears in
+`TransactionEntry.tsx`, where the bill is created.
+
+So a shopkeeper raising a ₹60,000 consignment that needs an e-way bill is told nothing while
+entering it. They find out only if they go back and open the saved bill — by which time the
+goods may have left. Goods moving without a required e-way bill can be detained.
+
+**Note:** the computation is correct and complete (`ewayBillNeed()`, the ₹50,000 threshold,
+`invoiceMovesGoods()`). This is purely a question of *when*, not *whether*.
+
+**Suggested fix:** mount both notices in the entry screen, where the bill can still be
+changed. No new logic — a different mount point.
+
+---
+
+## D-34 · CMP-08 due date is computed and never surfaced
+**Status:** OPEN **Severity:** Medium **Found:** Phase 9, source
+
+`cmp08DueDate(year, quarterEndMonth)` in `composition-scheme.ts` computes a composition
+dealer's quarterly return deadline. No component imports it.
+
+A composition dealer therefore gets no reminder of a date the app already knows how to
+calculate. Late filing carries a fee.
+
+**Suggested fix:** a reminder ahead of the date, not a dashboard tile. A deadline is only
+useful before it passes.
+
+---
+
+## D-35 · There is no due date on a credit sale
+**Status:** OPEN **Severity:** Medium (structural) **Found:** Phase 9, schema
+
+No `dueDate`, `creditDays` or `paymentTerms` field exists anywhere in the schema.
+
+So "overdue" can only mean **old**, never **past the terms we agreed**. A customer given 7
+days and one given 60 are aged identically, and the distributor bills in this programme all
+carried explicit credit terms (15, 21, 30 days) that the app has nowhere to put.
+
+**Why it matters:** it caps how good D-32's fix can be. Per-invoice ageing by invoice date is
+a real improvement; ageing against agreed terms is what a shopkeeper actually means.
+
+---
+
 ## Cross-reference
+
 
 
 

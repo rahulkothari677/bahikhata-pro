@@ -8,7 +8,7 @@ constraint that was decided in phase 1. Everything below is either a decision th
 made, a fact established by measurement, or a rule I committed to. None of it is
 speculation — speculation goes in the phase reports, not here.
 
-Last verified: **Phase 8 complete, 17 Aug 2026**
+Last verified: **Phase 9 complete, 17 Aug 2026**
 
 ---
 
@@ -276,7 +276,24 @@ IndexedDB queue, dead-letter store, idempotent mutation IDs so a replay cannot d
 **This is the model to copy** — the one place in the app where partial failure is handled end
 to end and reported honestly.
 
-## 5d. THE RECURRING FLAW: computed, then never used as a signal
+## 5d. THE RECURRING FLAW — refined in Phase 9 into THREE shapes
+
+It is not one pattern. Sweeping four surfaces showed three, and they need different fixes:
+
+| Shape | Example | Fix |
+|---|---|---|
+| **Never surfaced** | `cmp08DueDate()` has no reader | give it a reader |
+| **Surfaced too late** | e-way / bill-of-supply notices mount only in TransactionDetail, after saving | change the mount point |
+| **Degraded on a stale premise** | debt ageing says allocations are not recorded; they are | re-test the premise |
+
+The third is the hardest to find, because everything about it looks deliberate — and it was,
+just not any more.
+
+**A signal has a MOMENT, not just a value.** Before the decision, at the moment the number
+changes, ahead of a date, and specific rather than aggregate. The offline banner already does
+exactly this and is the standard to build to.
+
+### The original statement (Phases 4 and 7)
 
 Twice now, in two different phases, the app has held the right number and never turned it
 into a prompt:
@@ -342,7 +359,7 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | 06 | The entry surface, benchmarked | Complete — head-to-head timing still owed |
 | 07 | Purchase → inventory → sale as one motion | Complete |
 | 08 | Mobile interaction design | Complete — real-device session still owed |
-| 09 | The connected surfaces (parties, payments, reports) | Pending |
+| 09 | The connected surfaces | Complete — 4 surfaces swept, not the whole app |
 | 10 | Synthesis and migration | Pending |
 
 ---
@@ -372,6 +389,10 @@ Phase 1 established that this is not one problem. Solving them out of order wast
 | updateProductCosts writes the line rate, not landed cost | LOGGED |
 | 38 tap targets below 44px (nav rows, 264x38) | LOGGED |
 | Entry form density + 20-char typing = keyboard covers the screen | LOGGED |
+| **Debt ageing degraded by a comment that stopped being true** | LOGGED |
+| E-way / bill-of-supply notices appear only AFTER saving | LOGGED |
+| CMP-08 due date computed, never surfaced | LOGGED |
+| No due date / credit terms on a sale | LOGGED |
 | GST rate list duplicated in seven files | **FIXED + guard test** |
 | **Part-pack sale deducts whole packs — 15x stock error, silent** | LOGGED |
 | Batch/expiry cannot attach to stock; no FEFO, no expiry guard | LOGGED |
