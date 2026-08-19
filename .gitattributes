@@ -1,0 +1,70 @@
+# Line endings for OUR source: LF in the repo and LF on disk, every platform.
+#
+# WHY THIS EXISTS. This repo is written on Windows and built on Linux CI. With
+# Git's Windows default (`core.autocrlf=true`) a file is stored as LF but
+# checked out as CRLF, so the same file is a different sequence of bytes
+# depending on which machine reads it. That has already cost us twice:
+#
+#   1. A migration guard split files on "\n" only. On a Windows checkout every
+#      line ends "\r\n", and JavaScript's `.` cannot match a carriage return —
+#      so `/--.*$/` stripped nothing and the guard read a SQL comment as
+#      destructive DDL. It accused another agent's correct migration. CI was
+#      green the whole time, because CI checks out LF. The bug existed on one
+#      machine only, which is the hardest kind to believe.
+#
+#   2. Any tool that rewrites a tracked file — npm touching package-lock.json,
+#      a formatter, a codemod — writes CRLF, and git then reports the file as
+#      modified with no content change. That noise hides real diffs and invites
+#      someone to `git checkout --` over work they meant to keep.
+#
+# SCOPE IS DELIBERATELY NARROW. An earlier draft of this file used a blanket
+# `* text=auto eol=lf`. Measuring before committing showed it would also have
+# rewritten `android/gradlew.bat` — and a Windows batch file with LF endings
+# can be misparsed by cmd.exe. The `android/` tree is Capacitor-generated, it
+# is not where either bug happened, and an Android build cannot be verified
+# from this machine. So this file governs the source we actually write and
+# leaves everything else exactly as git handled it before.
+#
+# Verified before committing: of 400 tracked source files, ZERO were stored
+# with CRLF — so this changes no repository content. It only stops Windows
+# checkouts from rewriting them on disk.
+
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.md    text eol=lf
+*.sql   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+
+# NOTE: *.bat / *.cmd / *.ps1 are deliberately NOT listed. Windows batch files
+# need CRLF, and every way I tried to express that here left gradlew.bat
+# showing as modified. Since android/ is Capacitor-generated, is not where
+# either bug happened, and an Android build cannot be verified from this
+# machine, the right move was to take it out of scope entirely rather than
+# ship a rule I could not prove. If shell scripts under android/ ever need
+# normalising, that is a separate, testable change.
+
+# Binary — never converted, never diffed as text.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
+*.pdf  binary
+*.xls  binary
+*.xlsx binary
+*.docx binary
+*.keystore binary
+*.jks  binary

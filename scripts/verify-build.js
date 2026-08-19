@@ -30,6 +30,30 @@
 
 const { spawnSync } = require('child_process')
 const path = require('path')
+const fs = require('fs')
+
+/*
+ * Delete the generated route types before building.
+ *
+ * WHY. `.next/types/validator.ts` is generated with one import per route, and
+ * Next ADDS to it without pruning. Delete a route — as the bill-share removal
+ * did — and the stale entry survives, so the next build fails with:
+ *
+ *   error TS2307: Cannot find module '../../src/app/api/bill-share/route.js'
+ *
+ * It reads exactly like a broken import in real source, and it sent me hunting
+ * through code that was already correct — twice, on two different days. The
+ * app was fine both times; only the cache was wrong. CLAUDE.md already says
+ * "a stale bundle looks exactly like a bug"; this is that, in the type layer.
+ *
+ * Only `.next/types` goes. Wiping all of `.next` would throw away the
+ * incremental build cache and cost a minute on every verify for no benefit —
+ * the rest of the cache is invalidated correctly by Next itself.
+ */
+const typesDir = path.join(__dirname, '..', '.next', 'types')
+if (fs.existsSync(typesDir)) {
+  fs.rmSync(typesDir, { recursive: true, force: true })
+}
 
 // Run Next's own CLI entry point with THIS node binary, rather than shelling
 // out to `npx`. Two reasons, both Windows:
