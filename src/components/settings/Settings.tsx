@@ -483,7 +483,20 @@ export function Settings({
     successMessage: string,
   ) => {
     const prevCategory = compositionCategory
-    const prevTo = compositionTo
+    /*
+     * Roll back to what the SERVER holds, not to `compositionTo`.
+     *
+     * The input's onChange has already written the typed value into state by
+     * the time onBlur fires, so `compositionTo` here IS the rejected date —
+     * restoring it would "undo" to the thing that was just refused. Found in
+     * the browser: the server correctly refused an exit date before the start
+     * date and showed the reason, and the field went on displaying the bad
+     * date. Once the toast faded, the screen showed a date the server had
+     * never accepted, with nothing left to say so.
+     *
+     * The toast explains what happened; the field must show what is true.
+     */
+    const prevTo = savedCompositionTo.current
     if (patch.compositionCategory !== undefined) setCompositionCategory(patch.compositionCategory)
     if (patch.compositionTo !== undefined) setCompositionTo(patch.compositionTo ?? '')
     try {

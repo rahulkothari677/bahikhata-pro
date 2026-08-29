@@ -223,3 +223,37 @@ describe('CMP-08 and GSTR-4 use the SAME window', () => {
     }
   })
 })
+
+describe('the settings screen shows what the server actually holds', () => {
+  const ui = readCode('src/components/settings/Settings.tsx')
+
+  test('a refused exit date rolls the field back to the saved value', () => {
+    /*
+     * FOUND IN THE BROWSER, not by any API test — the API behaved correctly
+     * throughout. The server refused an exit date earlier than the start date
+     * and returned the reason; the field went on displaying the refused date,
+     * and once the toast faded the screen showed a date the server had never
+     * accepted.
+     *
+     * The cause is the same one that made the save guard fail earlier in this
+     * task: the input's onChange writes into state before onBlur runs, so the
+     * "previous value" captured there is the REJECTED one. Rolling back to it
+     * restores exactly what was refused.
+     *
+     * Both bugs come from treating bound state as a record of what was saved.
+     * It is a record of what was typed.
+     */
+    expect(ui).toContain('const prevTo = savedCompositionTo.current')
+    expect(ui).not.toMatch(/const prevTo = compositionTo\b/)
+  })
+
+  test('the saved marker advances only after the server accepts', () => {
+    // Otherwise a refused save would look saved, and the next blur would skip
+    // it as unchanged — losing the correction silently.
+    const persist = ui.slice(ui.indexOf('const persistComposition'), ui.indexOf('const persistRoundOff'))
+    const okIndex = persist.indexOf('savedCompositionTo.current = patch.compositionTo')
+    const catchIndex = persist.indexOf('} catch')
+    expect(okIndex).toBeGreaterThan(-1)
+    expect(okIndex).toBeLessThan(catchIndex)
+  })
+})
