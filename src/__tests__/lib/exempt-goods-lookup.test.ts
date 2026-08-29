@@ -17,6 +17,7 @@ import {
   EXEMPT_TABLE_INFO,
 } from '@/lib/exempt-goods-lookup'
 import { CONDITION_TEXT } from '@/lib/hsn-rate-lookup'
+import { readCode } from '@/test-support/read-source'
 
 describe('the condition that decides half the kirana', () => {
   test('loose curd is a question, not an answer', () => {
@@ -174,5 +175,51 @@ describe('the table says where it came from', () => {
      */
     expect(EXEMPT_TABLE_INFO.entryCount).toBe(172)
     expect(EXEMPT_TABLE_INFO.codeCount).toBeGreaterThanOrEqual(180)
+  })
+})
+
+describe('the item screen ASKS when the answer is conditional (#93)', () => {
+  const ui = readCode('src/components/inventory/ProductDialog.tsx')
+
+  test('a conditional exemption renders a question, not a default', () => {
+    /*
+     * THE GAP THIS CLOSES, which I created earlier the same day.
+     *
+     * Replacing the hand-written exempt list stopped the app answering
+     * "exempt" for loose rice — correctly, because 1006 is exempt only "other
+     * than pre-packaged and labelled" and no HSN carries that. But nothing
+     * then asked, so a 0% rice landed on the schema default of 'taxable'.
+     * That traded one silent wrong answer for another: verified live, HSN
+     * 1006 at 0% came back gstTreatment 'taxable'.
+     *
+     * Asserted on the RENDER, via readCode, which strips comments — the note
+     * above quotes every phrase involved.
+     */
+    expect(ui).toContain("exemption?.outcome === 'needs-confirmation'")
+    expect(ui).toContain('Is this sold loose, or pre-packaged and labelled?')
+  })
+
+  test('both answers are offered, and neither is pre-selected', () => {
+    // "Force the choice, no silent default" is the whole of #93. One button
+    // would be a default wearing a question mark.
+    expect(ui).toContain('Sold loose — exempt')
+    expect(ui).toContain('Pre-packaged &amp; labelled — taxable')
+  })
+
+  test('the question cites the notification it came from', () => {
+    // §0 — every figure shows receipts that open the real record. A tax
+    // question with no source is just the app asserting something.
+    expect(ui).toContain('exemption.source')
+    expect(ui).toContain('exemption.rules[0].serial')
+  })
+
+  test('a rate above zero settles it, and nothing is asked', () => {
+    /*
+     * A typed rate means the shopkeeper has said they charge tax. The screen
+     * must use the same precedence as suggestGstTreatment on the server, or
+     * the two disagree about one product — which is the "two things describing
+     * one thing" class that caused four earlier bugs.
+     */
+    expect(ui).toMatch(/if \(rate > 0\) return null/)
   })
 })

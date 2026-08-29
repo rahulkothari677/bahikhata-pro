@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { describeSaveOutcome } from '@/lib/edit-conflict'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import { readError } from '@/lib/read-error'
 import { useSetting } from '@/hooks/use-setting'
 import { defaultTracksInventory } from '@/lib/inventory-tracking'
 import { GST_RATES } from '@/lib/gst-rates'
+import { lookupExemption } from '@/lib/exempt-goods-lookup'
 
 
 const UNITS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'm', 'box', 'dozen', 'packet']
@@ -57,6 +58,27 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
   // 🔒 R15-5 (Round 15): Read hideProfit so the margin preview box is hidden
   // for staff-with-hideProfit. Was: shown unconditionally when both prices > 0.
   const { hideProfit } = useSetting()
+
+  /*
+   * What Notification 10/2025 says about this HSN (#84, #93).
+   *
+   * ONLY ASKED AT 0%. A rate above zero means the shopkeeper has told us they
+   * charge tax on this item, and that settles it — the exemption question is
+   * about which zero applies, not whether to override a rate they typed. The
+   * same precedence the suggester uses server-side, so the screen and the API
+   * cannot disagree about the same product.
+   *
+   * A pure lookup over a 182-key object, so it costs nothing to recompute as
+   * the code is typed and needs no query.
+   */
+  const exemption = useMemo(() => {
+    const rate = parseFloat(form.gstRate) || 0
+    if (rate > 0) return null
+    const code = form.hsn.trim()
+    if (!code) return null
+    const r = lookupExemption(code)
+    return r.outcome === 'not-listed' ? null : r
+  }, [form.hsn, form.gstRate])
 
   // Sync form when dialog opens or product changes
   useEffect(() => {
@@ -329,6 +351,75 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
               </SelectContent>
             </Select>
           </div>
+          {/*
+            * #93 — THE QUESTION THE APP MUST ASK INSTEAD OF GUESSING.
+            *
+            * Notification 10/2025 exempts most kirana staples only "other than
+            * pre-packaged and labelled": loose rice is exempt, the same rice
+            * branded and packed is 5%. Ninety-nine of its 210 rules turn on a
+            * condition like that, and no HSN code carries the answer — 1006 is
+            * 1006 either way.
+            *
+            * The old hand-written list answered "exempt" for all of them. The
+            * new lookup refuses to, which left a 0% rice sitting on the schema
+            * default of "taxable" — trading one silent wrong answer for
+            * another. This is what closes that: the shopkeeper is looking
+            * straight at the item, so this is the one moment the question is
+            * cheap to answer and the answer is certain.
+            *
+            * Spans both columns because it is a question, not a field.
+            */}
+          {exemption?.outcome === 'needs-confirmation' && (
+            <div className="sm:col-span-2 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-3">
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                Is this sold loose, or pre-packaged and labelled?
+              </p>
+              <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1">
+                {exemption.rules[0].description}
+              </p>
+              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-1">
+                Sold loose it is exempt. Pre-packaged and labelled, it is taxable — and the two go in
+                different boxes of your GSTR-1, so this decides whether your return is right.
+              </p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Button
+                  type="button" size="sm" variant="outline"
+                  className="h-11"
+                  onClick={() => setForm(f => ({ ...f, gstTreatment: 'exempt', gstRate: '0' }))}
+                >
+                  Sold loose — exempt
+                </Button>
+                <Button
+                  type="button" size="sm" variant="outline"
+                  className="h-11"
+                  onClick={() => setForm(f => ({ ...f, gstTreatment: 'taxable' }))}
+                >
+                  Pre-packaged &amp; labelled — taxable
+                </Button>
+              </div>
+              <p className="text-3xs text-amber-700 dark:text-amber-400 mt-2">
+                {exemption.source} · entry {exemption.rules[0].serial}
+              </p>
+            </div>
+          )}
+
+          {/*
+            * The confident case, shown for the same reason the question is:
+            * so the shopkeeper can see WHY the app chose exempt, and which
+            * line of which notification says so. §0 — every figure shows
+            * receipts that open the real record.
+            */}
+          {exemption?.outcome === 'exempt' && (
+            <div className="sm:col-span-2 rounded-lg border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3">
+              <p className="text-2xs text-emerald-900 dark:text-emerald-200">
+                <b>Exempt from GST.</b> {exemption.rules[0].description}
+              </p>
+              <p className="text-3xs text-emerald-700 dark:text-emerald-400 mt-1">
+                {exemption.source} · entry {exemption.rules[0].serial}
+              </p>
+            </div>
+          )}
+
           {/* 🔒 V17 Audit §4.2: GST treatment — for GSTR-3B 3.1(c) nil/exempt/non-GST breakdown */}
           <div>
             <Label htmlFor="field-gst-treatment">GST Treatment</Label>
