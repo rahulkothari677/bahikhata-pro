@@ -10,6 +10,7 @@ import { logAudit } from '@/lib/audit'
 import { deriveStateCode } from '@/lib/gst'
 import { getAdvancesForPeriod } from '@/lib/advances-for-period'
 import { buildAmendments, filedInvoicesFrom, type AmendmentTables } from '@/lib/gstr1-amendments'
+import { gstr1aWindow, correctionFitsGstr1a } from '@/lib/gstr1a-window'
 import { buildGstr1, type Gstr1Transaction, type ShopInfo } from '@/lib/gstr1-builder'
 import { getPriorFYBounds } from '@/lib/fiscal-year'
 
@@ -349,7 +350,126 @@ export async function GET(req: NextRequest) {
       where: { userId_monthYear: { userId, monthYear } },
     })
 
+    /*
+     * ── GSTR-1A: THIS period's own correction window (#41) ────────────────
+     *
+     * Everything above deals with EARLIER periods — `monthYear: { not: ... }`
+     * — so a correction to the period being viewed has never appeared on its
+     * own screen. It surfaces next month as a 9A amendment instead, and by
+     * then the cheap fix has expired.
+     *
+     * The window is open when this period's GSTR-1 is filed and its OWN
+     * GSTR-3B is not. Both facts are already stored, so nothing is guessed.
+     *
+     * Why it is worth the extra query: GSTR-3B's outward table has been locked
+     * since July 2025 and auto-fills from GSTR-1. Correcting inside the window
+     * means the right tax is paid once. Missing it means paying the wrong
+     * figure now and reclaiming it next month — or, in the other direction,
+     * sitting on exactly the GSTR-1-over-GSTR-3B gap that Rule 88C turns into
+     * a notice, which our own Notice Risk panel already warns about.
+     */
+    let gstr1a: {
+      window: ReturnType<typeof gstr1aWindow>
+      corrections: Array<{ inum: string; changes: string[]; fitsGstr1a: boolean; reason: string }>
+      blockedCount: number
+    } | null = null
+
+    if (existingSnapshot?.filingStatus === 'filed') {
+      const own3b = await db.gstReturn.findUnique({
+        where: { userId_monthYear: { userId, monthYear } },
+        select: { filingStatus: true },
+      })
+      const window = gstr1aWindow({
+        gstr1Filed: true,
+        gstr3bFiled: own3b?.filingStatus === 'filed',
+        /*
+         * Frequency is not stored anywhere yet, so this passes null and the
+         * window answers for a monthly filer. A quarterly shop would be told
+         * something unconfirmed — logged as the known limit rather than
+         * papered over, because inventing a frequency field to guess at is
+         * worse than saying we do not track it.
+         */
+        filingFrequency: null,
+      })
+
+      /*
+       * The SAME comparison the later-period amendments use — filed snapshot
+       * against the books as they stand. Reusing buildAmendments rather than
+       * writing a second comparison: two rules answering "has this invoice
+       * changed?" would drift, and this one decides which return a correction
+       * belongs in.
+       */
+      const ownFiled = filedInvoicesFrom(existingSnapshot.rawJson, monthYear)
+      const corrections: Array<{ inum: string; changes: string[]; fitsGstr1a: boolean; reason: string }> = []
+
+      if (window.isOpen && ownFiled.length > 0) {
+        const ownNums = [...new Set(ownFiled.map(f => f.inum))]
+        const [ownLive, ownCancelled] = await Promise.all([
+          db.transaction.findMany({
+            // Bounded by ownNums — the invoices this period actually filed.
+            where: { userId, invoiceNo: { in: ownNums }, type: { in: ['sale', 'credit-note', 'debit-note'] }, deletedAt: null },
+            select: { invoiceNo: true, date: true, totalAmount: true, party: { select: { gstin: true, state: true } } },
+          }),
+          db.transaction.findMany({
+            where: { userId, invoiceNo: { in: ownNums }, type: { in: ['sale', 'credit-note', 'debit-note'] }, deletedAt: { not: null } },
+            select: { invoiceNo: true },
+          }),
+        ])
+        const ownCurrent = new Map(
+          ownLive.map((t) => {
+            const partyState = deriveStateCode(t.party?.state || null, null, t.party?.gstin || null, null)
+            return [String(t.invoiceNo), {
+              inum: String(t.invoiceNo),
+              idt: formatPortalDateForAmendment(t.date),
+              val: roundMoney(t.totalAmount),
+              pos: partyState || shopStateCode || '',
+              ctin: t.party?.gstin || undefined,
+              exists: true,
+            }]
+          }),
+        )
+        for (const t of ownCancelled) {
+          const inum = String(t.invoiceNo)
+          if (!ownCurrent.has(inum)) {
+            ownCurrent.set(inum, { inum, idt: '', val: 0, pos: '', ctin: undefined, exists: false })
+          }
+        }
+
+        const own = buildAmendments(ownFiled, ownCurrent)
+        /*
+         * The four tables carry their rows under three different shapes —
+         * b2ba/b2cla group under `inv`, cdnra under `nt`, and cdnura is a flat
+         * array of notes. Flattened explicitly rather than with a spread over
+         * a union, which typechecks only by accident and would silently drop a
+         * table if one changed shape. A dropped table here means a correction
+         * the shopkeeper is never told about.
+         */
+        const amendedRows = [
+          ...own.b2ba.flatMap(g => g.inv),
+          ...own.b2cla.flatMap(g => g.inv),
+          ...own.cdnra.flatMap(g => g.nt),
+          ...own.cdnura,
+        ]
+        for (const inv of amendedRows) {
+          const fit = correctionFitsGstr1a(inv.changes)
+          corrections.push({
+            inum: inv.oinum,
+            changes: inv.changes,
+            fitsGstr1a: fit.fits,
+            reason: fit.reason,
+          })
+        }
+      }
+
+      gstr1a = {
+        window,
+        corrections,
+        blockedCount: corrections.filter(c => !c.fitsGstr1a).length,
+      }
+    }
+
     return NextResponse.json({
+      gstr1a,
       period: {
         monthYear,
         periodStart: periodStart.toISOString(),

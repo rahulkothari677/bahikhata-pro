@@ -16,6 +16,7 @@
 
 import { useState } from 'react'
 import { NeedsAmending } from '@/components/reports/NeedsAmending'
+import { Gstr1aWindow } from '@/components/reports/Gstr1aWindow'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -282,6 +283,17 @@ export function Gstr1Report() {
         * ago with nothing on screen to show it — the same way the filing
         * readiness card once shipped invisible.
         */}
+      {/*
+        * ABOVE NeedsAmending on purpose (#41). Both talk about corrections, and
+        * they point at different returns — GSTR-1A fixes THIS month, the 9A
+        * amendments below fix it in a LATER one. The time-limited route has to
+        * be read first, because it is the one that expires.
+        */}
+      <Gstr1aWindow
+        window={data?.gstr1a?.window}
+        corrections={data?.gstr1a?.corrections}
+        blockedCount={data?.gstr1a?.blockedCount}
+      />
       <NeedsAmending b2ba={data?.gstr1?.b2ba} b2cla={data?.gstr1?.b2cla} cdnra={data?.gstr1?.cdnra} cdnura={data?.gstr1?.cdnura} />
 
       {/* Filed-vs-live divergence warning */}
