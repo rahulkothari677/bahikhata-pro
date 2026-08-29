@@ -27,6 +27,7 @@ import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { EmptyState } from '@/components/common/EmptyState'
+import { checkMixedSupply } from '@/lib/mixed-supply-invoice'
 import { deriveInterStateFromStates } from '@/lib/gst-states'
 import { useSetting } from '@/hooks/use-setting'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
@@ -74,6 +75,17 @@ type ItemRow = {
   unitPrice: number
   gstRate: number
   unit: string
+  /*
+   * The line's own GST treatment, carried from the product (#91).
+   *
+   * Needed because a 0% line is NOT automatically exempt — a line marked
+   * 'taxable' at a nil tariff is still a taxable supply and belongs on the tax
+   * invoice. Without this the mixed-supply check would read every zero-rate
+   * line as exempt and split bills that need no splitting, which matters now
+   * that the item screen deliberately leaves a conditional item as 'taxable'
+   * until the shopkeeper answers the packaging question.
+   */
+  gstTreatment?: string | null
 }
 
 export function TransactionEntry({ type, estimateMode = false }: { type: LedgerType; estimateMode?: boolean }) {
@@ -517,6 +529,26 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const shopState: string | undefined = settingData?.setting?.state
   const derivedInterState = deriveInterStateFromStates(shopState, selectedParty?.state)
 
+  /*
+   * #91 — a registered buyer cannot take taxable and exempt items on ONE bill.
+   *
+   * Tax invoice for the taxable lines (Section 31(1)), bill of supply for the
+   * rest (Section 31(3)(c)). Rule 46A permits a single combined document only
+   * where the buyer is UNREGISTERED — which is most of a kirana's day, and is
+   * why this is computed from the customer's GSTIN rather than warned on
+   * every mixed basket.
+   *
+   * Recomputed as lines are added, which is free: a scan of the rows already
+   * on screen.
+   */
+  const mixedSupply = useMemo(
+    () => checkMixedSupply(
+      items.map(i => ({ gstRate: Number(i.gstRate) || 0, gstTreatment: i.gstTreatment })),
+      selectedParty?.gstin,
+    ),
+    [items, selectedParty?.gstin],
+  )
+
   // The preview is what the shopkeeper checks before saving, so it has to
   // agree with what the server will store. Whenever the answer is knowable,
   // force the flag to the derived value — including over a restored draft or
@@ -622,6 +654,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         quantity: 1,
         unitPrice: isSale ? product.salePrice : product.purchasePrice,
         gstRate: product.gstRate,
+        gstTreatment: product.gstTreatment ?? null,
         unit: product.unit,
       }])
     }
@@ -2398,6 +2431,36 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </Badge>
                   )}
                 </div>
+                {/*
+                  * #91 — this bill needs to be TWO documents.
+                  *
+                  * Beside the IGST/CGST indicator because both answer "what
+                  * kind of bill is this?", and a shopkeeper checking one is
+                  * already looking here.
+                  *
+                  * It WARNS and does not block. Someone at the counter with a
+                  * customer waiting is the worst moment to refuse a sale over
+                  * a documentation rule they have never heard of — that
+                  * teaches them the app gets in the way, and the next thing
+                  * they learn is how to work around it.
+                  */}
+                {mixedSupply.needsSplit && (
+                  <div className="mt-2 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-2.5">
+                    <p className="text-2xs font-medium text-amber-900 dark:text-amber-200">
+                      This needs two bills, not one
+                    </p>
+                    <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1">
+                      {mixedSupply.message}
+                    </p>
+                    <ul className="mt-1.5 space-y-0.5">
+                      {mixedSupply.documents.map(d => (
+                        <li key={d} className="text-2xs text-amber-800 dark:text-amber-300 flex gap-1.5">
+                          <span>&bull;</span><span>{d}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {derivedInterState.indeterminate && (
                   <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
                     {!shopState
