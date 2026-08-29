@@ -23,6 +23,7 @@ import {
   canEnterCompositionFrom,
   financialYearStart,
 } from '@/lib/composition-window'
+import { readCode } from '@/test-support/read-source'
 
 /** Q2 of FY 2026-27: July, August, September. periodEnd is exclusive. */
 const Q2_START = new Date(2026, 6, 1)
@@ -140,5 +141,41 @@ describe('a back-dated registration cannot be charged for months before it', () 
     // but a Q1 question must not charge for April–June.
     const q1 = sliceForComposition(onScheme('2026-07-01'), new Date(2026, 3, 1), new Date(2026, 6, 1))
     expect(q1).toBeNull()
+  })
+})
+
+describe('the settings route enforces both dates', () => {
+  /*
+   * These read the route as text because the handler needs a session, a
+   * database and a Next request to call. What they pin is the SHAPE of two
+   * rules that were each wrong once, in ways nothing else would notice.
+   */
+  const route = readCode('src/app/api/settings/route.ts')
+
+  test('switching the scheme on stamps 1 April, never today', () => {
+    /*
+     * MY OWN BUG, found while wiring the screen. The route refused a
+     * client-supplied entry date that was not 1 April — and then, when the
+     * client sent none, wrote `new Date()`: the very value it had just
+     * rejected. A rule enforced on one path and broken on the other is not a
+     * rule.
+     *
+     * It also silently lost turnover. Once CMP-08 began clamping to this
+     * column, a shop switching composition on in August would have had its
+     * quarter start on the day it toggled, dropping every earlier sale in
+     * that quarter from the return with no error anywhere.
+     */
+    expect(route).toContain('financialYearStart(new Date())')
+    expect(route).not.toMatch(/sanitized\.compositionFrom\s*=\s*new Date\(\)/)
+  })
+
+  test('an exit before the entry date is refused, not stored', () => {
+    /*
+     * Storing it fails silently and confusingly: sliceForComposition finds no
+     * overlap for any quarter, so every CMP-08 answers "you were not a
+     * composition dealer then" while Settings still shows the scheme on. A
+     * contradiction with nothing to click.
+     */
+    expect(route).toContain('Exit date is before the start date')
   })
 })

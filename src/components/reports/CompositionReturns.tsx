@@ -16,7 +16,7 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, CalendarDays, Loader2 } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Info, Loader2 } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { formatINR } from '@/lib/utils'
 
@@ -29,6 +29,24 @@ function currentQuarter(d = new Date()) {
   const y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
   const q = Math.floor(((d.getMonth() + 9) % 12) / 3) + 1
   return `${y}-Q${q}`
+}
+
+/**
+ * A date from the API, as a day a shopkeeper would say out loud.
+ *
+ * `shiftDays` exists because every period end from the API is EXCLUSIVE — the
+ * first instant NOT covered. Printing it raw would name the day after the last
+ * day included, and on a split quarter that is precisely the boundary in
+ * dispute. Callers showing "up to X" pass -1 and get the last day that IS
+ * covered. Returns '' rather than "Invalid Date" so a missing field degrades
+ * to a gap instead of shouting.
+ */
+function fmtDay(iso?: string | null, shiftDays = 0): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  if (shiftDays) d.setDate(d.getDate() + shiftDays)
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 /* Defined at module scope: a component created inside render is a new type on
@@ -64,12 +82,41 @@ export function CompositionReturns() {
   const notComposition = c?.error || a?.error
 
   if (notComposition) {
+    /*
+     * Two different refusals used to print the same sentence.
+     *
+     * "You are on the regular scheme" is right for a shop that never opted in.
+     * It is WRONG, and misleading, for a composition dealer who left part-way
+     * through the year: that shop IS a composition dealer, just not for the
+     * quarter being asked about, and telling it to go and opt in sends it to
+     * change a setting that is already correct.
+     *
+     * The API distinguishes the two and writes the reason. Preferring its
+     * `message` is the same rule as refusing WITH the reason on the way in —
+     * a refusal that does not say why gets read as the app being limited.
+     */
+    const apiMessage = c?.message || a?.message
     return (
       <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
-        <p className="text-sm font-medium">These returns are for composition dealers</p>
+        <p className="text-sm font-medium">
+          {apiMessage ? 'No CMP-08 for this quarter' : 'These returns are for composition dealers'}
+        </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Your shop is on the regular scheme, so you file GSTR-1 and GSTR-3B instead. You can change
-          this in Account → Feature Toggles if you have opted into the composition scheme.
+          {apiMessage || (
+            <>
+              {/*
+                * This used to say "Account → Feature Toggles". The composition
+                * scheme is not there and never was: those toggles are display
+                * switches, while this is a legal status that changes the tax
+                * rate and which returns exist. It sits with e-invoicing in the
+                * tax settings. A pointer to the wrong screen is worse than
+                * none — the shopkeeper looks, finds nothing, and concludes the
+                * app cannot do it.
+                */}
+              Your shop is on the regular scheme, so you file GSTR-1 and GSTR-3B instead. If you have
+              opted in with form CMP-02, turn on the composition scheme in Settings → Invoice &amp; Tax.
+            </>
+          )}
         </p>
       </div>
     )
@@ -88,7 +135,17 @@ export function CompositionReturns() {
           </p>
         </div>
         <div className="p-4 space-y-2">
-          <Row label="Turnover this quarter" value={formatINR(c?.turnover || 0)} />
+          {/*
+            * The label states the period it ACTUALLY covers. "Turnover this
+            * quarter" is a lie on a split quarter, and it is the kind of lie
+            * that reconciles — the reader checks the figure against three
+            * months of sales, finds it short, and distrusts the app rather
+            * than reading further.
+            */}
+          <Row
+            label={c?.leftMidQuarter ? `Turnover up to ${fmtDay(c?.period?.to, -1)}` : 'Turnover this quarter'}
+            value={formatINR(c?.turnover || 0)}
+          />
           <Row label="CGST" value={formatINR(c?.cgst || 0)} />
           <Row label="SGST" value={formatINR(c?.sgst || 0)} />
           <div className="pt-2 border-t border-border/60">
@@ -98,6 +155,33 @@ export function CompositionReturns() {
             You pay this from your own margin — your bills carry no GST.
           </p>
         </div>
+
+        {/*
+          * THE SPLIT QUARTER (#42). Crossing the turnover limit ends
+          * composition on the crossing day itself, so this CMP-08 can cover
+          * six weeks of a thirteen-week quarter. Without this panel the only
+          * visible symptom is a number that looks too small.
+          *
+          * Blue, not amber. Nothing has gone wrong and nothing is overdue —
+          * the shop grew past the scheme. An alarm colour here would read as
+          * "you have a problem", and the one real risk is the opposite
+          * mistake: assuming the rest of the quarter needs no return at all.
+          */}
+        {c?.leftMidQuarter && (
+          <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/30 border-t border-blue-200 dark:border-blue-900 flex items-start gap-2">
+            <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="text-2xs text-blue-800 dark:text-blue-300 space-y-1">
+              <p>{c.splitNote}</p>
+              {c.regularPeriod && (
+                <p>
+                  <b>{fmtDay(c.regularPeriod.from)} to {fmtDay(c.regularPeriod.to, -1)}</b> is on the
+                  regular scheme. That part goes in GSTR-1 and GSTR-3B, not here — it is not missing,
+                  it is on a different form.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* GSTR-4 — the annual return */}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -206,6 +206,31 @@ export function Settings({
   const [roundOffEnabled, setRoundOffEnabled] = useState(false)
   // null = never answered, which is deliberately distinct from false.
   const [eInvoiceApplicable, setEInvoiceApplicable] = useState<boolean | null>(null)
+  /*
+   * COMPOSITION SCHEME (#42). These had NO surface at all: the scheme could
+   * only be switched on by calling the API by hand, while the Reports screen
+   * told the shopkeeper to change it in "Account → Feature Toggles" — a screen
+   * that does not exist anywhere in this codebase. So the whole CMP-08 /
+   * GSTR-4 engine was unreachable, and the sentence pointing at it was false.
+   *
+   * compositionTo is the one that costs money. Crossing the turnover limit
+   * ends the scheme on the crossing day itself, and until this field could be
+   * entered, CMP-08 charged 1% across the whole quarter — on top of the
+   * regular GST the shop had already paid after crossing.
+   */
+  const [compositionCategory, setCompositionCategory] = useState<string | null>(null)
+  const [compositionTo, setCompositionTo] = useState<string>('')
+  /*
+   * What the SERVER currently holds for the exit date.
+   *
+   * Needed because `compositionTo` is bound to the input and changes on every
+   * keystroke — so on blur it always equals the field, and a "did this change?"
+   * guard written against it can never be true. My first version of this had
+   * exactly that bug: the guard matched every time and the date was never
+   * saved, silently, with the field still showing the date the user typed.
+   * The comparison has to be against what was last persisted.
+   */
+  const savedCompositionTo = useRef<string>('')
   // 📄 How bills are delivered. See docs/DOCUMENT-ENGINE-PLAN.md.
   const [docSendFormat, setDocSendFormat] = useState<'smart' | 'image' | 'pdf'>('smart')
   const [invoiceTheme, setInvoiceTheme] = useState('classic')
@@ -277,6 +302,12 @@ export function Settings({
       })
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
       setEInvoiceApplicable(data.setting.eInvoiceApplicable ?? null)
+      setCompositionCategory(data.setting.compositionCategory ?? null)
+      /* <input type="date"> speaks YYYY-MM-DD only; anything else renders blank
+         and silently looks like "no exit date set". */
+      const loadedTo = data.setting.compositionTo ? String(data.setting.compositionTo).slice(0, 10) : ''
+      setCompositionTo(loadedTo)
+      savedCompositionTo.current = loadedTo
       setDocSendFormat(data.setting.docSendFormat ?? 'smart')
       setInvoiceTheme(data.setting.invoiceTheme ?? 'classic')
       setInvoiceTemplate(data.setting.invoiceTemplate ?? 'standard')
@@ -434,6 +465,53 @@ export function Settings({
     } catch (e: any) {
       setEInvoiceApplicable(prev)
       sonnerToast.error(e?.message || 'Could not save the e-invoicing setting')
+    }
+  }
+
+  /*
+   * Save a composition change and roll the screen back if the server refuses.
+   *
+   * The server is the one that knows the rules — it rejects an entry date that
+   * is not 1 April, and it returns the LEGAL REASON in `message`. Surfacing
+   * that message instead of a generic "could not save" is the whole point: a
+   * shopkeeper told only that it failed assumes the app is broken, when in
+   * fact the law does not allow what they asked for. Same rule as the report
+   * screen — a refusal that does not say why gets read as a limitation.
+   */
+  const persistComposition = async (
+    patch: { compositionCategory?: string | null; compositionTo?: string | null },
+    successMessage: string,
+  ) => {
+    const prevCategory = compositionCategory
+    const prevTo = compositionTo
+    if (patch.compositionCategory !== undefined) setCompositionCategory(patch.compositionCategory)
+    if (patch.compositionTo !== undefined) setCompositionTo(patch.compositionTo ?? '')
+    try {
+      const r = await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      if (!r.ok) {
+        const body = await r.json().catch(() => null)
+        throw new Error(body?.message || body?.error || 'Could not save')
+      }
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      /* The returns themselves change shape when these dates move, and a stale
+         CMP-08 showing the old period is the exact confusion this fixes. */
+      queryClient.invalidateQueries({ queryKey: ['cmp-08'] })
+      queryClient.invalidateQueries({ queryKey: ['gstr-4'] })
+      /* The write landed, so this is now what the server holds. Updating it
+         only on SUCCESS is what makes a refused save retryable: the guard
+         still sees a difference and lets the next blur try again. */
+      if (patch.compositionTo !== undefined) savedCompositionTo.current = patch.compositionTo ?? ''
+      sonnerToast.success(successMessage)
+    } catch (e: any) {
+      setCompositionCategory(prevCategory)
+      setCompositionTo(prevTo)
+      sonnerToast.error(e?.message || 'Could not save the composition setting')
     }
   }
 
@@ -2119,6 +2197,97 @@ export function Settings({
               checked={eInvoiceApplicable === true}
               onCheckedChange={(checked) => persistEInvoice(checked)}
             />
+          </div>
+
+          {/*
+            * COMPOSITION SCHEME (#42).
+            *
+            * It lives HERE, next to e-invoicing, and not in Features &
+            * Preferences — where the Reports screen used to send people. Those
+            * toggles are display switches held in the browser; this one changes
+            * which returns exist, which tax rate applies, and whether the shop's
+            * bills may show GST at all. Putting a legal status among on/off
+            * conveniences invites someone to flip it to see what happens.
+            *
+            * A dropdown, not a switch, because the RATE depends on the answer:
+            * trader and manufacturer 1%, restaurant 5%, service provider 6%.
+            * A single "composition: on" would have to guess one of them, and a
+            * guessed rate is a wrong return that looks filed.
+            */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Composition scheme</p>
+                <p className="text-2xs text-muted-foreground">
+                  Turn this on only if you have opted in with form CMP-02. You then pay a small
+                  percentage of your sales instead of GST, your bills carry no tax, and you file
+                  CMP-08 and GSTR-4 instead of GSTR-1 and GSTR-3B.
+                </p>
+              </div>
+            </div>
+
+            <select
+              aria-label="Composition scheme category"
+              className="mt-3 w-full h-11 rounded-lg border border-border/60 bg-background px-3 text-sm"
+              value={compositionCategory ?? ''}
+              onChange={(e) => {
+                const v = e.target.value || null
+                persistComposition(
+                  /* Turning it off clears the exit date too — the server does
+                     the same. A leftover exit date on a regular-scheme shop is
+                     a trap waiting for the next time it opts in. */
+                  v ? { compositionCategory: v } : { compositionCategory: null, compositionTo: null },
+                  v ? 'Composition scheme turned on' : 'Back on the regular scheme',
+                )
+              }}
+            >
+              <option value="">Regular scheme (I charge GST on my bills)</option>
+              <option value="trader">Trader — 1% of turnover</option>
+              <option value="manufacturer">Manufacturer — 1% of turnover</option>
+              <option value="restaurant">Restaurant, no alcohol — 5% of turnover</option>
+              <option value="service">Service provider — 6% of turnover</option>
+            </select>
+
+            {/*
+              * THE FIELD THAT STOPS DOUBLE TAXATION.
+              *
+              * Crossing the turnover limit ends composition on the crossing day
+              * itself — there is no grace period, and from that moment the shop
+              * must issue tax invoices and charge full GST. Without this date
+              * CMP-08 charged 1% across the WHOLE quarter, on top of the GST
+              * already paid on post-crossing sales. Only shown once the scheme
+              * is on: an exit date with no scheme to exit is meaningless.
+              */}
+            {compositionCategory && (
+              <div className="mt-3">
+                <Label htmlFor="composition-to" className="text-xs">
+                  Date I left the scheme (leave blank if you are still in it)
+                </Label>
+                <Input
+                  id="composition-to"
+                  type="date"
+                  className="mt-1"
+                  value={compositionTo}
+                  onChange={(e) => setCompositionTo(e.target.value)}
+                  onBlur={(e) => {
+                    const v = e.target.value
+                    /* Compare against what the SERVER has, not against the
+                       bound state — see the note on savedCompositionTo. */
+                    if (v === savedCompositionTo.current) return
+                    persistComposition(
+                      { compositionTo: v || null },
+                      v ? 'Exit date saved' : 'Exit date cleared',
+                    )
+                  }}
+                />
+                <p className="text-2xs text-muted-foreground mt-1">
+                  Set this the day you cross the turnover limit. Your CMP-08 will then charge only
+                  up to that date, and everything after it goes into GSTR-1 and GSTR-3B — so you
+                  are not taxed twice on the same sales.
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

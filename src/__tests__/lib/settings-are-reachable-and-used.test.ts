@@ -174,9 +174,45 @@ describe('every invoice setting has a screen that can set it', () => {
   it.each([
     'invoicePrefix', 'invoiceNextNumber', 'invoiceTerms', 'invoiceThankYou',
     'invoiceDueDays', 'bankIfsc', 'upiId', 'paymentQrUrl', 'signatureUrl',
+    /*
+     * #42, 29 Aug 2026. These two were the worst instance of this defect yet,
+     * because the screen that needed them TOLD the shopkeeper where to go and
+     * the place did not exist: CompositionReturns said "Account → Feature
+     * Toggles", which has never contained the composition scheme. So the whole
+     * CMP-08 / GSTR-4 engine could only be switched on by calling the API by
+     * hand, and compositionTo — the field that stops a shop being taxed twice
+     * after it crosses the turnover limit — could not be entered at all.
+     *
+     * That is the same shape as invoicePrefix: built, validated, tested, and
+     * unreachable. It is on this list so it cannot happen a third time.
+     */
+    'compositionCategory', 'compositionTo',
   ])('%s can be set from a screen', setting => {
     expect({ setting, settable: SETTINGS_UI.includes(setting) })
       .toEqual({ setting, settable: true })
+  })
+
+  it('the composition scheme is not sent to a screen that does not have it', () => {
+    /*
+     * The pointer, not the control. A correct control plus a sentence naming
+     * the wrong screen still leaves the shopkeeper looking in the wrong place
+     * and concluding the app cannot do it — which is exactly what happened
+     * here for three weeks.
+     *
+     * Feature Toggles is real (profile icon → Features), so this is not about
+     * a missing screen. It holds display switches; the composition scheme
+     * changes the tax rate and which returns exist, and it lives with
+     * e-invoicing in the tax settings.
+     *
+     * `readCode` strips comments, so this asserts on what the component
+     * RENDERS, not on the note above explaining why. Writing it as a windowed
+     * regex over the raw file was my first attempt and it is Cause 7 exactly:
+     * the explanation quotes the banned phrase, so the guard would have been
+     * measuring my own comment.
+     */
+    const rendered = readCode('src/components/reports/CompositionReturns.tsx')
+    expect(rendered).not.toContain('Feature Toggles')
+    expect(rendered).toContain('Invoice')
   })
 
   it('the visibility toggles render from the registry', () => {

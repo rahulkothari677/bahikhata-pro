@@ -4,7 +4,7 @@ import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { withCache, noStore } from '@/lib/cache'
 import { apiError } from '@/lib/api-error'
 import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
-import { canEnterCompositionFrom } from '@/lib/composition-window'
+import { canEnterCompositionFrom, financialYearStart } from '@/lib/composition-window'
 
 // GET /api/settings
 export async function GET() {
@@ -153,18 +153,34 @@ export async function PUT(req: NextRequest) {
         }
         sanitized.compositionCategory = v
         /*
-         * Defaults to today only when the client did not state a date.
+         * Defaults to the START OF THE FINANCIAL YEAR, not to today.
          *
-         * This comment used to say the column was "CURRENTLY UNUSED", which
-         * was true and honest when written — nothing read it. It is now read
-         * by lib/composition-window.ts, so CMP-08 clamps to the registration
-         * period instead of charging a whole quarter regardless. Correcting
-         * the comment matters as much as the code: a note describing
-         * behaviour the file no longer has is a claim the next reader trusts
-         * without checking, which is exactly how this column sat inert for
-         * three weeks.
+         * It used to stamp `new Date()`, and that contradicted the check
+         * directly above: the route REFUSES a client-supplied date that is not
+         * 1 April, then quietly wrote today's date — the very value it had
+         * just rejected — whenever the client sent none. A rule enforced on
+         * one path and broken on the other is not a rule.
+         *
+         * It is also wrong in a way that costs turnover. Once
+         * composition-window.ts began clamping CMP-08 to this column, a shop
+         * switching the scheme on in August would have had its quarter start
+         * on the day it toggled, silently dropping every sale earlier in the
+         * quarter from the return.
+         *
+         * 1 April is the only date this can legally be: CMP-02 takes effect
+         * from the start of a financial year and must be filed before that
+         * year begins (Rule 3). A shop on composition today has been on it
+         * since April, whenever it got round to telling us.
+         *
+         * (This comment previously said the column was "CURRENTLY UNUSED" —
+         * true and honest when written, false the moment #42 landed. A note
+         * describing behaviour the file no longer has is a claim the next
+         * reader trusts without checking, which is how this column sat inert
+         * for three weeks.)
          */
-        if (sanitized.compositionFrom === undefined) sanitized.compositionFrom = new Date()
+        if (sanitized.compositionFrom === undefined) {
+          sanitized.compositionFrom = financialYearStart(new Date())
+        }
       } else {
         return NextResponse.json({
           error: 'Invalid composition category',
@@ -185,6 +201,30 @@ export async function PUT(req: NextRequest) {
         const exit = new Date(body.compositionTo)
         if (Number.isNaN(exit.getTime())) {
           return NextResponse.json({ error: 'compositionTo must be a date' }, { status: 400 })
+        }
+        /*
+         * An exit BEFORE the entry date has no legal meaning, and the failure
+         * it causes is silent rather than loud: sliceForComposition correctly
+         * finds no overlap for any quarter, so every CMP-08 answers "you were
+         * not a composition dealer then" — while Settings still shows the
+         * scheme switched on. The shopkeeper sees a contradiction with no
+         * explanation and nothing to click.
+         *
+         * Refuse it here, where the date is entered and the person can still
+         * see what they typed. A refusal at the point of entry costs one
+         * correction; the same problem discovered at filing time costs a
+         * return.
+         */
+        const entry = (sanitized.compositionFrom as Date | undefined)
+          ?? (await db.setting.findUnique({
+            where: { userId },
+            select: { compositionFrom: true },
+          }))?.compositionFrom
+        if (entry && exit < entry) {
+          return NextResponse.json({
+            error: 'Exit date is before the start date',
+            message: `You joined the composition scheme on ${entry.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}, so you cannot have left it before that. Check the date you typed.`,
+          }, { status: 400 })
         }
         sanitized.compositionTo = exit
       }
