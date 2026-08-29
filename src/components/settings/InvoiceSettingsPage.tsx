@@ -152,9 +152,16 @@ export const INVOICE_SECTIONS = [
   {
     id: 'invoice-tax',
     label: 'Rounding & tax',
-    summary: 'Round off, e-invoicing',
+    /*
+     * The composition scheme is named here because this list is the ONLY way
+     * to find it. A row summarised as "Round off, e-invoicing" is one a
+     * composition dealer scrolls straight past — the setting would be present
+     * and still effectively unreachable, which is the defect #42 spent three
+     * commits removing rather than one worth reintroducing in a label.
+     */
+    summary: 'Round off, e-invoicing, composition scheme',
     // The one that is genuinely not guessable from its name.
-    hint: 'Round off drops the paise so the total is a whole rupee. e-Invoicing is a legal requirement once your turnover has crossed ₹5 crore in any year since 2017-18 — most shops do not need it.',
+    hint: 'Round off drops the paise so the total is a whole rupee. e-Invoicing is a legal requirement once your turnover has crossed ₹5 crore in any year since 2017-18 — most shops do not need it. The composition scheme is for shops that pay a small percentage of sales instead of GST and file CMP-08 and GSTR-4.',
     icon: Coins,
     tint: 'text-amber-600 dark:text-amber-400',
     tintBg: 'bg-amber-100 dark:bg-amber-950',
