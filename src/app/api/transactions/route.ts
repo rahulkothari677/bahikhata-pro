@@ -9,6 +9,7 @@ import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, t
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, createTransactionSchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
+import { getOrCreateWalkInParty } from '@/lib/walk-in-party'
 import { apiError } from '@/lib/api-error'
 import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
@@ -303,7 +304,21 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge, updateProductCosts, itcBlockedReason } = validation.data as any
+    const { type, partyId: requestedPartyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge, updateProductCosts, itcBlockedReason } = validation.data as any
+
+    /*
+     * A counter return lands on the shop's reserved "Walk-in Customer".
+     *
+     * Resolved HERE, before anything reads partyId — deriveInterStateStatus
+     * below decides place of supply from the party, so resolving it later
+     * would compute the tax split against a party that did not exist yet.
+     * That is the ordering bug this comment exists to stop somebody redoing.
+     *
+     * See lib/walk-in-party.ts for why a real party beats a null one.
+     */
+    const partyId: string | null = (isNoteType(type) && !requestedPartyId)
+      ? await getOrCreateWalkInParty(db, userId)
+      : requestedPartyId
 
     // 🔒 FIX H1: Check staff permission based on transaction type
     // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
@@ -739,12 +754,21 @@ export async function POST(req: NextRequest) {
     // customer — and never again at the one that overstates their liability.
     // Task #37 tracks removing the requirement altogether by carrying these
     // returns on a real "Walk-in Customer" party.
-    if (isNoteType(type) && !partyId) {
-      return NextResponse.json({
-        error: 'Add a customer to this return',
-        message: 'A return has to be linked to a customer so their balance can be adjusted. Pick the customer above — or add them in one tap if they are not on your list yet. Do NOT record it as a stock adjustment: that changes your stock but not your GST, so you would end up paying tax on a sale that came back.',
-      }, { status: 400 })
-    }
+    /*
+     * RESOLVED — the rejection is gone. See lib/walk-in-party.ts.
+     *
+     * The CA review was blunt: Section 34 does not require a named recipient,
+     * and of everything in the app this was the item costing users real money
+     * today. Refusing the note did not protect anybody; it just moved the loss
+     * from the khata to the tax.
+     *
+     * A counter return now lands on the shop's reserved "Walk-in Customer"
+     * party, created the first time it is needed. Every khata invariant the
+     * old rejection was protecting stays true — the note has somebody to
+     * credit — and GSTR-1 nets it into B2CS automatically, because that party
+     * carries no GSTIN.
+     */
+    // (the walk-in party was resolved above, before place-of-supply is derived)
 
     // 🔒 AUDIT V24 §2: Validate credit/debit notes against their original
     // invoice — ownership, type pairing (CN→sale, DN→purchase), same party,

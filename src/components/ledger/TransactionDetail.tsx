@@ -34,6 +34,7 @@ import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
 import { resolveInvoiceDesign } from '@/lib/invoice-presets'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
+import { deriveStateCode } from '@/lib/gst-states'
 import { buildInvoiceDocument, invoiceShopFromSetting } from '@/lib/invoice-document'
 import { CustomFieldInputs } from '@/components/common/CustomFieldInputs'
 import type { CustomFieldDef } from '@/lib/custom-fields'
@@ -711,6 +712,13 @@ export function TransactionDetail() {
             items={txn.items || []}
             ewayBillNo={txn.ewayBillNo}
             type={txn.type}
+            /*
+             * Place of supply decides which intra-state threshold applies.
+             * For an intra-state sale that is the shop's own state, which is
+             * where the goods are moving. Absent, the check falls back to the
+             * central ₹50,000 — safe in the direction that matters.
+             */
+            stateCode={deriveStateCode(null, null, settingData?.setting?.gstin, settingData?.setting?.state)}
           />
 
           {/* Party + meta info */}

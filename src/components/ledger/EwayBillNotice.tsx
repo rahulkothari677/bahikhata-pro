@@ -35,6 +35,7 @@ export function EwayBillNotice({
   ewayBillNo,
   type,
   transactionId,
+  stateCode,
 }: {
   totalAmount: number
   isInterState: boolean
@@ -42,6 +43,12 @@ export function EwayBillNotice({
   ewayBillNo?: string | null
   type?: string
   transactionId?: string
+  /**
+   * GST state code of the place of supply, for the intra-state threshold.
+   * Absent falls back to the central ₹50,000 — safe in the direction that
+   * matters. See lib/eway-bill.ts.
+   */
+  stateCode?: string | null
 }) {
   const [num, setNum] = useState('')
   const [saving, setSaving] = useState(false)
@@ -96,6 +103,7 @@ export function EwayBillNotice({
     consignmentValue: totalAmount,
     isInterState,
     movesGoods: invoiceMovesGoods(items || []),
+    stateCode,
   })
   if (need.status !== 'likely-required') return null
 

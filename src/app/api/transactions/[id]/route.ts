@@ -7,6 +7,7 @@ import { roundMoney, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
+import { getOrCreateWalkInParty } from '@/lib/walk-in-party'
 import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
 import { UnitMismatchError } from '@/lib/unit-mismatch-error'
@@ -244,7 +245,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }, { status: 400 })
     }
 
-    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, originalTransactionId, noteType, noteReason, affectsStock } = validation.data as any
+    const { type, partyId: requestedPartyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, originalTransactionId, noteType, noteReason, affectsStock } = validation.data as any
+
+    /*
+     * Same rule as POST: a counter return goes on the reserved walk-in party
+     * rather than being refused. Resolved BEFORE deriveInterStateStatus below,
+     * which decides place of supply from the party — see the note in POST.
+     */
+    const partyId: string | null = (isNoteType(type) && !requestedPartyId)
+      ? await getOrCreateWalkInParty(db, userId)
+      : requestedPartyId
 
     // 🔒 AUDIT FIX N6 (v3): Forbid changing transaction type.
     // Was: editing a sale→income would orphan items and leak stock (no reversal).
@@ -609,16 +619,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // Includes the FIX M3 snap-to-total clamp for explicit values.
     const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount, paymentMode)
 
-    // 🔒 AUDIT V25 FIX §6.2 (Batch 7): Block credit/debit notes without a party
-    // on edit too (same check as POST). A note without a party is a silent no-op.
-    // Same wording as POST — see the note there on why the old advice to
-    // "adjust stock instead" was costing shops money.
-    if (isNoteType(type) && !partyId) {
-      return NextResponse.json({
-        error: 'Add a customer to this return',
-        message: 'A return has to be linked to a customer so their balance can be adjusted. Pick the customer above — or add them in one tap if they are not on your list yet.',
-      }, { status: 400 })
-    }
+    // (a note with no party was resolved to the walk-in party above, so the
+    //  old rejection here is gone — see POST for why)
 
     // 🔒 AUDIT V24 §2: Same note-vs-original validation as POST, excluding this
     // note itself from the cumulative cap (we're replacing its old value).
