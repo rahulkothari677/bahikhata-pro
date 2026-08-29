@@ -328,15 +328,35 @@ export async function POST(req: NextRequest) {
     // just an amount, and bills start showing correct dues immediately. No UI
     // change is required for the defect to be fixed.
     //
-    // ONLY FOR 'received'. A 'paid' payment settles OUR debt to a supplier; the
-    // bills involved are purchases, and reusing the sales-side rule there would
-    // allocate against the wrong documents. Supplier-side allocation is its own
-    // change and is deliberately not attempted here.
+    /*
+     * BOTH DIRECTIONS ALLOCATE (#88, 29 Aug 2026).
+     *
+     * This used to run for 'received' only, with a note saying supplier-side
+     * allocation "is its own change and is deliberately not attempted here".
+     * The caution was right about the risk — the sales rule pointed at the
+     * wrong documents — but the consequence had not been felt yet.
+     *
+     * It has now. The 180-day rule reverses input credit when a supplier is
+     * not paid within 180 days of their invoice, and it measures that with
+     * `computeInvoiceDue`, which reads paidAmount + allocations. With no
+     * supplier-side allocation, money paid to a supplier through the payments
+     * screen never reached the purchase bill: the bill stayed "unpaid"
+     * forever, and #88 would warn about credit at risk on suppliers who had
+     * been paid in full — telling a shopkeeper to pay someone twice, with no
+     * way to clear it.
+     *
+     * The fix is the document type, which is all that was ever type-specific
+     * here: a receipt settles our SALES, a payment settles our PURCHASES.
+     * Everything downstream — oldest-first planning, the client-supplied plan,
+     * and validateAllocations as the security boundary — is direction-neutral
+     * and unchanged.
+     */
     let allocationPlan: { allocations: Array<{ transactionId: string; amount: number }>; unallocated: number } =
       { allocations: [], unallocated: roundMoney(amt) }
 
-    if (type === 'received') {
-      // Open sales for this party. Bounded by `take` — a party with years of
+    if (type === 'received' || type === 'paid') {
+      const settlesDocumentType = type === 'received' ? 'sale' : 'purchase'
+      // Open bills for this party. Bounded by `take` — a party with years of
       // history must not drag its whole ledger into memory on every payment.
       // Oldest first is both the allocation order and the useful bound: if a
       // party somehow has more than 500 unsettled bills, the oldest are the
@@ -345,7 +365,7 @@ export async function POST(req: NextRequest) {
         where: {
           userId,
           partyId,
-          type: 'sale',
+          type: settlesDocumentType,
           deletedAt: null,
         },
         select: {

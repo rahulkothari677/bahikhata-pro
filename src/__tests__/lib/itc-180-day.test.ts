@@ -297,3 +297,55 @@ describe('the warning is mounted and ordered to be useful', () => {
     expect(ui).toContain('data.findingCount === 0) return null')
   })
 })
+
+describe('money paid to a supplier actually reaches the purchase bill', () => {
+  const payments = readCode('src/app/api/payments/route.ts')
+
+  test('a supplier payment is allocated, not just recorded', () => {
+    /*
+     * THE GAP THIS CLOSES, found while verifying #88 in the live app.
+     *
+     * The payments route allocated for 'received' only. A note explained that
+     * supplier-side allocation "is its own change and is deliberately not
+     * attempted here" — right about the risk, but the consequence had not been
+     * felt yet.
+     *
+     * It has now. The 180-day rule measures what is unpaid with
+     * `computeInvoiceDue`, which reads paidAmount + allocations. With no
+     * supplier-side allocation, money paid through the payments screen never
+     * reached the purchase bill: it stayed "unpaid" forever, so #88 would warn
+     * about credit at risk on suppliers already paid in full — telling a
+     * shopkeeper to pay someone twice, with no way to clear the warning.
+     */
+    expect(payments).toContain("type === 'received' || type === 'paid'")
+  })
+
+  test('a receipt settles SALES and a payment settles PURCHASES', () => {
+    /*
+     * The document type was the only thing that was ever direction-specific,
+     * and getting it wrong is what the original note warned about: a supplier
+     * payment allocated against sales would settle the wrong bills entirely.
+     */
+    expect(payments).toContain("const settlesDocumentType = type === 'received' ? 'sale' : 'purchase'")
+    expect(payments).toContain('type: settlesDocumentType')
+  })
+
+  test('the security check still runs on both directions', () => {
+    /*
+     * validateAllocations is what stops a hand-crafted request over-settling a
+     * bill, settling an already-paid one, or reaching another party's bills. It
+     * must sit INSIDE the branch that now covers both directions.
+     *
+     * Written against the CALL, not the first occurrence of the name — my first
+     * version compared indexOf('validateAllocations'), which matched the IMPORT
+     * at the top of the file and so could never be after anything. Measuring
+     * nearby text instead of the structure is the mistake this repo has made
+     * six times; here it made the test fail on correct code, which is the
+     * harmless direction, but the fix is the same.
+     */
+    const branch = payments.indexOf("type === 'received' || type === 'paid'")
+    const call = payments.indexOf('validateAllocations(', branch)
+    expect(branch).toBeGreaterThan(-1)
+    expect(call).toBeGreaterThan(branch)
+  })
+})
