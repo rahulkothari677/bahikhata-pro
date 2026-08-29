@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
+import { imsWindow, IMS_ACTIONS } from '@/lib/ims-deadline'
 
 /**
  * GET /api/gstr-2b/reconcile?month=2026-07
@@ -202,9 +203,41 @@ export async function GET(req: NextRequest) {
       twoBOnly.reduce((s, t) => s + t.igst + t.cgst + t.sgst, 0)
     )
 
+    /*
+     * ── IMS: when this stops being a choice (#40) ─────────────────────────
+     *
+     * Everything above says what does NOT line up. It cannot say what that now
+     * costs, because the reconciliation predates IMS.
+     *
+     * Under the substituted Section 38 an invoice nobody acts on is DEEMED
+     * ACCEPTED when GSTR-2B generates on the 14th — accepted along with the tax
+     * treatment the supplier gave it. So the same twoBOnly row that used to
+     * mean "you forgot to enter a bill" can now also mean "somebody billed your
+     * GSTIN for something that is not yours, and you have until the 14th to
+     * say so".
+     *
+     * One extra query, for a filing status already stored. Nothing here is
+     * estimated from a date.
+     */
+    const own3b = await db.gstReturn.findUnique({
+      where: { userId_monthYear: { userId, monthYear } },
+      select: { filingStatus: true },
+    })
+    const ims = imsWindow(monthYear, own3b?.filingStatus === 'filed')
+
     return NextResponse.json({
       monthYear,
       hasImport: true,
+      /*
+       * Carried alongside the existing shape rather than replacing it — the 2B
+       * screen, the CSV export and the notice-risk route all read these fields,
+       * and IMS adds a meaning to them rather than changing what they count.
+       */
+      ims: {
+        ...ims,
+        generationDate: ims.generationDate.toISOString(),
+        actions: IMS_ACTIONS,
+      },
       importInfo: {
         importedAt: gstr2bImport.importedAt,
         invoiceCount: gstr2bImport.invoiceCount,

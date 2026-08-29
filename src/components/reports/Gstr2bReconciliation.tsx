@@ -33,8 +33,7 @@ import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
 import {
   ChevronLeft, ChevronRight, Upload, Download, Loader2,
-  CheckCircle2, AlertTriangle, XCircle, FileCheck, FileX,
-} from 'lucide-react'
+  CheckCircle2, AlertTriangle, XCircle, FileCheck, FileX, Clock } from 'lucide-react'
 
 type ReconcileSection = 'matched' | 'booksOnly' | 'twoBOnly'
 
@@ -231,6 +230,69 @@ export function Gstr2bReconciliation() {
       {/* Reconciliation results */}
       {hasImport && summary && (
         <>
+          {/*
+            * IMS — the deadline that arrives on its own (#40).
+            *
+            * Above everything, because it changes what every number below
+            * MEANS. Doing nothing used to leave things as they were; since the
+            * substituted Section 38 it accepts them. A shopkeeper who reads the
+            * tables without knowing that will conclude an unmatched invoice is
+            * somebody else's problem.
+            *
+            * Only shown when there is actually something to act on. A month
+            * where everything matched needs no countdown — calm when fine.
+            */}
+          {data?.ims && (summary.twoBOnly > 0 || summary.booksOnly > 0) && (
+            <div className={
+              data.ims.state === 'deemed-accepted'
+                ? 'rounded-2xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/30 p-4'
+                : data.ims.state === 'closing'
+                  ? 'rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-4'
+                  : 'rounded-2xl border border-border/60 bg-muted/30 p-4'
+            }>
+              <div className="flex items-start gap-2">
+                <Clock className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                  data.ims.state === 'deemed-accepted' ? 'text-red-600 dark:text-red-400'
+                    : data.ims.state === 'closing' ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-muted-foreground'
+                }`} />
+                <div>
+                  <p className="text-sm font-semibold">
+                    {data.ims.state === 'deemed-accepted'
+                      ? 'These were accepted automatically'
+                      : data.ims.state === 'period-closed'
+                        ? 'This month is closed'
+                        : 'Doing nothing counts as saying yes'}
+                  </p>
+                  <p className="text-2xs text-muted-foreground mt-1">{data.ims.message}</p>
+                </div>
+              </div>
+
+              {/*
+                * The two ways out of a portal-only invoice, side by side.
+                *
+                * Offering ONE would decide for the shopkeeper which kind of
+                * problem this is — and only they can know whether a bill is
+                * theirs. This is the same rule as the packaging question on the
+                * item screen: where the app cannot know, it asks.
+                */}
+              {summary.twoBOnly > 0 && data.ims.actions?.twoBOnly && (
+                <div className="mt-3 rounded-lg border border-border/60 bg-background/60 p-3">
+                  <p className="text-2xs font-medium">{data.ims.actions.twoBOnly.title}</p>
+                  <p className="text-2xs text-muted-foreground mt-1">{data.ims.actions.twoBOnly.detail}</p>
+                  <ul className="mt-2 space-y-1">
+                    {data.ims.actions.twoBOnly.options.map((o: string) => (
+                      <li key={o} className="text-2xs flex gap-2">
+                        <span className="text-muted-foreground">•</span>
+                        <span>{o}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Import info */}
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -263,9 +325,26 @@ export function Gstr2bReconciliation() {
               active={activeSection === 'booksOnly'}
               onClick={() => setActiveSection('booksOnly')}
             />
+            {/*
+              * Labelled "2B-only (Missing Purchase)" until 29 Aug 2026, and it
+              * had to change.
+              *
+              * That label states a conclusion the app cannot reach: it tells the
+              * shopkeeper they FORGOT something, so the obvious next move is to
+              * enter the bill and make the numbers agree.
+              *
+              * Under IMS the same row can mean the opposite — a supplier has
+              * filed an invoice against this GSTIN that is not theirs — and
+              * entering it would turn somebody else's mistake into their own
+              * wrong return. Worse, doing nothing accepts it anyway on the 14th.
+              *
+              * So the label now says what is TRUE (it is not in your books) and
+              * leaves the conclusion to the person who can actually draw it. The
+              * panel above gives both ways out.
+              */}
             <SummaryCard
               icon={<XCircle className="w-4 h-4" />}
-              label="2B-only (Missing Purchase)"
+              label="Not in your books — needs a decision"
               count={summary.twoBOnly}
               itc={summary.missingItc}
               color="text-rose-600"
