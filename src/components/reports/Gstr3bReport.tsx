@@ -32,6 +32,7 @@ import { useState } from 'react'
 import { FilingReadiness } from '@/components/reports/FilingReadiness'
 import { ReturnsAgree } from '@/components/reports/ReturnsAgree'
 import { NoticeRisk } from '@/components/reports/NoticeRisk'
+import { ItcReversalWarning } from '@/components/reports/ItcReversalWarning'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -270,6 +271,19 @@ export function Gstr3bReport() {
         * test was proved by deleting this mount and watching all six fail.
         */}
       <NoticeRisk month={month} />
+
+      {/*
+        * #88 — input credit about to be lost because a supplier is unpaid.
+        *
+        * Here, on GSTR-3B, because this is where the reversal is declared
+        * (Table 4(B)(2)) and where a shopkeeper is already thinking about
+        * their credit for the month. Below NoticeRisk because that one is
+        * about THIS return; this is about a deadline that runs independently
+        * of any filing period and can bite in a month with no other problem.
+        *
+        * Silent when nothing is due — see the component.
+        */}
+      <ItcReversalWarning />
 
       {/* 🔒 V17 Audit Phase 1 P0.2: Filed-vs-live divergence warning.
           Shows when a filed snapshot's netTaxPayable differs from the live value —
