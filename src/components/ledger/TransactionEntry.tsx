@@ -2431,36 +2431,6 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </Badge>
                   )}
                 </div>
-                {/*
-                  * #91 — this bill needs to be TWO documents.
-                  *
-                  * Beside the IGST/CGST indicator because both answer "what
-                  * kind of bill is this?", and a shopkeeper checking one is
-                  * already looking here.
-                  *
-                  * It WARNS and does not block. Someone at the counter with a
-                  * customer waiting is the worst moment to refuse a sale over
-                  * a documentation rule they have never heard of — that
-                  * teaches them the app gets in the way, and the next thing
-                  * they learn is how to work around it.
-                  */}
-                {mixedSupply.needsSplit && (
-                  <div className="mt-2 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-2.5">
-                    <p className="text-2xs font-medium text-amber-900 dark:text-amber-200">
-                      This needs two bills, not one
-                    </p>
-                    <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1">
-                      {mixedSupply.message}
-                    </p>
-                    <ul className="mt-1.5 space-y-0.5">
-                      {mixedSupply.documents.map(d => (
-                        <li key={d} className="text-2xs text-amber-800 dark:text-amber-300 flex gap-1.5">
-                          <span>&bull;</span><span>{d}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
                 {derivedInterState.indeterminate && (
                   <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
                     {!shopState
@@ -2724,6 +2694,43 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
                 <IndianRupee className="w-4 h-4" /> Summary
               </h3>
+
+              {/*
+                * #91 — this bill needs to be TWO documents.
+                *
+                * IN THE SUMMARY, and that placement is the fix for a real bug.
+                * It was first put beside the IGST/CGST indicator, which reads
+                * as the natural home — both answer "what kind of bill is
+                * this?". That block is marked `hidden lg:block`: DESKTOP ONLY.
+                * So on a phone, which is what this app is for, the warning did
+                * not exist. Found by opening the sale screen at 375px and
+                * finding the panel in the DOM with zero height.
+                *
+                * The Summary renders at every width and is what a shopkeeper
+                * checks before saving, so a warning about the document they
+                * are about to produce belongs here.
+                *
+                * It WARNS and does not block — someone at the counter with a
+                * customer waiting is the worst moment to refuse a sale over a
+                * documentation rule they have never heard of.
+                */}
+              {mixedSupply.needsSplit && (
+                <div className="mb-3 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-2.5">
+                  <p className="text-2xs font-medium text-amber-900 dark:text-amber-200">
+                    This needs two bills, not one
+                  </p>
+                  <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1">
+                    {mixedSupply.message}
+                  </p>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {mixedSupply.documents.map(d => (
+                      <li key={d} className="text-2xs text-amber-800 dark:text-amber-300 flex gap-1.5">
+                        <span>&bull;</span><span>{d}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal ({items.length} items)</span>

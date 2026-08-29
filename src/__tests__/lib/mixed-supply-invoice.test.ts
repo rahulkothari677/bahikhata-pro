@@ -127,3 +127,47 @@ describe('it reaches the screen where the bill is written', () => {
     expect(ui).not.toMatch(/disabled=\{[^}]*mixedSupply/)
   })
 })
+
+describe('the warning is somewhere a phone can actually show it', () => {
+  const ui = readCode('src/components/ledger/TransactionEntry.tsx')
+
+  /*
+   * THE BUG THIS PINS, found by opening the sale screen at 375px.
+   *
+   * The warning was first placed beside the IGST/CGST indicator, which reads as
+   * its natural home — both answer "what kind of bill is this?". That block
+   * carries `hidden lg:block`: DESKTOP ONLY. So on a phone, which is what this
+   * app is for, the panel sat in the DOM with zero height and no shopkeeper
+   * would ever have seen it.
+   *
+   * Fourth time this codebase has shipped a correct rule with no surface, and
+   * the first where the surface existed only at a screen size nobody uses.
+   *
+   * CONTAINMENT, not file position. My first version asserted the warning
+   * appears earlier in the FILE than `hidden lg:block` — which is meaningless,
+   * because the Summary is declared later in the file and is still visible on
+   * every device. It failed on correct code. Measuring position instead of
+   * structure is the mistake this repo has now made seven times.
+   */
+  const summaryRegion = () => {
+    /* Anchored on real JSX, not on the `{/* Live summary *\/}` comment above
+       it — readCode strips comments, so a comment anchor is always -1. That
+       cost me one run. */
+    const start = ui.indexOf('<IndianRupee className="w-4 h-4" /> Summary')
+    expect(start).toBeGreaterThan(-1)
+    // The Summary card ends at the next </Card> after it.
+    const end = ui.indexOf('</Card>', start)
+    expect(end).toBeGreaterThan(start)
+    return ui.slice(start, end)
+  }
+
+  test('it lives INSIDE the Summary card, which renders at every width', () => {
+    expect(summaryRegion()).toContain('This needs two bills, not one')
+  })
+
+  test('the Summary card is not itself desktop-only', () => {
+    // The whole point. A containment check is worthless if the container it
+    // proves membership of is the hidden one.
+    expect(summaryRegion()).not.toContain('hidden lg:block')
+  })
+})
