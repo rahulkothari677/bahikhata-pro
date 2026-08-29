@@ -384,14 +384,18 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
               <div className="flex flex-wrap gap-2 mt-3">
                 <Button
                   type="button" size="sm" variant="outline"
-                  className="h-11"
+                  /* 48dp, not 44. §4's touch-target bar, and these two are the
+                     only controls on the screen that decide a tax treatment. */
+                  className="h-12"
                   onClick={() => setForm(f => ({ ...f, gstTreatment: 'exempt', gstRate: '0' }))}
                 >
                   Sold loose — exempt
                 </Button>
                 <Button
                   type="button" size="sm" variant="outline"
-                  className="h-11"
+                  /* 48dp, not 44. §4's touch-target bar, and these two are the
+                     only controls on the screen that decide a tax treatment. */
+                  className="h-12"
                   onClick={() => setForm(f => ({ ...f, gstTreatment: 'taxable' }))}
                 >
                   Pre-packaged &amp; labelled — taxable
