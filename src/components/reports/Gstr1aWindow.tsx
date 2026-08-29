@@ -75,20 +75,20 @@ export function Gstr1aWindow({ window, corrections = [], blockedCount = 0 }: Pro
   }
 
   /*
-   * CLOSED, with corrections outstanding. Shown rather than hidden: the
-   * shopkeeper needs to know the cheap route has gone and the later amendment
-   * is now the only one, or they will look for a GSTR-1A button that no longer
-   * applies to them.
+   * CLOSED — silent, and deliberately so.
+   *
+   * My first version rendered a "GSTR-1A has closed" card here whenever
+   * corrections were outstanding. Verifying in the live app showed it could
+   * NEVER appear: the route only computes corrections while the window is
+   * open, so `corrections` is always empty in this state and the branch was
+   * dead code that read as a working feature.
+   *
+   * Silence is also the right answer. Once the window has shut, the correction
+   * genuinely belongs in the next period — and NeedsAmending, directly below,
+   * already shows exactly that. A second card announcing a door that closed
+   * would appear on every past month forever, saying nothing actionable.
    */
-  if (window.state === 'closed') {
-    if (corrections.length === 0) return null
-    return (
-      <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
-        <p className="text-sm font-medium">GSTR-1A has closed for this month</p>
-        <p className="text-xs text-muted-foreground mt-1">{window.message}</p>
-      </div>
-    )
-  }
+  if (window.state === 'closed') return null
 
   const fixable = corrections.filter(c => c.fitsGstr1a)
 

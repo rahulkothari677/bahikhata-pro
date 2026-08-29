@@ -172,6 +172,22 @@ describe('the screen does not overclaim', () => {
     expect(ui).toContain("window.state === 'open' && corrections.length === 0) return null")
   })
 
+  test('a CLOSED window renders nothing at all', () => {
+    /*
+     * My first version rendered a "GSTR-1A has closed" card whenever
+     * corrections were outstanding. Verifying in the live app showed it could
+     * never appear: the route computes corrections ONLY while the window is
+     * open, so that array is always empty here. Dead code reading as a
+     * working feature.
+     *
+     * Silence is also correct — once the window shuts, the correction belongs
+     * in the next period, and NeedsAmending below already shows it. A card
+     * announcing a closed door would sit on every past month forever.
+     */
+    expect(ui).toContain("if (window.state === 'closed') return null")
+    expect(ui).not.toContain('GSTR-1A has closed for this month')
+  })
+
   test('it renders above NeedsAmending, because it is the one that expires', () => {
     const report = readCode('src/components/reports/Gstr1Report.tsx')
     expect(report.indexOf('<Gstr1aWindow')).toBeLessThan(report.indexOf('<NeedsAmending'))
