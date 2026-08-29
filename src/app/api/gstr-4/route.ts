@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
 import { roundMoney } from '@/lib/money'
 import { compositionTaxFor, COMPOSITION_RATES, type CompositionCategory } from '@/lib/composition-scheme'
+import { compositionWindow, sliceForComposition } from '@/lib/composition-window'
 
 /**
  * GSTR-4 — a composition dealer's ANNUAL return.
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
 
     const setting = await db.setting.findUnique({
       where: { userId },
-      select: { compositionCategory: true },
+      select: { compositionCategory: true, compositionFrom: true, compositionTo: true },
     })
     const category = (setting?.compositionCategory || null) as CompositionCategory | null
     if (!category) {
@@ -59,13 +60,40 @@ export async function GET(req: NextRequest) {
       }, { status: 400 })
     }
 
+    /*
+     * THE SAME WINDOW CMP-08 USES (#42), and the reason that window is a
+     * shared module rather than a date filter written twice.
+     *
+     * This route used to aggregate the whole financial year regardless of when
+     * the shop left the scheme, while CMP-08 clamped to the exit date. So a
+     * shop that crossed the turnover limit in August got an annual return that
+     * declared post-exit, regular-scheme sales as composition turnover — and
+     * that disagreed with the sum of its own four CMP-08s.
+     *
+     * Both errors are quiet. Table 6 is simply larger than it should be, and
+     * the mismatch against Table 5 reads as a rounding difference until a
+     * notice arrives. A comment three lines below this used to assert the two
+     * "agree by construction"; it did not survive the day CMP-08 learned to
+     * clamp, which is precisely why the rule lives in one function now.
+     */
+    const window = compositionWindow(setting as never)
+    const yearSlice = sliceForComposition(window, fyStart, fyEnd)
+    if (!yearSlice) {
+      return NextResponse.json({
+        error: 'Not on the composition scheme during this year',
+        message: 'Your shop was not a composition dealer at any point in this financial year, so there is no GSTR-4 to file for it. Check the dates in Settings.',
+      }, { status: 400 })
+    }
+    const yearFrom = yearSlice.compositionStart
+    const yearTo = yearSlice.compositionEnd
+
     const [sales, creditNotes, rcm] = await Promise.all([
       db.transaction.aggregate({
-        where: { userId, type: 'sale', deletedAt: null, date: { gte: fyStart, lt: fyEnd } },
+        where: { userId, type: 'sale', deletedAt: null, date: { gte: yearFrom, lt: yearTo } },
         _sum: { totalAmount: true }, _count: { _all: true },
       }),
       db.transaction.aggregate({
-        where: { userId, type: 'credit-note', deletedAt: null, date: { gte: fyStart, lt: fyEnd } },
+        where: { userId, type: 'credit-note', deletedAt: null, date: { gte: yearFrom, lt: yearTo } },
         _sum: { totalAmount: true },
       }),
       /*
@@ -75,7 +103,7 @@ export async function GET(req: NextRequest) {
        * than the composition rate.
        */
       db.transaction.aggregate({
-        where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: fyStart, lt: fyEnd } },
+        where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: yearFrom, lt: yearTo } },
         _sum: { subtotal: true, cgst: true, sgst: true, igst: true },
       }),
     ])
@@ -89,35 +117,59 @@ export async function GET(req: NextRequest) {
     /*
      * Table 5 — what was already paid, quarter by quarter.
      *
-     * Computed from the same books the quarterly CMP-08 was, so the two agree
-     * by construction. Four quarters, Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar.
+     * Each quarter goes through the SAME slice as /api/cmp-08, so Table 5 is
+     * the sum of the four returns actually filed rather than a second opinion
+     * about them. Four quarters, Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar.
+     *
+     * A quarter the shop was not on the scheme for is reported as onScheme:
+     * false, NOT as ₹0. Those are different facts — the first says no CMP-08
+     * was due, the second says one was due and came to nothing — and only the
+     * second belongs in a total. A shopkeeper reading four rows of zeroes has
+     * no way to tell which of the two happened.
      */
-    const quarters: Array<{ quarter: string; turnover: number; tax: number }> = []
+    const quarters: Array<{ quarter: string; turnover: number; tax: number; onScheme: boolean }> = []
     let paidTotal = 0
     for (let q = 0; q < 4; q++) {
       const qStart = new Date(startYear, 3 + q * 3, 1)
       const qEnd = new Date(startYear, 3 + q * 3 + 3, 1)
+      const qSlice = sliceForComposition(window, qStart, qEnd)
+      if (!qSlice) {
+        quarters.push({ quarter: `Q${q + 1}`, turnover: 0, tax: 0, onScheme: false })
+        continue
+      }
       const [qs, qcn] = await Promise.all([
         db.transaction.aggregate({
-          where: { userId, type: 'sale', deletedAt: null, date: { gte: qStart, lt: qEnd } },
+          where: { userId, type: 'sale', deletedAt: null, date: { gte: qSlice.compositionStart, lt: qSlice.compositionEnd } },
           _sum: { totalAmount: true },
         }),
         db.transaction.aggregate({
-          where: { userId, type: 'credit-note', deletedAt: null, date: { gte: qStart, lt: qEnd } },
+          where: { userId, type: 'credit-note', deletedAt: null, date: { gte: qSlice.compositionStart, lt: qSlice.compositionEnd } },
           _sum: { totalAmount: true },
         }),
       ])
       const qTurnover = roundMoney((qs._sum.totalAmount || 0) - (qcn._sum.totalAmount || 0))
       const qTax = compositionTaxFor(qTurnover, category)
       paidTotal = roundMoney(paidTotal + qTax.total)
-      quarters.push({ quarter: `Q${q + 1}`, turnover: qTax.turnover, tax: qTax.total })
+      quarters.push({ quarter: `Q${q + 1}`, turnover: qTax.turnover, tax: qTax.total, onScheme: true })
     }
 
     const netPayable = roundMoney(outward.total + rcmTax - paidTotal)
 
     return NextResponse.json({
       fy,
-      period: { from: fyStart.toISOString(), to: fyEnd.toISOString() },
+      /*
+       * The period actually declared, which is the composition window and not
+       * always the financial year. Reporting the full FY here would name a
+       * range the figures beneath it do not cover — the same mistake CMP-08
+       * made before #42.
+       */
+      period: { from: yearFrom.toISOString(), to: yearTo.toISOString() },
+      fyPeriod: { from: fyStart.toISOString(), to: fyEnd.toISOString() },
+      leftMidYear: yearSlice.splitsMidPeriod,
+      splitNote: yearSlice.note,
+      regularPeriod: yearSlice.splitsMidPeriod
+        ? { from: yearSlice.regularStart!.toISOString(), to: yearSlice.regularEnd!.toISOString() }
+        : null,
       category,
       categoryLabel: COMPOSITION_RATES[category].label,
       dueDate: new Date(startYear + 1, 5, 30).toISOString(),   // 30 June following

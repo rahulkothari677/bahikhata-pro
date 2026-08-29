@@ -179,3 +179,47 @@ describe('the settings route enforces both dates', () => {
     expect(route).toContain('Exit date is before the start date')
   })
 })
+
+describe('CMP-08 and GSTR-4 use the SAME window', () => {
+  /*
+   * THE DRIFT THIS FILE EXISTS TO PREVENT, and which happened anyway.
+   *
+   * composition-window.ts was written so the quarterly return and the annual
+   * return could not disagree. I then wired it into /api/cmp-08 only, and
+   * wrote a commit message claiming both. /api/gstr-4 kept aggregating the
+   * whole financial year, so a shop that left the scheme in August had an
+   * annual return declaring post-exit regular-scheme sales as composition
+   * turnover — disagreeing with the sum of its own four CMP-08s.
+   *
+   * Neither error is visible. Table 6 is just bigger than it should be, and
+   * the gap against Table 5 reads as rounding until a notice arrives. Found by
+   * opening the app and checking a claim I had made about my own code, not by
+   * any test.
+   *
+   * A shared module only prevents drift where it is actually called, so the
+   * call itself is what gets asserted.
+   */
+  test.each([
+    'src/app/api/cmp-08/route.ts',
+    'src/app/api/gstr-4/route.ts',
+  ])('%s narrows its period through sliceForComposition', file => {
+    const code = readCode(file)
+    expect({ file, uses: code.includes('sliceForComposition') }).toEqual({ file, uses: true })
+  })
+
+  test('neither route aggregates on an unclamped period boundary', () => {
+    /*
+     * The stronger claim: importing the helper is not the same as using it on
+     * every query. Both routes had aggregates keyed to the raw period start —
+     * `fyStart` in the annual return, `periodStart` in the quarterly one — and
+     * those are exactly the names that must no longer appear inside a date
+     * filter. Written against `gte:` specifically, because both names remain
+     * legitimately in use for building the period and for reporting it back.
+     */
+    for (const file of ['src/app/api/cmp-08/route.ts', 'src/app/api/gstr-4/route.ts']) {
+      const code = readCode(file)
+      const badFilters = code.match(/gte:\s*(fyStart|periodStart|qStart)\b/g) || []
+      expect({ file, badFilters }).toEqual({ file, badFilters: [] })
+    }
+  })
+})

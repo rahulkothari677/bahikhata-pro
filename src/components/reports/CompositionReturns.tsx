@@ -194,7 +194,13 @@ export function CompositionReturns() {
           </p>
         </div>
         <div className="p-4 space-y-2">
-          <Row label="Year's turnover (Table 6)" value={formatINR(a?.table6?.turnover || 0)} />
+          {/* Same rule as the quarterly card: name the period the figure
+              actually covers, so a shopkeeper checking it against a full
+              year's sales is not left thinking the total is short. */}
+          <Row
+            label={a?.leftMidYear ? `Turnover up to ${fmtDay(a?.period?.to, -1)} (Table 6)` : "Year's turnover (Table 6)"}
+            value={formatINR(a?.table6?.turnover || 0)}
+          />
           <Row label="Tax on it" value={formatINR(a?.table6?.total || 0)} />
           <Row label="Reverse charge purchases" value={formatINR(a?.table4RcmInward?.tax || 0)} />
           <Row label="Already paid in CMP-08" value={`− ${formatINR(a?.table5PaidViaCmp08?.total || 0)}`} />
@@ -202,6 +208,24 @@ export function CompositionReturns() {
             <Row label="Still to pay" value={formatINR(a?.netPayable || 0)} strong />
           </div>
         </div>
+
+        {/*
+          * A year that ended early, said on the annual return too (#42).
+          * Table 6 asks for the year's outward supplies, and a dealer who left
+          * in August must declare only the part while on the scheme — putting
+          * the full year in would declare sales that already carried regular
+          * GST. Without this the figure simply looks wrong against their books.
+          */}
+        {a?.leftMidYear && (
+          <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/30 border-t border-blue-200 dark:border-blue-900 flex items-start gap-2">
+            <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <p className="text-2xs text-blue-800 dark:text-blue-300">
+              You were on the composition scheme for part of this year only, so Table 6 covers your
+              sales up to {fmtDay(a?.period?.to, -1)}. Do not enter the whole year here — the rest
+              was on the regular scheme and is already declared in GSTR-1 and GSTR-3B.
+            </p>
+          </div>
+        )}
 
         {/*
           * The single most expensive mistake available on this form, stated
