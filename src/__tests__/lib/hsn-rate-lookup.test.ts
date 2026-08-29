@@ -59,7 +59,6 @@ describe('rates read from the notification', () => {
   test.each([
     ['7108', 3, 'gold'],
     ['0402', 5, 'concentrated/sweetened milk'],
-    ['2403', 28, 'other manufactured tobacco'],
   ])('HSN %s is %i%% (%s)', (hsn, rate) => {
     const r = lookupHsn(hsn)
     expect(r.rules.map(x => x.gstRate)).toContain(rate)
@@ -71,6 +70,40 @@ describe('rates read from the notification', () => {
     // own liability. The lookup must know the real figure.
     const r = lookupHsn('2202')
     expect(r.rules.some(x => x.gstRate === 40)).toBe(true)
+  })
+
+  test('a code whose rate changed AFTER the table refuses instead of answering', () => {
+    /*
+     * THE BUG THIS PINS, and I shipped it.
+     *
+     * The table is parsed from Notification 09/2025 — "rates as on 22.09.2025".
+     * Tobacco moved to 40% on 1 Feb 2026 (Notification 19/2025-CT(R), dated
+     * 31.12.2025). So for eleven months this answered 28% for cigarettes,
+     * confidently, with a schedule reference attached to make it look sound.
+     *
+     * It must now refuse. It deliberately does NOT answer 40% either: bidi
+     * stayed at 18% while the rest of heading 2403 moved, so a single number
+     * on the heading would be a new wrong answer replacing the old one.
+     */
+    const r = lookupHsn('2402')   // cigarettes
+    expect(r.outcome).toBe('superseded')
+    expect(r.suggestedRate).toBeNull()
+    expect(r.message).toMatch(/19\/2025/)
+    expect(r.message).toMatch(/1 February 2026/)
+    // and it must not still be quoting the stale figure
+    expect(r.message).not.toMatch(/28%/)
+  })
+
+  test('the supersession names bidi, because the heading did not move as one', () => {
+    // Getting this wrong in the other direction — stamping 40% on all of 2403
+    // — would overcharge every bidi sale by 22 points.
+    expect(lookupHsn('2403').supersededBy!.note).toMatch(/bidi/i)
+  })
+
+  test('codes NOT affected by the amendment still answer normally', () => {
+    // The refusal must be surgical. Gold is nowhere near tobacco.
+    expect(lookupHsn('7108').outcome).not.toBe('superseded')
+    expect(lookupHsn('7108').suggestedRate).toBe(3)
   })
 
   test('there is no 12% rate for goods any more', () => {

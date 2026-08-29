@@ -48,6 +48,58 @@ export interface RateRule {
   excludes?: string[]
 }
 
+/**
+ * Changes made AFTER the base notification this table was built from.
+ *
+ * WHY THIS EXISTS — I shipped the bug it fixes. The table is parsed from
+ * Notification 09/2025, whose own title is "rates on goods **as on
+ * 22.09.2025**". Tobacco then moved to 40% on 1 February 2026. So for eleven
+ * months the table has been answering 28% for cigarettes, confidently, with a
+ * schedule reference attached to make it look authoritative.
+ *
+ * I found it by checking a claim in the CA's review against the very PDF he
+ * supplied — he said 28% was gone, his own file said otherwise, and chasing
+ * why exposed that both of us were reading a snapshot as if it were current.
+ *
+ * WHY THIS DOES NOT SIMPLY STATE 40%. I have verified that Notification
+ * 19/2025-CT(R) dated 31.12.2025 moved these goods to 40% from 01.02.2026,
+ * from two independent sources — but I do not hold that notification, and it
+ * does not move them uniformly: **bidi stayed at 18%** while the rest of
+ * heading 2403 went to 40%. Encoding "2403 → 40%" would therefore be a new
+ * wrong answer replacing the old one, on a sub-code I cannot pin.
+ *
+ * So the table declares the change and refuses. "This rate changed on 1 Feb
+ * 2026 and I do not have the new figure" is useful. "28%" is a lie with a
+ * citation attached.
+ */
+export interface RateAmendment {
+  /** Code prefixes affected. A 4-digit heading covers its sub-codes. */
+  prefixes: string[]
+  notification: string
+  effectiveFrom: string
+  note: string
+}
+
+export const RATE_AMENDMENTS: RateAmendment[] = [
+  {
+    prefixes: ['2401', '2402', '2403', '2404', '21069020'],
+    notification: '19/2025-Central Tax (Rate), dated 31.12.2025',
+    effectiveFrom: '2026-02-01',
+    note:
+      'Pan masala, gutkha, cigarettes and other tobacco moved to 40%. Bidi stayed at 18%, so the heading did not move as one — check the item before accepting any rate.',
+  },
+]
+
+/** The amendment affecting this code, if one lands after the table's date. */
+export function amendmentFor(hsn: string, asOn: Date = new Date()): RateAmendment | null {
+  for (const a of RATE_AMENDMENTS) {
+    if (new Date(a.effectiveFrom) > asOn) continue          // not in force yet
+    if (a.effectiveFrom <= table.source.ratesAsOn) continue  // already in the base
+    if (a.prefixes.some(p => hsn.startsWith(p) || p.startsWith(hsn))) return a
+  }
+  return null
+}
+
 export type LookupOutcome =
   /** Exactly one rule, no conditions — the closest thing to a definite answer. */
   | 'single'
@@ -57,6 +109,8 @@ export type LookupOutcome =
   | 'ambiguous'
   /** Not in the rate schedules. May be exempt — we cannot tell yet. */
   | 'unknown'
+  /** The base notification's rate for this code was changed after it. */
+  | 'superseded'
 
 export interface HsnLookupResult {
   hsn: string
@@ -69,6 +123,8 @@ export interface HsnLookupResult {
   /** Plain-language sentence for the screen. Never a bare number. */
   message: string
   source: { notification: string; ratesAsOn: string }
+  /** Set when a later notification changed this code's rate. */
+  supersededBy?: RateAmendment
 }
 
 const CODES = table.codes as Record<string, RateRule[]>
@@ -116,6 +172,21 @@ export function lookupHsn(input: string): HsnLookupResult {
     return {
       ...base, outcome: 'unknown', matchedOn: null, rules: [], suggestedRate: null,
       message: 'Enter at least 2 digits of the HSN code.',
+    }
+  }
+
+  /*
+   * A superseded code is answered before anything else. The base table still
+   * holds a rate for it and would happily return that rate with a schedule
+   * reference — which is precisely how it spent eleven months telling people
+   * cigarettes were 28%.
+   */
+  const amended = amendmentFor(hsn)
+  if (amended) {
+    return {
+      ...base, outcome: 'superseded', matchedOn: null, rules: [], suggestedRate: null,
+      supersededBy: amended,
+      message: `This rate changed on ${new Date(amended.effectiveFrom).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} (${amended.notification}). ${amended.note} Set the rate yourself — our table predates the change.`,
     }
   }
 
