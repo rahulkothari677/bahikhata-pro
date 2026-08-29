@@ -90,7 +90,23 @@ describe('the one thing GSTR-1A cannot do', () => {
      */
     const r = correctionFitsGstr1a(['GSTIN changed from 27AAA... to 29BBB...'])
     expect(r.fits).toBe(false)
-    expect(r.reason).toMatch(/next month/)
+
+    /*
+     * CORRECTED 29 Aug 2026, and the correction is the point.
+     *
+     * This used to assert the reason says "next month" — because that is what I
+     * shipped this morning: "that has to go in next month's return as an
+     * amendment." It is WRONG. A customer's GSTIN cannot be amended in ANY
+     * period, this one or a later one. The portal refuses it either way,
+     * because it would move input credit to a different business.
+     *
+     * A test can only pin the behaviour it was given, and this one faithfully
+     * pinned a mistake. The remedy is a credit note plus a fresh invoice, and
+     * both correction routes now say so in the same words.
+     */
+    expect(r.reason).toMatch(/credit note/)
+    expect(r.reason).toMatch(/fresh bill/)
+    expect(r.reason).not.toMatch(/next month/)
   })
 
   test('value, date and place-of-supply changes are all fine', () => {

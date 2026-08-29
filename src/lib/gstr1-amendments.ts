@@ -212,3 +212,121 @@ export function filedInvoicesFrom(rawJson: unknown, fp: string): FiledInvoice[] 
   }
   return out
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * WHAT CAN STILL BE CORRECTED, AND HOW (#89, #90)
+ *
+ * Everything above answers "has this invoice changed since we filed it?".
+ * These answer the two questions that follow, which the app never asked:
+ * is it too late, and is this particular change even allowed?
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * A CUSTOMER'S GSTIN CANNOT BE AMENDED. Ever. (#90)
+ *
+ * `buildAmendments` happily reports "Customer GSTIN changed from X to Y" as
+ * something to declare, and the portal will not accept it. Changing who an
+ * invoice was billed to moves input credit from one taxpayer to another, and
+ * an amendment is not allowed to do that — the original buyer would lose
+ * credit they may already have claimed, without ever being told.
+ *
+ * The real remedy is two documents: a CREDIT NOTE cancelling the original, and
+ * a FRESH INVOICE to the correct GSTIN. That is a different action with
+ * different paperwork, so telling someone it is "an amendment" sends them to a
+ * screen that refuses them and leaves them thinking the app is broken.
+ *
+ * ONE DEFINITION, used by both correction routes. lib/gstr1a-window.ts asks the
+ * same question for the same-period route and must get the same answer — two
+ * GSTIN rules would be the drift class that caused four earlier bugs.
+ *
+ * @param changes the `changes` array buildAmendments already produces
+ */
+export function gstinChangeBlocksAmendment(changes: string[]): boolean {
+  return changes.some(c => /gstin/i.test(c))
+}
+
+export const GSTIN_AMENDMENT_REMEDY =
+  'A customer’s GSTIN cannot be corrected by amending the bill — the portal will not accept it, because it would move the input credit to a different business. Raise a credit note against the original bill, then issue a fresh bill to the correct GSTIN.'
+
+export interface AmendmentDeadline {
+  /** 30 November following the end of that financial year. */
+  novemberCutoff: Date
+  /** Whichever applies: the cutoff, or the annual return if filed earlier. */
+  effectiveDeadline: Date
+  daysLeft: number
+  /** True once nothing more can be corrected for that period. */
+  expired: boolean
+  /** Why it expired — the annual return, or the calendar. */
+  closedBy: 'annual-return' | 'november-cutoff' | null
+  message: string
+}
+
+/**
+ * How long is left to correct a filed period.
+ *
+ * THE RULE. A mistake cannot be corrected forever. The cut-off is **30 November
+ * following the end of the financial year the invoice belongs to, OR the date
+ * the annual return for that year is filed — WHICHEVER IS EARLIER.**
+ *
+ * The "whichever is earlier" half is the part that catches people, and it is
+ * the half a calendar cannot tell you: file the annual return in August and the
+ * door shuts in August, three months before the date everyone remembers.
+ *
+ * WHY THIS MATTERS HERE. Our amendment screen lists corrections with no
+ * deadline at all. A shopkeeper can see "this bill needs amending" every month
+ * for a year and reasonably assume it will keep waiting for them. It will not,
+ * and when it stops waiting nothing tells them — the row simply becomes
+ * permanent.
+ *
+ * @param fp        filing period of the ORIGINAL invoice, MMYYYY
+ * @param asOn      today
+ * @param annualReturnFiledOn  when GSTR-9 for that FY was filed, if it was
+ */
+export function amendmentDeadline(
+  fp: string,
+  asOn: Date = new Date(),
+  annualReturnFiledOn?: Date | string | null,
+): AmendmentDeadline {
+  const month = Number(fp.slice(0, 2))
+  const year = Number(fp.slice(2))
+
+  /*
+   * The financial year runs April to March, so Jan–Mar belong to the year
+   * BEFORE their calendar year. An invoice from February 2026 is in FY 2025-26,
+   * whose deadline is 30 November 2026 — not November 2027. Getting this
+   * backwards would give someone a year they do not have.
+   */
+  const fyStartYear = month >= 4 ? year : year - 1
+  const novemberCutoff = new Date(fyStartYear + 1, 10, 30)   // 30 Nov, month index 10
+
+  const annual = annualReturnFiledOn
+    ? (annualReturnFiledOn instanceof Date ? annualReturnFiledOn : new Date(annualReturnFiledOn))
+    : null
+  const annualValid = annual && !Number.isNaN(annual.getTime()) ? annual : null
+
+  const effectiveDeadline = annualValid && annualValid < novemberCutoff ? annualValid : novemberCutoff
+  const closedBy: AmendmentDeadline['closedBy'] =
+    annualValid && annualValid < novemberCutoff ? 'annual-return' : 'november-cutoff'
+
+  const a = Date.UTC(asOn.getFullYear(), asOn.getMonth(), asOn.getDate())
+  const b = Date.UTC(effectiveDeadline.getFullYear(), effectiveDeadline.getMonth(), effectiveDeadline.getDate())
+  const daysLeft = Math.round((b - a) / 86_400_000)
+  const expired = daysLeft < 0
+
+  const dateText = effectiveDeadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  return {
+    novemberCutoff,
+    effectiveDeadline,
+    daysLeft,
+    expired,
+    closedBy: expired ? closedBy : null,
+    message: expired
+      ? (closedBy === 'annual-return'
+        ? `Too late to correct this. You filed the annual return for that year on ${dateText}, which closes corrections for it — earlier than the usual 30 November date.`
+        : `Too late to correct this. The deadline for that year was ${dateText}.`)
+      : (closedBy === 'annual-return'
+        ? `You have ${daysLeft} days. Filing the annual return for that year will close this even sooner.`
+        : `You have ${daysLeft} days — until ${dateText}. Filing the annual return for that year would close it sooner.`),
+  }
+}
