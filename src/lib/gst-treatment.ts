@@ -26,6 +26,7 @@
  * proposal for existing rows — never a silent rewrite of a product a shopkeeper
  * has already classified themselves. They know their goods; this knows a table.
  */
+import { lookupExemption } from '@/lib/exempt-goods-lookup'
 
 /**
  * Exempt under Notification 2/2017 — the bulk of a kirana's zero-tax stock.
@@ -36,7 +37,28 @@
  * before any of this is applied.
  */
 /*
- * REMOVED 1701 (sugar) on first live run, and the reason is the useful part.
+ * ── THE HAND-WRITTEN EXEMPT LIST IS GONE (29 Aug 2026) ──────────────────
+ *
+ * It was 21 HSN prefixes, and the comment above them cited **Notification
+ * 2/2017**. That notification was SUPERSEDED by 10/2025-CT(R) on 17 Sep 2025 —
+ * the supersession is stated in 10/2025's own opening paragraph. So this file
+ * was classifying a shopkeeper's stock against a dead statute, carefully.
+ *
+ * Exemption now comes from `lib/exempt-goods-lookup.ts`, parsed from the live
+ * notification: 172 entries and 182 codes, against the 21 guessed here.
+ *
+ * WHAT THE OLD LIST GOT STRUCTURALLY WRONG, beyond being out of date. It wrote
+ * the condition into a CODE COMMENT — "0713 // dried leguminous vegetables —
+ * dal, pulses (unbranded)". A comment cannot be read at runtime. So the code
+ * behaved as though 0713 were exempt unconditionally, and leaned on the rate
+ * check to catch packaged dal.
+ *
+ * The note kept below is what proves that lean does not hold, and it is the
+ * reason the new lookup asks instead of assuming.
+ *
+ * ── KEPT, because it is the lesson and not just history ─────────────────
+ *
+ * REMOVED 1701 (sugar) on first live run.
  *
  * Sugar is 5% GST. I had listed it with a comment reasoning that the rate check
  * would stop it being misapplied — and the rate check DOES work. But the shop's
@@ -46,32 +68,12 @@
  * The lesson: the rate guard protects against a correctly-priced product with a
  * misleading HSN. It cannot protect against a MIS-priced product, and a
  * shopkeeper who has typed the wrong rate is exactly who most needs the
- * suggestion to be conservative. So the list now carries only goods that are
- * genuinely zero-tax in their ordinary retail form, and anything whose
- * exemption depends on branding, packaging or grade stays off it.
+ * suggestion to be conservative.
+ *
+ * That is now enforced by the data rather than by my judgement about which
+ * codes were safe to list: 99 of 210 rules carry a condition, and every one of
+ * them produces a QUESTION instead of a classification.
  */
-const EXEMPT_PREFIXES = [
-  '0401', // fresh milk and cream, not concentrated or sweetened
-  '0403', // curd, lassi, buttermilk
-  '0406', // chena, paneer (unbranded)
-  '0407', // eggs in shell
-  '0409', // natural honey (unbranded)
-  '0701', // potatoes, fresh
-  '0702', // tomatoes, fresh
-  '0703', // onions, garlic, fresh
-  '0706', // carrots, fresh
-  '0713', // dried leguminous vegetables — dal, pulses (unbranded)
-  '0801', // coconuts, nuts, fresh
-  '0803', // bananas, fresh
-  '0804', // mangoes, guavas, fresh
-  '0805', // citrus fruit, fresh
-  '0806', // grapes, fresh
-  '1001', // wheat (unbranded)
-  '1006', // rice (unbranded)
-  '1101', // wheat or meslin flour — atta (unbranded)
-  '1102', // other cereal flours (unbranded)
-  '2501', // salt
-]
 
 /**
  * Outside GST entirely — Article 366(12A) excludes these until the GST Council
@@ -143,12 +145,34 @@ export function suggestGstTreatment(
   if (code.replace(/\D/g, '').startsWith('99')) return null
 
   if (matches(code, NON_GST_PREFIXES)) return 'nonGst'
-  if (matches(code, EXEMPT_PREFIXES)) return 'exempt'
 
   /*
-   * A 0% product with a known HSN that is not on either list. Nil-rated is the
-   * correct residual: it means "taxable supply, tariff rate 0", which is what a
-   * zero-rated good that is not notified-exempt is.
+   * Exemption, from the live notification rather than a list I typed.
+   *
+   * A CONDITIONAL match returns null — "I do not know" — and null means leave
+   * the existing value alone. That is a deliberate loss of coverage: loose rice
+   * and loose dal are common, and they now get no automatic answer where the
+   * old list confidently said "exempt".
+   *
+   * It is the right trade. The condition is packaging, the app cannot see the
+   * packet, and being wrong here puts taxed sales in the exempt box of GSTR-1.
+   * The suggestion is silent and #93 asks the question on the item screen,
+   * where the shopkeeper is looking at the thing.
+   */
+  const exemption = lookupExemption(code)
+  if (exemption.outcome === 'exempt') return 'exempt'
+  if (exemption.outcome === 'needs-confirmation') return null
+
+  /*
+   * A 0% product with a known HSN that the notification does not exempt.
+   * Nil-rated is the correct residual: it means "taxable supply, tariff rate
+   * 0", which is what a zero-rated good that is not notified-exempt is.
+   *
+   * KNOWN GAP, stated rather than hidden: six exemptions in 10/2025 are keyed
+   * to "Any Chapter" and no HSN at all — rakhi and puja samagri among them.
+   * They cannot be matched here, so a rakhi at 0% falls through to nil-rated,
+   * which is the wrong box. They are exported as UNKEYED_EXEMPTIONS for the
+   * item screen to offer as a checklist; this function cannot ask.
    */
   return 'nil'
 }

@@ -18,16 +18,59 @@ describe('the rate overrules the code', () => {
 })
 
 describe('zero-rated goods are sorted into the right box', () => {
+  /*
+   * REWRITTEN 29 Aug 2026, and the split below is the whole point.
+   *
+   * These used to assert that honey, dal, rice and atta are 'exempt'. They no
+   * longer are — not because the law changed, but because this file used to
+   * encode a guess. Every one of those four is exempt in Notification 10/2025
+   * ONLY "other than pre-packaged and labelled", and the old list wrote that
+   * condition into a code comment reading "(unbranded)". A comment cannot be
+   * read at runtime, so the code answered "exempt" for branded packaged atta
+   * exactly as readily as for loose atta.
+   *
+   * Updating a test to match new behaviour is normally a smell, so the reason
+   * is stated per case rather than assumed: the app cannot see the packet, and
+   * putting a taxed sale in the exempt box of GSTR-1 is a wrong return.
+   */
   it.each([
-    ['0401', 'fresh milk'],
-    ['0409', 'natural honey, unbranded'],
-    ['0713', 'dal and pulses, unbranded'],
-    ['1006', 'rice, unbranded'],
-    ['1101', 'atta, unbranded'],
-    ['2501', 'salt'],
-    ['0407', 'eggs'],
+    ['0401', 'fresh milk — exempt however it is sold'],
+    ['2501', 'salt — no condition in the notification'],
+    ['0407', 'eggs in shell — no condition'],
+    ['0406', 'paneer — exempt WHETHER OR NOT pre-packaged'],
   ])('%s (%s) → exempt', (hsn) => {
     expect(suggestGstTreatment(hsn, 0)).toBe('exempt')
+  })
+
+  it.each([
+    ['0409', 'honey — exempt only if not pre-packaged and labelled'],
+    ['0713', 'dal and pulses — same condition'],
+    ['1006', 'rice — same condition'],
+    ['1101', 'atta — same condition'],
+    ['0403', 'curd — same condition'],
+  ])('%s (%s) → stays silent, because only the shopkeeper knows', (hsn) => {
+    /*
+     * Null means "leave whatever is there". This IS a deliberate loss of
+     * coverage — loose rice and loose dal are common, and they used to get a
+     * confident answer. The trade is correct: the condition is packaging, the
+     * app cannot see the packet, and #93 asks on the item screen where the
+     * shopkeeper is looking at the thing.
+     */
+    expect(suggestGstTreatment(hsn, 0)).toBeNull()
+  })
+
+  it('0403 and 0406 are treated differently, though they read almost alike', () => {
+    /*
+     * The single sharpest case in the notification:
+     *   0403  "Curd, Lassi, Butter milk, OTHER THAN pre-packaged and labelled"
+     *   0406  "Chena or paneer, WHETHER OR NOT pre-packaged and labelled"
+     * Same shape, opposite meaning. A substring match on "pre-packaged and
+     * labelled" marks both conditional and asks a pointless question about
+     * paneer — and a shopkeeper asked a question that has no bearing on the
+     * answer learns to dismiss the ones that do.
+     */
+    expect(suggestGstTreatment('0403', 0)).toBeNull()
+    expect(suggestGstTreatment('0406', 0)).toBe('exempt')
   })
 
   it.each([
@@ -94,8 +137,21 @@ describe('goods whose zero rate would be a data error, not a fact', () => {
      * The rate guard protects a correctly-priced product with a misleading HSN.
      * It cannot protect a MIS-priced one — and a shopkeeper who typed the wrong
      * rate is precisely who needs this to be conservative.
+     *
+     * ── THE ANSWER IMPROVED ON 29 Aug 2026: 'nil' → null ──────────────────
+     *
+     * This used to expect 'nil'. Silence is better, and the reason is a fact
+     * about the tariff I did not know when I wrote the line above: heading
+     * 1701 carries BOTH refined sugar (5%) AND jaggery/gur, which Notification
+     * 10/2025 exempts when sold loose. One code, two goods, opposite answers.
+     *
+     * So a 0% product marked 1701 is genuinely ambiguous — it could be loose
+     * gur, correctly exempt, or mis-priced sugar. 'nil' asserted the wrong box
+     * for gur while merely being unhelpful for sugar. Null asserts neither and
+     * leaves the shopkeeper's own value alone, which is what this whole file
+     * is built on.
      */
-    expect(suggestGstTreatment('1701', 0)).toBe('nil')
+    expect(suggestGstTreatment('1701', 0)).toBeNull()
     expect(suggestGstTreatment('1701', 5)).toBe('taxable')
   })
 })
@@ -104,7 +160,8 @@ describe('services are not guessed at', () => {
   it('offers no suggestion for a zero-rated service', () => {
     /*
      * This app serves every kind of shop, not only a kirana. The exempt list
-     * here is GOODS, exempted by Notification 2/2017. Services are exempted by
+     * here is GOODS, exempted by Notification 10/2025 (which superseded
+     * 2/2017, cited here until 29 Aug 2026). Services are exempted by
      * a different notification (12/2017) with a different list, which this file
      * does not carry — so for a zero-rated service the honest answer is "I do
      * not know", not the residual "nil-rated".

@@ -1,0 +1,1684 @@
+{
+ "source": {
+  "notification": "10/2025-Central Tax (Rate)",
+  "gazette": "G.S.R. 660(E)",
+  "dated": "2025-09-17",
+  "supersedes": "02/2017-Central Tax (Rate)",
+  "note": "Exempt from CGST under section 11(1). Supersedes 02/2017-CT(R), which the previous hand-written list in lib/gst-treatment.ts still cited."
+ },
+ "generatedFrom": "notification-10-2025-exempt.txt",
+ "entryCount": 172,
+ "ruleCount": 210,
+ "codeCount": 182,
+ "codes": {
+  "10": [
+   {
+    "description": "All goods of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 56
+   }
+  ],
+  "12": [
+   {
+    "description": "All goods of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 77
+   }
+  ],
+  "26": [
+   {
+    "description": "Uranium Ore concentrate",
+    "conditions": [],
+    "serial": 110
+   }
+  ],
+  "30": [
+   {
+    "description": "Drugs or medicines listed in Annexure I",
+    "conditions": [
+     "listed-in-annexure"
+    ],
+    "serial": 113
+   }
+  ],
+  "44": [
+   {
+    "description": "Deities made of stone, marble or wood",
+    "conditions": [],
+    "serial": 124
+   }
+  ],
+  "46": [
+   {
+    "description": "Khali Dona; Goods made of sal leaves, siali leaves, sisal leaves, sabai grass, including sabai grass rope",
+    "conditions": [],
+    "serial": 125
+   },
+   {
+    "description": "Plates and cups made up of all kinds of leaves/ flowers/bark",
+    "conditions": [],
+    "serial": 126
+   }
+  ],
+  "48": [
+   {
+    "description": "Rupee notes or coins when sold to Reserve Bank of India or the Government of India",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 131
+   }
+  ],
+  "50": [
+   {
+    "description": "Khadi fabric, sold through Khadi and Village Industries Commission (KVIC) and KVIC certified institutions/outlets",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 145
+   }
+  ],
+  "51": [
+   {
+    "description": "Khadi fabric, sold through Khadi and Village Industries Commission (KVIC) and KVIC certified institutions/outlets",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 145
+   }
+  ],
+  "52": [
+   {
+    "description": "Gandhi Topi, Khadi yarn",
+    "conditions": [],
+    "serial": 144
+   },
+   {
+    "description": "Khadi fabric, sold through Khadi and Village Industries Commission (KVIC) and KVIC certified institutions/outlets",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 145
+   }
+  ],
+  "53": [
+   {
+    "description": "Khadi fabric, sold through Khadi and Village Industries Commission (KVIC) and KVIC certified institutions/outlets",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 145
+   },
+   {
+    "description": "Coir pith compost other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 148
+   }
+  ],
+  "54": [
+   {
+    "description": "Khadi fabric, sold through Khadi and Village Industries Commission (KVIC) and KVIC certified institutions/outlets",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 145
+   }
+  ],
+  "55": [
+   {
+    "description": "Khadi fabric, sold through Khadi and Village Industries Commission (KVIC) and KVIC certified institutions/outlets",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 145
+   }
+  ],
+  "63": [
+   {
+    "description": "Indian National Flag",
+    "conditions": [],
+    "serial": 149
+   }
+  ],
+  "68": [
+   {
+    "description": "Deities made of stone, marble or wood",
+    "conditions": [],
+    "serial": 124
+   }
+  ],
+  "69": [
+   {
+    "description": "Idols made of clay",
+    "conditions": [],
+    "serial": 152
+   }
+  ],
+  "71": [
+   {
+    "description": "Rupee notes or coins when sold to Reserve Bank of India or the Government of India",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 131
+   }
+  ],
+  "92": [
+   {
+    "description": "Indigenous handmade musical instruments as listed in Annexure II",
+    "conditions": [
+     "listed-in-annexure"
+    ],
+    "serial": 161
+   }
+  ],
+  "1001": [
+   {
+    "description": "Wheat and meslin, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 62
+   }
+  ],
+  "1002": [
+   {
+    "description": "Rye, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 63
+   }
+  ],
+  "1003": [
+   {
+    "description": "Barley, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 64
+   }
+  ],
+  "1004": [
+   {
+    "description": "Oats, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 65
+   }
+  ],
+  "1005": [
+   {
+    "description": "Maize (corn), other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 66
+   }
+  ],
+  "1006": [
+   {
+    "description": "Rice, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 67
+   }
+  ],
+  "1007": [
+   {
+    "description": "Grain sorghum, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 68
+   }
+  ],
+  "1008": [
+   {
+    "description": "Buckwheat, millet and canary seed; other cereals such as Jawar, Bajra, Ragi, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 69
+   }
+  ],
+  "1101": [
+   {
+    "description": "Wheat or meslin flour, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 70
+   }
+  ],
+  "1102": [
+   {
+    "description": "Cereal flours other than of wheat or meslin, maize (corn) flour, rye flour etc, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 71
+   }
+  ],
+  "1103": [
+   {
+    "description": "Cereal groats, meal and pellets, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 72
+   }
+  ],
+  "1104": [
+   {
+    "description": "Cereal grains hulled",
+    "conditions": [],
+    "serial": 73
+   }
+  ],
+  "1105": [
+   {
+    "description": "Flour, meal, powder, flakes, granules or pellets of potatoes, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 74
+   }
+  ],
+  "1106": [
+   {
+    "description": "Flour, meal, powder of the dried leguminous vegetables of heading 0713 (pulses) [other than guar meal (HS 1106 10 10) and guar gum refined split (HS 1106 10 90)], of sago or of roots or tubers of heading 0714 or of the products of Chapter 8 i.e. of tamarind, of singoda, mango flour, etc. other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "has-exclusion"
+    ],
+    "serial": 75
+   }
+  ],
+  "1201": [
+   {
+    "description": "Soya beans, whether or not broken, of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 78
+   }
+  ],
+  "1202": [
+   {
+    "description": "Ground-nuts, not roasted or otherwise cooked, whether or not shelled or broken, of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 79
+   }
+  ],
+  "1204": [
+   {
+    "description": "Linseed, whether or not broken, of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 80
+   }
+  ],
+  "1205": [
+   {
+    "description": "Rape or colza seeds, whether or not broken, of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 81
+   }
+  ],
+  "1206": [
+   {
+    "description": "Sunflower seeds, whether or not broken, of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 82
+   }
+  ],
+  "1207": [
+   {
+    "description": "Other oil seeds and oleaginous fruits (i.e. Palm nuts and kernels, cotton seeds, Castor oil seeds, Sesamum seeds, Mustard seeds, Safflower (Carthamus tinctorius) seeds, Melon seeds, Poppy seeds, Ajams, Mango kernel, Niger seed, Kokam) whether or not broken, of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 83
+   }
+  ],
+  "1209": [
+   {
+    "description": "Seeds, fruit and spores, of a kind used for sowing. Explanation: This entry does not cover seeds meant for any use other than sowing",
+    "conditions": [],
+    "serial": 84
+   }
+  ],
+  "1210": [
+   {
+    "description": "Hop cones, fresh",
+    "conditions": [],
+    "serial": 85
+   }
+  ],
+  "1211": [
+   {
+    "description": "Plants and parts of plants (including seeds and fruits), of a kind used primarily in perfumery, in pharmacy or for insecticidal, fungicidal or similar purpose, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 87
+   }
+  ],
+  "1212": [
+   {
+    "description": "Locust beans, seaweeds and other algae, sugar beet and sugar cane, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 88
+   }
+  ],
+  "1213": [
+   {
+    "description": "Cereal straw and husks, unprepared, whether or not chopped, ground, pressed or in the form of pellets",
+    "conditions": [],
+    "serial": 89
+   }
+  ],
+  "1214": [
+   {
+    "description": "Swedes, mangolds, fodder roots, hay, lucerne (alfalfa), clover, sainfoin, forage kale, lupines, vetches and similar forage products, whether or not in the form of pellets",
+    "conditions": [],
+    "serial": 90
+   }
+  ],
+  "1301": [
+   {
+    "description": "Lac and Shellac",
+    "conditions": [],
+    "serial": 91
+   }
+  ],
+  "1401": [
+   {
+    "description": "Sal leaves, siali leaves, sisal leaves, sabai grass",
+    "conditions": [],
+    "serial": 92
+   }
+  ],
+  "1701": [
+   {
+    "description": "(i) Jaggery of all types including Cane Jaggery (gur), Palmyra Jaggery, other than pre-packaged and labeled (ii) Khandsari Sugar, other than pre-packaged and labelled (iii) Rab,other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 96
+   }
+  ],
+  "1702": [
+   {
+    "description": "(i) Jaggery of all types including Cane Jaggery (gur), Palmyra Jaggery, other than pre-packaged and labeled (ii) Khandsari Sugar, other than pre-packaged and labelled (iii) Rab,other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 96
+   }
+  ],
+  "1901": [
+   {
+    "description": "Food preparation of millet flour, in powder form, containing at least 70% millets by weight, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 97
+   }
+  ],
+  "1904": [
+   {
+    "description": "Puffed rice, commonly known as Muri, flattened or beaten rice, commonly known as Chira, parched rice, commonly known as khoi, parched paddy or rice coated with sugar or gur, commonly known as Murki, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 98
+   }
+  ],
+  "1905": [
+   {
+    "description": "Pappad, by whatever name it is known",
+    "conditions": [],
+    "serial": 99
+   },
+   {
+    "description": "Khakhra; Bread (branded or otherwise), Pizza bread, roti, chapathi, paratha, parotta and other Indian breads by any name called",
+    "conditions": [],
+    "serial": 100
+   }
+  ],
+  "2106": [
+   {
+    "description": "Khakhra; Bread (branded or otherwise), Pizza bread, roti, chapathi, paratha, parotta and other Indian breads by any name called",
+    "conditions": [],
+    "serial": 100
+   },
+   {
+    "description": "Prasadam supplied by religious places like temples, mosques, churches, gurudwaras, dargahs, etc",
+    "conditions": [],
+    "serial": 102
+   }
+  ],
+  "2201": [
+   {
+    "description": "Water (other than aerated, mineral, distilled, medicinal, ionic, battery, de-mineralized and water sold in sealed unit container)",
+    "conditions": [],
+    "serial": 103
+   },
+   {
+    "description": "Non-alcoholic Toddy, Neera including date and palm neera",
+    "conditions": [],
+    "serial": 104
+   }
+  ],
+  "2301": [
+   {
+    "description": "Aquatic feed including shrimp feed and prawn feed, poultry feed and cattle feed, including grass, hay and straw, supplement and additives, wheat bran and de-oiled cake other than rice bran",
+    "conditions": [],
+    "serial": 105
+   }
+  ],
+  "2302": [
+   {
+    "description": "Aquatic feed including shrimp feed and prawn feed, poultry feed and cattle feed, including grass, hay and straw, supplement and additives, wheat bran and de-oiled cake other than rice bran",
+    "conditions": [],
+    "serial": 105
+   },
+   {
+    "description": "Husk of pulses including Chilka, Concentrates including chuni or churi, Khanda",
+    "conditions": [],
+    "serial": 108
+   }
+  ],
+  "2306": [
+   {
+    "description": "De-oiled rice bran",
+    "conditions": [],
+    "serial": 106
+   },
+   {
+    "description": "Cotton seed oil cake",
+    "conditions": [],
+    "serial": 107
+   }
+  ],
+  "2308": [
+   {
+    "description": "Aquatic feed including shrimp feed and prawn feed, poultry feed and cattle feed, including grass, hay and straw, supplement and additives, wheat bran and de-oiled cake other than rice bran",
+    "conditions": [],
+    "serial": 105
+   }
+  ],
+  "2309": [
+   {
+    "description": "Aquatic feed including shrimp feed and prawn feed, poultry feed and cattle feed, including grass, hay and straw, supplement and additives, wheat bran and de-oiled cake other than rice bran",
+    "conditions": [],
+    "serial": 105
+   },
+   {
+    "description": "Husk of pulses including Chilka, Concentrates including chuni or churi, Khanda",
+    "conditions": [],
+    "serial": 108
+   }
+  ],
+  "2501": [
+   {
+    "description": "Salt (including table salt and denatured salt) and pure sodium chloride, whether or not in aqueous solutions or containing added anti-caking or free flowing agents; sea water",
+    "conditions": [],
+    "serial": 109
+   }
+  ],
+  "2835": [
+   {
+    "description": "Dicalcium phosphate (DCP) of animal feed grade conforming to IS specification No.5470 : 2002",
+    "conditions": [],
+    "serial": 112
+   }
+  ],
+  "3002": [
+   {
+    "description": "Human Blood and its components",
+    "conditions": [],
+    "serial": 114
+   }
+  ],
+  "3006": [
+   {
+    "description": "All types of contraceptives",
+    "conditions": [],
+    "serial": 115
+   }
+  ],
+  "3101": [
+   {
+    "description": "All goods and organic manure, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 116
+   }
+  ],
+  "3304": [
+   {
+    "description": "Kajal (other than kajal pencil sticks), Kumkum, Bindi, Sindur, Alta",
+    "conditions": [],
+    "serial": 117
+   }
+  ],
+  "3825": [
+   {
+    "description": "Municipal waste, sewage sludge, clinical waste",
+    "conditions": [],
+    "serial": 118
+   }
+  ],
+  "3926": [
+   {
+    "description": "Plastic bangles",
+    "conditions": [],
+    "serial": 119
+   }
+  ],
+  "4014": [
+   {
+    "description": "Condoms and contraceptives",
+    "conditions": [],
+    "serial": 120
+   }
+  ],
+  "4016": [
+   {
+    "description": "Erasers",
+    "conditions": [],
+    "serial": 121
+   }
+  ],
+  "4401": [
+   {
+    "description": "Firewood or fuel wood",
+    "conditions": [],
+    "serial": 122
+   }
+  ],
+  "4402": [
+   {
+    "description": "Wood charcoal (including shell or nut charcoal), whether or not agglomerated",
+    "conditions": [],
+    "serial": 123
+   }
+  ],
+  "4802": [
+   {
+    "description": "Judicial, Non-judicial stamp papers, Court fee stamps when sold by the Government Treasuries or Vendors authorized by the Government",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 127
+   },
+   {
+    "description": "Uncoated paper and paperboard, of a kind used for writing, printing or other graphic purposes, in rolls or rectangular (including square) sheets, of any size, other than paper of heading 4801 or 4803, used for exercise book, graph book, laboratory note book and notebooks",
+    "conditions": [],
+    "serial": 128
+   }
+  ],
+  "4817": [
+   {
+    "description": "Postal items, like envelope, Post card etc., sold by Government",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 129
+   }
+  ],
+  "4820": [
+   {
+    "description": "Exercise book, graph book, laboratory note book and notebooks",
+    "conditions": [],
+    "serial": 130
+   }
+  ],
+  "4901": [
+   {
+    "description": "Printed books, including Braille books",
+    "conditions": [],
+    "serial": 132
+   }
+  ],
+  "4902": [
+   {
+    "description": "Newspapers, journals and periodicals, whether or not illustrated or containing advertising material",
+    "conditions": [],
+    "serial": 133
+   }
+  ],
+  "4903": [
+   {
+    "description": "Children's picture, drawing or colouring books",
+    "conditions": [],
+    "serial": 134
+   }
+  ],
+  "4905": [
+   {
+    "description": "Maps and hydrographic or similar charts of all kinds, including atlases, wall maps, topographical plans and globes, printed",
+    "conditions": [],
+    "serial": 136
+   }
+  ],
+  "4907": [
+   {
+    "description": "Judicial, Non-judicial stamp papers, Court fee stamps when sold by the Government Treasuries or Vendors authorized by the Government",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 127
+   },
+   {
+    "description": "Postal items, like envelope, Post card etc., sold by Government",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 129
+   },
+   {
+    "description": "Rupee notes or coins when sold to Reserve Bank of India or the Government of India",
+    "conditions": [
+     "seller-specific"
+    ],
+    "serial": 131
+   },
+   {
+    "description": "Duty Credit Scrips",
+    "conditions": [],
+    "serial": 137
+   }
+  ],
+  "5001": [
+   {
+    "description": "Silkworm laying, cocoon",
+    "conditions": [],
+    "serial": 138
+   }
+  ],
+  "5002": [
+   {
+    "description": "Raw silk",
+    "conditions": [],
+    "serial": 139
+   }
+  ],
+  "5003": [
+   {
+    "description": "Silk waste",
+    "conditions": [],
+    "serial": 140
+   }
+  ],
+  "5101": [
+   {
+    "description": "Wool, not carded or combed",
+    "conditions": [],
+    "serial": 141
+   }
+  ],
+  "5102": [
+   {
+    "description": "Fine or coarse animal hair, not carded or combed",
+    "conditions": [],
+    "serial": 142
+   }
+  ],
+  "5103": [
+   {
+    "description": "Waste of wool or of fine or coarse animal hair",
+    "conditions": [],
+    "serial": 143
+   }
+  ],
+  "5303": [
+   {
+    "description": "Jute fibres, raw or processed but not spun",
+    "conditions": [],
+    "serial": 146
+   }
+  ],
+  "5305": [
+   {
+    "description": "Coconut, coir fibre",
+    "conditions": [],
+    "serial": 147
+   }
+  ],
+  "6703": [
+   {
+    "description": "Human hair, dressed, thinned, bleached or otherwise worked",
+    "conditions": [],
+    "serial": 150
+   }
+  ],
+  "7018": [
+   {
+    "description": "Glass bangles (except those made from precious metals)",
+    "conditions": [
+     "has-exclusion"
+    ],
+    "serial": 153
+   }
+  ],
+  "7117": [
+   {
+    "description": "Bangles of lac/shellac",
+    "conditions": [],
+    "serial": 154
+   }
+  ],
+  "8201": [
+   {
+    "description": "Agricultural implements manually operated or animal driven i.e. Hand tools, such as spades, shovels, mattocks, picks, hoes, forks and rakes; axes, bill hooks and similar hewing tools; secateurs and pruners of any kind; scythes, sickles, hay knives, hedge shears, timber wedges and other tools of a kind used in agriculture, horticulture or forestry other than ghamella.",
+    "conditions": [],
+    "serial": 155
+   }
+  ],
+  "8214": [
+   {
+    "description": "Pencil sharpeners",
+    "conditions": [],
+    "serial": 156
+   }
+  ],
+  "8445": [
+   {
+    "description": "Charkha for hand spinning of yarns, including amber charkha",
+    "conditions": [],
+    "serial": 157
+   }
+  ],
+  "8446": [
+   {
+    "description": "Handloom [weaving machinery]",
+    "conditions": [
+     "has-exclusion"
+    ],
+    "serial": 158
+   }
+  ],
+  "9021": [
+   {
+    "description": "Hearing aids",
+    "conditions": [],
+    "serial": 160
+   }
+  ],
+  "9603": [
+   {
+    "description": "Muddhas made of sarkanda, Brooms or brushes, consisting of twigs or other vegetable materials, bound together, with or without handles",
+    "conditions": [],
+    "serial": 162
+   }
+  ],
+  "9608": [
+   {
+    "description": "Pencils (including propelling or sliding pencils), crayons, pastels, drawing charcoals, writing or drawing chalks and tailor’s chalk; Slate pencils and chalk sticks",
+    "conditions": [],
+    "serial": 163
+   }
+  ],
+  "9609": [
+   {
+    "description": "Pencils (including propelling or sliding pencils), crayons, pastels, drawing charcoals, writing or drawing chalks and tailor’s chalk; Slate pencils and chalk sticks",
+    "conditions": [],
+    "serial": 163
+   }
+  ],
+  "9803": [
+   {
+    "description": "Passenger baggage",
+    "conditions": [],
+    "serial": 166
+   }
+  ],
+  "11061010": [
+   {
+    "description": "Guar meal",
+    "conditions": [],
+    "serial": 76
+   }
+  ],
+  "12101000": [
+   {
+    "description": "Hop cones, neither ground nor powdered nor in the form of pellets",
+    "conditions": [],
+    "serial": 86
+   }
+  ],
+  "14049040": [
+   {
+    "description": "Betel leaves",
+    "conditions": [],
+    "serial": 93
+   }
+  ],
+  "14049060": [
+   {
+    "description": "Coconut shell, unworked",
+    "conditions": [],
+    "serial": 94
+   }
+  ],
+  "14049090": [
+   {
+    "description": "Vegetable materials, for manufacture of jhadoo or broom sticks",
+    "conditions": [],
+    "serial": 95
+   }
+  ],
+  "20098990": [
+   {
+    "description": "Tender coconut water other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 101
+   }
+  ],
+  "27160000": [
+   {
+    "description": "Electrical energy",
+    "conditions": [],
+    "serial": 111
+   }
+  ],
+  "49040000": [
+   {
+    "description": "Music, printed or in manuscript, whether or not bound or illustrated",
+    "conditions": [],
+    "serial": 135
+   }
+  ],
+  "69120040": [
+   {
+    "description": "Earthen pot and clay lamps",
+    "conditions": [],
+    "serial": 151
+   }
+  ],
+  "88026000": [
+   {
+    "description": "Spacecraft (including satellites) and suborbital and spacecraft launch vehicles",
+    "conditions": [],
+    "serial": 159
+   }
+  ],
+  "96100000": [
+   {
+    "description": "Slates",
+    "conditions": [],
+    "serial": 164
+   }
+  ],
+  "96190010": [
+   {
+    "description": "Sanitary towels (pads) or sanitary napkins; tampons",
+    "conditions": [],
+    "serial": 165
+   }
+  ],
+  "96190020": [
+   {
+    "description": "Sanitary towels (pads) or sanitary napkins; tampons",
+    "conditions": [],
+    "serial": 165
+   }
+  ],
+  "0101": [
+   {
+    "description": "Live asses, mules and hinnies",
+    "conditions": [],
+    "serial": 1
+   }
+  ],
+  "0102": [
+   {
+    "description": "Live bovine animals",
+    "conditions": [],
+    "serial": 2
+   }
+  ],
+  "0103": [
+   {
+    "description": "Live swine",
+    "conditions": [],
+    "serial": 3
+   }
+  ],
+  "0104": [
+   {
+    "description": "Live sheep and goats",
+    "conditions": [],
+    "serial": 4
+   }
+  ],
+  "0105": [
+   {
+    "description": "Live poultry, that is to say, fowls of the species Gallus domesticus, ducks, geese, turkeys and guinea fowls",
+    "conditions": [],
+    "serial": 5
+   }
+  ],
+  "0106": [
+   {
+    "description": "Other live animals such as Mammals, Birds, Insects",
+    "conditions": [],
+    "serial": 6
+   }
+  ],
+  "0201": [
+   {
+    "description": "Meat of bovine animals, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 7
+   }
+  ],
+  "0203": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 8
+   },
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 9
+   }
+  ],
+  "0204": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 8
+   },
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 9
+   }
+  ],
+  "0205": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 8
+   },
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 9
+   }
+  ],
+  "0206": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 8
+   },
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 9
+   }
+  ],
+  "0207": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 8
+   },
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 9
+   }
+  ],
+  "0208": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 8
+   },
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 9
+   }
+  ],
+  "0209": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 8
+   },
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 9
+   }
+  ],
+  "0202": [
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 9
+   }
+  ],
+  "0210": [
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 9
+   }
+  ],
+  "03": [
+   {
+    "description": "Fish seeds, prawn / shrimp seeds whether or not processed, cured or in frozen state [other than goods falling under Chapter 3 and attracting 2.5%]",
+    "conditions": [
+     "has-exclusion"
+    ],
+    "serial": 10
+   }
+  ],
+  "0301": [
+   {
+    "description": "Live fish",
+    "conditions": [],
+    "serial": 11
+   }
+  ],
+  "0302": [
+   {
+    "description": "Fish, fresh or chilled, excluding fish fillets and other fish meat of heading 0304",
+    "conditions": [
+     "fresh-or-chilled-only",
+     "has-exclusion"
+    ],
+    "serial": 12
+   }
+  ],
+  "0304": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 13
+   },
+   {
+    "description": "All goods, other than fresh or chilled, and other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 14
+   }
+  ],
+  "0306": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 13
+   },
+   {
+    "description": "All goods, other than fresh or chilled, and other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 14
+   }
+  ],
+  "0307": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 13
+   },
+   {
+    "description": "All goods, other than fresh or chilled, and other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 14
+   }
+  ],
+  "0308": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 13
+   },
+   {
+    "description": "All goods, other than fresh or chilled, and other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 14
+   }
+  ],
+  "0309": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 13
+   },
+   {
+    "description": "All goods, other than fresh or chilled, and other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 14
+   }
+  ],
+  "0303": [
+   {
+    "description": "All goods, other than fresh or chilled, and other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 14
+   }
+  ],
+  "0305": [
+   {
+    "description": "All goods, other than fresh or chilled, and other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 14
+   }
+  ],
+  "0401": [
+   {
+    "description": "Fresh milk and pasteurised milk, including separated milk, milk and cream, not concentrated nor containing added sugar or other sweetening matter, UHT milk",
+    "conditions": [],
+    "serial": 15
+   }
+  ],
+  "0403": [
+   {
+    "description": "Curd, Lassi, Butter milk, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 16
+   }
+  ],
+  "0406": [
+   {
+    "description": "Chena or paneer, whether or not pre-packaged and labelled",
+    "conditions": [],
+    "serial": 17
+   }
+  ],
+  "0407": [
+   {
+    "description": "Birds' eggs, in shell, fresh, preserved or cooked",
+    "conditions": [],
+    "serial": 18
+   }
+  ],
+  "0409": [
+   {
+    "description": "Natural honey, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 19
+   }
+  ],
+  "0501": [
+   {
+    "description": "Human hair, unworked, whether or not washed or scoured; waste of human hair",
+    "conditions": [],
+    "serial": 20
+   }
+  ],
+  "0504": [
+   {
+    "description": "All goods, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 21
+   },
+   {
+    "description": "All goods, other than fresh or chilled, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled",
+     "not-fresh-or-chilled"
+    ],
+    "serial": 22
+   }
+  ],
+  "0506": [
+   {
+    "description": "All goods i.e. Bones and horn-cores, unworked, defatted, simply prepared (but not cut to shape), treated with acid or gelatinised; powder and waste of these products",
+    "conditions": [],
+    "serial": 23
+   }
+  ],
+  "050790": [
+   {
+    "description": "All goods i.e. Hoof meal; horn meal; hooves, claws, nails and beaks; antlers; etc.",
+    "conditions": [],
+    "serial": 24
+   }
+  ],
+  "0511": [
+   {
+    "description": "Semen including frozen semen",
+    "conditions": [],
+    "serial": 25
+   }
+  ],
+  "06": [
+   {
+    "description": "Live trees and other plants; bulbs, roots and the like; cut flowers and ornamental foliage",
+    "conditions": [],
+    "serial": 26
+   }
+  ],
+  "0701": [
+   {
+    "description": "Potatoes, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 27
+   }
+  ],
+  "0702": [
+   {
+    "description": "Tomatoes, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 28
+   }
+  ],
+  "0703": [
+   {
+    "description": "Onions, shallots, garlic, leeks and other alliaceous vegetables, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 29
+   }
+  ],
+  "0704": [
+   {
+    "description": "Cabbages, cauliflowers, kohlrabi, kale and similar edible brassicas, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 30
+   }
+  ],
+  "0705": [
+   {
+    "description": "Lettuce (Lactuca sativa) and chicory (Cichorium spp.), fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 31
+   }
+  ],
+  "0706": [
+   {
+    "description": "Carrots, turnips, salad beetroot, salsify, celeriac, radishes and similar edible roots, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 32
+   }
+  ],
+  "0707": [
+   {
+    "description": "Cucumbers and gherkins, fresh or chilled",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 33
+   }
+  ],
+  "0708": [
+   {
+    "description": "Leguminous vegetables, shelled or unshelled, fresh or chilled.",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 34
+   }
+  ],
+  "0709": [
+   {
+    "description": "Other vegetables, fresh or chilled.",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 35
+   }
+  ],
+  "0710": [
+   {
+    "description": "Vegetables (uncooked or cooked by steaming or boiling in water), frozen",
+    "conditions": [],
+    "serial": 36
+   }
+  ],
+  "0711": [
+   {
+    "description": "Vegetables provisionally preserved, but unsuitable in that state for immediate consumption",
+    "conditions": [],
+    "serial": 37
+   }
+  ],
+  "0712": [
+   {
+    "description": "Dried vegetables, whole, cut, sliced, broken or in powder, but not further prepared",
+    "conditions": [],
+    "serial": 38
+   }
+  ],
+  "0713": [
+   {
+    "description": "Dried leguminous vegetables, shelled, whether or not skinned or split other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 39
+   }
+  ],
+  "0714": [
+   {
+    "description": "Manioc, arrowroot, salep, Jerusalem artichokes, sweet potatoes and similar roots and tubers with high starch or inulin content, fresh or chilled, dried; sago pith.",
+    "conditions": [
+     "fresh-or-chilled-only"
+    ],
+    "serial": 40
+   },
+   {
+    "description": "Manioc, arrowroot, salep, Jerusalem artichokes, sweet potatoes and similar roots and tubers with high starch or inulin content, frozen, whether or not sliced or in the form of pellets, other than pre-packaged and labelled",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ],
+    "serial": 41
+   }
+  ],
+  "08": [
+   {
+    "description": "Dried makhana, whether or not shelled or peeled, other than pre- packaged and labelled",
+    "conditions": [],
+    "serial": 42
+   }
+  ],
+  "0801": [
+   {
+    "description": "Coconuts, fresh or dried, whether or not shelled or peeled",
+    "conditions": [],
+    "serial": 43
+   },
+   {
+    "description": "Brazil nuts, fresh, whether or not shelled or peeled",
+    "conditions": [],
+    "serial": 44
+   }
+  ],
+  "0802": [
+   {
+    "description": "Other nuts, fresh such as Almonds, Hazelnuts or filberts (Corylus spp.), walnuts, Chestnuts (Castanea spp.), Pistachios, Macadamia nuts, Kola nuts (Cola spp.), Areca nuts, Pine nuts, fresh, whether or not shelled or peeled",
+    "conditions": [],
+    "serial": 45
+   }
+  ],
+  "0803": [
+   {
+    "description": "Bananas, including plantains, fresh or dried",
+    "conditions": [],
+    "serial": 46
+   }
+  ],
+  "0804": [
+   {
+    "description": "Dates, figs, pineapples, avocados, guavas, mangoes and mangosteens, fresh.",
+    "conditions": [],
+    "serial": 47
+   }
+  ],
+  "0805": [
+   {
+    "description": "Citrus fruit, such as Oranges, Mandarins (including tangerines and satsumas); clementines, wilkings and similar citrus hybrids, Grapefruit, including pomelos, Lemons (Citrus limon, Citrus limonum) and limes (Citrus aurantifolia, Citrus latifolia), fresh.",
+    "conditions": [],
+    "serial": 48
+   }
+  ],
+  "0806": [
+   {
+    "description": "Grapes, fresh",
+    "conditions": [],
+    "serial": 49
+   }
+  ],
+  "0807": [
+   {
+    "description": "Melons (including watermelons) and papaws (papayas), fresh",
+    "conditions": [],
+    "serial": 50
+   }
+  ],
+  "0808": [
+   {
+    "description": "Apples, pears and quinces, fresh",
+    "conditions": [],
+    "serial": 51
+   }
+  ],
+  "0809": [
+   {
+    "description": "Apricots, cherries, peaches (including nectarines), plums and sloes, fresh",
+    "conditions": [],
+    "serial": 52
+   }
+  ],
+  "0810": [
+   {
+    "description": "Other fruit such as strawberries, raspberries, blackberries, mulberries and loganberries, black, white or red currants and gooseberries, cranberries, bilberries and other fruits of the genus vaccinium, Kiwi fruit, Durians, Persimmons, Pomegranates, Tamarind, Sapota (chico), Custard-apple (ata), Bore, Lichi, fresh",
+    "conditions": [],
+    "serial": 53
+   }
+  ],
+  "0813": [
+   {
+    "description": "Tamarind dried",
+    "conditions": [],
+    "serial": 54
+   }
+  ],
+  "0814": [
+   {
+    "description": "Peel of citrus fruit or melons (including watermelons), fresh.",
+    "conditions": [],
+    "serial": 55
+   }
+  ],
+  "07": [
+   {
+    "description": "All goods of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 56
+   }
+  ],
+  "09": [
+   {
+    "description": "All goods of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 56
+   }
+  ],
+  "0901": [
+   {
+    "description": "Coffee beans, not roasted",
+    "conditions": [],
+    "serial": 57
+   }
+  ],
+  "0902": [
+   {
+    "description": "Unprocessed green leaves of tea",
+    "conditions": [],
+    "serial": 58
+   }
+  ],
+  "0909": [
+   {
+    "description": "Seeds of anise, badian, fennel, coriander, cumin or caraway; juniper berries of seed quality",
+    "conditions": [
+     "seed-quality-only"
+    ],
+    "serial": 59
+   }
+  ],
+  "09101110": [
+   {
+    "description": "Fresh ginger, other than in processed form",
+    "conditions": [
+     "unprocessed-only"
+    ],
+    "serial": 60
+   }
+  ],
+  "09103010": [
+   {
+    "description": "Fresh turmeric, other than in processed form",
+    "conditions": [
+     "unprocessed-only"
+    ],
+    "serial": 61
+   }
+  ]
+ },
+ "unkeyed": [
+  {
+   "serial": 167,
+   "appliesTo": "Any chapter",
+   "description": "Puja samagri namely:- (i) Rudraksha, rudraksha mala, tulsi kanthi mala, panchgavya (mixture of cowdung, desi ghee, milk and curd); (ii) Sacred thread (commonly known as yagnopavit); (iii) Wooden khadau; (iv) Panchamrit, (v) Vibhuti, (vi) Unbranded honey (vii) Wick for diya. (viii) Roli (ix) Kalava (Raksha sutra) (x) Chandan tika",
+   "conditions": []
+  },
+  {
+   "serial": 168,
+   "appliesTo": "-",
+   "description": "Supply of lottery by any person other than State Government, Union Territory or Local authority subject to the condition that the supply of such lottery has suffered appropriate Central tax, State tax, Union Territory tax or integrated tax, as the case may be, when supplied by State Government, Union Territory or local authority, as the case may be, to the lottery distributor or selling agent appointed by the State Government, Union Territory or local authority, as the case may be.",
+   "conditions": []
+  },
+  {
+   "serial": 169,
+   "appliesTo": "-",
+   "description": "Supply of goods by a Government entity to Central Government, State Government, Union Territory, local authority or any person specified by Central Government, State Government, Union Territory or local authority, against consideration received from Central Government, State Government, Union Territory or local authority in the form of grants",
+   "conditions": []
+  },
+  {
+   "serial": 170,
+   "appliesTo": "Any Chapter",
+   "description": "Parts for manufacture of hearing aids",
+   "conditions": []
+  },
+  {
+   "serial": 171,
+   "appliesTo": "Any Chapter except 71",
+   "description": "Rakhi (other than those made of goods falling under Chapter 71)",
+   "conditions": []
+  },
+  {
+   "serial": 172,
+   "appliesTo": "Any Chapter",
+   "description": "Supply of gift items received by the President, Prime Minister, Governor or Chief Minister of any State or Union territory, or any public servant, by way of public auction by the Government, where auction proceeds are to be used for public or charitable cause.",
+   "conditions": []
+  }
+ ]
+}

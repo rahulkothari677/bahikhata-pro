@@ -152,6 +152,23 @@ export const CONDITION_TEXT: Record<string, string> = {
     'This rate depends on a declared retail sale price.',
   'has-exclusion':
     'This entry excludes some goods. Read the description before accepting it.',
+
+  /*
+   * Added with the exemption table (10/2025). They live HERE, in the one map,
+   * because a condition means the same thing whichever notification raised it
+   * and a screen should not have to know which table an answer came from.
+   * Two maps describing one idea is the mistake that caused four of my bugs.
+   */
+  'fresh-or-chilled-only':
+    'This applies only to the fresh or chilled form. Frozen or processed, it is treated differently.',
+  'unprocessed-only':
+    'This applies only in the unprocessed form. Processed, it is treated differently.',
+  'seller-specific':
+    'This depends on WHO sells it — a government treasury, KVIC, or a similar authorised seller. An ordinary shop selling the same item is usually not covered.',
+  'listed-in-annexure':
+    'This applies only to items named in the notification’s own annexure. The HSN code alone does not decide it.',
+  'seed-quality-only':
+    'This applies only to goods of seed quality, not the same item sold as food.',
 }
 
 /**
