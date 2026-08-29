@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
+import { compositionWindow, sliceForComposition } from '@/lib/composition-window'
 import { roundMoney } from '@/lib/money'
 import {
   compositionTaxFor, compositionLimitFor, cmp08DueDate,
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
 
     const setting = await db.setting.findUnique({
       where: { userId },
-      select: { compositionCategory: true, gstin: true, state: true },
+      select: { compositionCategory: true, gstin: true, state: true, compositionFrom: true, compositionTo: true },
     })
     const category = (setting?.compositionCategory || null) as CompositionCategory | null
 
@@ -64,17 +65,43 @@ export async function GET(req: NextRequest) {
     }
 
     /*
+     * THE QUARTER SPLITS AT THE EXIT DATE.
+     *
+     * Crossing ₹1.5 crore ends composition on the crossing date itself, with
+     * no grace period — from then the shop issues tax invoices and charges
+     * regular GST. Charging composition tax on the whole quarter regardless
+     * put 1% on top of turnover the shop had ALREADY paid regular GST on.
+     * Real double taxation, and only for shops that are growing.
+     *
+     * One shared function decides the window, because GSTR-4 needs the same
+     * answer and two date filters written separately would drift.
+     */
+    const slice = sliceForComposition(
+      compositionWindow(setting as never),
+      periodStart,
+      periodEnd,
+    )
+    if (!slice) {
+      return NextResponse.json({
+        error: 'Not on the composition scheme for this quarter',
+        message: 'Your shop was not a composition dealer during this quarter, so there is no CMP-08 to file for it. Check the dates in Settings.',
+      }, { status: 400 })
+    }
+    const from = slice.compositionStart
+    const to = slice.compositionEnd
+
+    /*
      * Turnover, not taxable value. There is no per-invoice tax to strip out —
      * a composition dealer's bills carry none — so the total of what was sold
      * IS the base the rate applies to.
      */
     const sales = await db.transaction.aggregate({
-      where: { userId, type: 'sale', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
+      where: { userId, type: 'sale', deletedAt: null, date: { gte: from, lt: to } },
       _sum: { totalAmount: true },
       _count: { _all: true },
     })
     const creditNotes = await db.transaction.aggregate({
-      where: { userId, type: 'credit-note', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
+      where: { userId, type: 'credit-note', deletedAt: null, date: { gte: from, lt: to } },
       _sum: { totalAmount: true },
     })
 
@@ -88,7 +115,24 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       quarter: q,
-      period: { from: periodStart.toISOString(), to: periodEnd.toISOString() },
+      /*
+       * The period ACTUALLY charged, which is not always the quarter. A shop
+       * that left mid-quarter is charged to its exit date only — reporting the
+       * full quarter here would show a range the figures do not cover.
+       */
+      period: { from: from.toISOString(), to: to.toISOString() },
+      quarterPeriod: { from: periodStart.toISOString(), to: periodEnd.toISOString() },
+      /*
+       * Said on screen, not buried. A shopkeeper looking at a CMP-08 that
+       * covers six weeks of a thirteen-week quarter needs to know why, and
+       * needs telling that the rest belongs in GSTR-1/3B — otherwise the
+       * missing turnover looks like our arithmetic failing.
+       */
+      leftMidQuarter: slice.splitsMidPeriod,
+      splitNote: slice.note,
+      regularPeriod: slice.splitsMidPeriod
+        ? { from: slice.regularStart!.toISOString(), to: slice.regularEnd!.toISOString() }
+        : null,
       category,
       categoryLabel: COMPOSITION_RATES[category].label,
       ...tax,

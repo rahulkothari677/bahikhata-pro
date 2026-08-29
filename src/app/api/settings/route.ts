@@ -4,6 +4,7 @@ import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { withCache, noStore } from '@/lib/cache'
 import { apiError } from '@/lib/api-error'
 import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
+import { canEnterCompositionFrom } from '@/lib/composition-window'
 
 // GET /api/settings
 export async function GET() {
@@ -117,34 +118,75 @@ export async function PUT(req: NextRequest) {
       if (v === null || v === '') {
         sanitized.compositionCategory = null
         sanitized.compositionFrom = null
+        sanitized.compositionTo = null
       } else if (allowed.includes(v)) {
+        /*
+         * ENTRY IS PROSPECTIVE ONLY, AND THE APP SHOULD SAY SO.
+         *
+         * CMP-02 takes effect from the start of a financial year and must be
+         * filed before that year begins (Rule 3). There is no mid-year opt-in,
+         * which is why there was never a proration rule to invent for this
+         * direction — the whole-quarter CMP-08 calculation is already right.
+         *
+         * A client MAY supply compositionFrom now (it used to be ignored and
+         * stamped with today — see #42). If they do, it must be a 1 April.
+         * Refused WITH THE REASON: a shopkeeper told only "not allowed"
+         * assumes the app is limited rather than the law.
+         *
+         * A brand-new registration opting in at registration is the one real
+         * exception, and it is not this path — that shop has no prior
+         * regular-scheme turnover in the year to double-tax.
+         */
+        if (body.compositionFrom) {
+          const requested = new Date(body.compositionFrom)
+          if (Number.isNaN(requested.getTime())) {
+            return NextResponse.json({ error: 'compositionFrom must be a date' }, { status: 400 })
+          }
+          const check = canEnterCompositionFrom(requested)
+          if (!check.allowed) {
+            return NextResponse.json({
+              error: 'Composition cannot start mid-year',
+              message: check.reason,
+            }, { status: 400 })
+          }
+          sanitized.compositionFrom = requested
+        }
         sanitized.compositionCategory = v
         /*
-         * Stamped with today, and — be honest — CURRENTLY UNUSED.
+         * Defaults to today only when the client did not state a date.
          *
-         * This used to say it existed "so earlier periods stay on the regular
-         * scheme rather than being retrospectively restated". That is not
-         * implemented: nothing reads this column. /api/cmp-08 and /api/gstr-4
-         * filter on the requested quarter alone, so a shop that switched
-         * mid-quarter gets composition tax charged on turnover from the part
-         * of the quarter when it was still regular — and already remitted GST
-         * on those sales.
-         *
-         * The comment is corrected rather than the behaviour because the right
-         * treatment for a mid-period switch is a tax question, not a coding
-         * one: under GST you normally opt in before the financial year via
-         * CMP-02, so mid-quarter switching is unusual and I will not invent a
-         * proration rule. See task #42 and CA question Q4.7.
-         *
-         * A false comment is worse than none — it is a guarantee a future
-         * reader will trust without checking. It cost me several minutes today.
+         * This comment used to say the column was "CURRENTLY UNUSED", which
+         * was true and honest when written — nothing read it. It is now read
+         * by lib/composition-window.ts, so CMP-08 clamps to the registration
+         * period instead of charging a whole quarter regardless. Correcting
+         * the comment matters as much as the code: a note describing
+         * behaviour the file no longer has is a claim the next reader trusts
+         * without checking, which is exactly how this column sat inert for
+         * three weeks.
          */
-        sanitized.compositionFrom = new Date()
+        if (sanitized.compositionFrom === undefined) sanitized.compositionFrom = new Date()
       } else {
         return NextResponse.json({
           error: 'Invalid composition category',
           message: 'Choose trader, manufacturer, restaurant or service.',
         }, { status: 400 })
+      }
+    }
+
+    /*
+     * The date the shop LEFT composition. Unlike entry, exit is immediate and
+     * mid-quarter — crossing ₹1.5 crore ends the scheme on the crossing date
+     * itself. CMP-08 stops here; see lib/composition-window.ts.
+     */
+    if (body.compositionTo !== undefined) {
+      if (body.compositionTo === null || body.compositionTo === '') {
+        sanitized.compositionTo = null
+      } else {
+        const exit = new Date(body.compositionTo)
+        if (Number.isNaN(exit.getTime())) {
+          return NextResponse.json({ error: 'compositionTo must be a date' }, { status: 400 })
+        }
+        sanitized.compositionTo = exit
       }
     }
 

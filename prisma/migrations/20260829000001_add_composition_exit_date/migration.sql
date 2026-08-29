@@ -1,0 +1,22 @@
+-- When a shop STOPPED being a composition dealer.
+--
+-- WHY. CMP-08 charged composition tax on the whole quarter regardless of when
+-- the shop left the scheme. A shop that crosses Rs 1.5 crore exits on the
+-- crossing date itself - no grace period - and from that moment issues tax
+-- invoices and charges regular GST. Our CMP-08 then applied 1% composition tax
+-- on top of that same post-exit turnover.
+--
+-- That is real double taxation, on the same rupees, for exactly the shops that
+-- are growing. The CA review: "a shop that already charged and remitted
+-- regular GST on post-crossing sales, then has 1% composition tax applied on
+-- top of that same turnover by your CMP-08 calculation, is paying tax twice."
+--
+-- NULL means "still under composition" - not "never was". compositionCategory
+-- already carries whether the shop is on the scheme at all, so this column
+-- only answers WHEN it ended. Clearing compositionCategory also clears this,
+-- the same way it already clears compositionFrom.
+--
+-- No backfill: every existing composition shop is treated as still in the
+-- scheme, which is what the app has always assumed and is correct for all of
+-- them today.
+ALTER TABLE "Setting" ADD COLUMN "compositionTo" TIMESTAMP(3);

@@ -546,12 +546,25 @@ model Setting {
    */
   compositionCategory String?
   /**
-   * When the shop entered the scheme. Stamped with "now" on switch-on.
-   * NOT YET READ BY ANYTHING. This previously claimed "returns before this
-   * stay regular" — that is not implemented; CMP-08 and GSTR-4 filter on the
-   * requested period alone. See task #42 and the note in api/settings/route.ts.
+   * When the shop entered the scheme. Only ever 1 April — CMP-02 is
+   * prospective and must be filed before the financial year begins (Rule 3),
+   * so there is no mid-year opt-in and nothing to prorate in this direction.
+   *
+   * READ by lib/composition-window.ts since 29 Aug 2026 (#42). It sat inert
+   * for three weeks while a comment here claimed a guarantee the code did not
+   * have — which is why that claim is now stated as history, not as fact.
    */
   compositionFrom     DateTime?
+  /**
+   * When the shop STOPPED being a composition dealer. NULL = still in it.
+   *
+   * Crossing Rs 1.5 crore ends composition on the crossing date itself, with
+   * no grace period. From that moment the shop issues tax invoices and charges
+   * regular GST — so CMP-08 must stop at this date, or it charges composition
+   * tax on turnover the shop has already paid regular GST on. Migration
+   * 20260829000001.
+   */
+  compositionTo       DateTime?
 
   id                   String    @id @default(cuid())
   userId               String    @unique // one setting per user
