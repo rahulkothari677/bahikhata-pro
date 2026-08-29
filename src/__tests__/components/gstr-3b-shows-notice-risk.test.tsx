@@ -115,7 +115,9 @@ describe('GSTR-3B screen surfaces the notice risk', () => {
 
     // ...and the card must be here. This is the assertion that would have
     // caught the FilingReadiness bug.
-    expect(await screen.findByText(/Filing this would trigger an automatic notice/)).toBeInTheDocument()
+    // Worded as EXPOSURE since 29 Aug 2026 — GSTN's threshold is configurable and
+    // unpublished, so the card reports the gap rather than promising a notice.
+    expect(await screen.findByText(/leaves you exposed to an automatic notice/)).toBeInTheDocument()
     expect(screen.getByText(/Rule 88C · DRC-01B/)).toBeInTheDocument()
   })
 

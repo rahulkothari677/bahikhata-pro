@@ -18,6 +18,13 @@
  * "fine" would be the kind of reassurance that costs someone interest, so an
  * under-threshold difference is shown plainly and told apart from a notice.
  *
+ * AND SINCE 29 AUG 2026 IT DOES NOT PROMISE ONE EITHER. The CA review
+ * established that 20% / ₹25 lakh was the Council's opening recommendation and
+ * that GSTN runs a configurable, unpublished threshold. So this card reports
+ * EXPOSURE — the real gap, in rupees and percent — rather than asserting that
+ * a notice will or will not be issued. The 7-day window and the block on the
+ * next GSTR-1 are confirmed and stay stated plainly.
+ *
  * @see lib/notice-risk.ts for the thresholds and the AND that matters
  */
 
@@ -118,7 +125,7 @@ export function NoticeRisk({ month }: { month: string }) {
               wrong, and saying nothing would waste the card. */}
           <p className={`font-semibold text-sm ${tone.title}`}>
             {isNotice
-              ? 'Filing this would trigger an automatic notice'
+              ? 'Filing this leaves you exposed to an automatic notice'
               : differences.length > 0
                 ? 'No notice — but this period is short-paid'
                 : 'No notice — and here is credit worth chasing'}
@@ -137,13 +144,19 @@ export function NoticeRisk({ month }: { month: string }) {
                 </div>
                 <p className={`text-xs ${tone.body}`}>{r.headline}</p>
 
-                {/* Both limits, shown against the actual figures. A shopkeeper
-                    who can see WHICH test they failed can act on it; a bare
-                    "you are over the limit" tells them nothing. */}
-                <div className={`mt-2 grid grid-cols-2 gap-2 text-3xs ${tone.body}`}>
+                {/* The gap against the public guide figures — labelled as a
+                    guide, because GSTN's actual threshold is configurable and
+                    unpublished (CA review, 29 Aug 2026). Showing WHICH test it
+                    passes is still useful; calling either one a legal trigger
+                    is not something we can stand behind. */}
+                <p className={`mt-2 text-3xs ${tone.body} opacity-80`}>
+                  Against the commonly cited guide figures — GSTN sets the real
+                  threshold and does not publish it:
+                </p>
+                <div className={`mt-1 grid grid-cols-2 gap-2 text-3xs ${tone.body}`}>
                   <div className="flex items-center gap-1.5">
                     <span className={r.crossedPercent ? 'font-bold' : 'opacity-70'}>
-                      {r.crossedPercent ? '✓ over' : '✗ under'} 20%
+                      {r.crossedPercent ? 'over' : 'under'} 20%
                     </span>
                     <span className="opacity-70 tabular-nums">
                       ({Number.isFinite(r.excessPercent) ? `${r.excessPercent}%` : 'n/a'})
@@ -151,7 +164,7 @@ export function NoticeRisk({ month }: { month: string }) {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className={r.crossedAbsolute ? 'font-bold' : 'opacity-70'}>
-                      {r.crossedAbsolute ? '✓ over' : '✗ under'} ₹25 lakh
+                      {r.crossedAbsolute ? 'over' : 'under'} ₹25 lakh
                     </span>
                   </div>
                 </div>

@@ -22,21 +22,41 @@
  * This turns the reconciliation we already do into a forward-looking answer:
  * "file this and you will/will not get a notice, and here is by how much."
  *
- * WHAT IT DELIBERATELY DOES NOT DO. It does not tell anyone their filing is
- * safe because it is under a threshold. A shortfall below the limit is still a
- * shortfall — it is simply not automatically escalated. Saying "you are fine"
- * about unpaid tax would be worse than saying nothing, so an under-threshold
- * difference is still reported, just not as a notice risk.
+ * WHAT IT DELIBERATELY DOES NOT DO — and this got stronger on 29 Aug 2026.
+ *
+ * It never tells anyone their filing is safe because it sits under a
+ * threshold. A shortfall below the limit is still a shortfall.
+ *
+ * The CA review then went further: the 20% / ₹25 lakh figures were the
+ * Council's OPENING recommendation, and GSTN applies a CONFIGURABLE threshold
+ * that is not published. So the app cannot honestly say "this will trigger a
+ * notice" OR "you are clear". It reports the gap — a fact — and calls it
+ * exposure. The 7-day window and the block on the next GSTR-1 are confirmed,
+ * and those are the parts that actually change what a shopkeeper does.
  *
  * @see lib/gst-reconciliation.ts — explains WHY the two returns differ
  */
 import { roundMoney } from '@/lib/money'
 
-/**
- * Rule 88C fires only when BOTH limits are crossed. This is the part most
- * summaries get wrong, and getting it wrong in either direction is costly:
- * treat it as OR and we cry wolf at every small shop; miss the AND and we
- * reassure someone who is about to be blocked.
+/*
+ * ⚠️ THESE ARE A GUIDE, NOT THE NOTIFIED RULE. Corrected 29 Aug 2026.
+ *
+ * We asserted on screen that DRC-01B fires above 20% AND ₹25 lakh. The CA
+ * review says that figure was the GST Council's OPENING recommendation —
+ * described as a threshold that "may be taken" to begin with — and that GSTN
+ * runs a **configurable** threshold rather than a published formula.
+ *
+ * That reframes the whole card. The dangerous sentence was never the number;
+ * it was the reassurance built on it: *"you are below ₹25 lakh, so you are
+ * safe."* If GSTN's live setting is lower, that told a shopkeeper they were
+ * clear on the exact filing that generated their notice.
+ *
+ * So the figures stay — they are the best public guide and they band the risk
+ * usefully — but nothing built on them may state a legal trigger. The card
+ * now shows the ACTUAL gap in rupees and percent and calls it exposure.
+ *
+ * The 7-day response window and the blocking of the next GSTR-1 are both
+ * confirmed correct, and those are the parts that change behaviour.
  */
 export const RULE_88C = {
   /** The excess must be more than this share of the tax paid in 3B. */
@@ -136,9 +156,16 @@ export function assessRule88C(gstr1Tax: number, gstr3bTax: number): RuleAssessme
     }
   }
 
+  /*
+   * Worded as EXPOSURE, never as a trigger. See the note on RULE_88C: the
+   * threshold GSTN actually applies is configurable and not published, so
+   * "this will trigger a notice" and "this is below the limit, you are safe"
+   * are both claims we cannot stand behind. The gap itself is a fact, and
+   * that is what the shopkeeper is shown.
+   */
   const bothOrOne = level === 'notice'
-    ? `That is more than ${RULE_88C.PERCENT}% AND more than ₹25 lakh, and Rule 88C treats both together as automatic.`
-    : `Rule 88C only escalates when the gap is over ${RULE_88C.PERCENT}% AND over ₹25 lakh. This clears ${crossedPercent ? 'the percentage but not the rupee limit' : crossedAbsolute ? 'the rupee limit but not the percentage' : 'neither limit'}, so it will not trigger a notice — but the tax is still short.`
+    ? `That is over 20% and over ₹25 lakh — well past the range where GSTN has generated DRC-01B.`
+    : `That is under the range where DRC-01B is usually generated — but the exact threshold is set by GSTN and is not published, so treat this as a gap to close rather than a clearance.`
 
   return {
     rule: '88C', level, excess,
@@ -146,8 +173,8 @@ export function assessRule88C(gstr1Tax: number, gstr3bTax: number): RuleAssessme
     base: gstr3bTax, crossedPercent, crossedAbsolute,
     headline: `Your GSTR-1 declares ₹${excess.toLocaleString('en-IN')} more tax than your GSTR-3B pays. ${bothOrOne}`,
     consequence: level === 'notice'
-      ? `You would receive a DRC-01B intimation. You then have ${RESPONSE_DAYS} days to pay the difference or explain it in Part B — and until you do, the portal will NOT let you file your next GSTR-1.`
-      : 'No notice, but you are short-paid on this period and interest runs on the difference.',
+      ? `If GSTN issues DRC-01B, you get ${RESPONSE_DAYS} days to pay the difference or explain it in Part B — and until you answer, the portal will NOT let you file your next GSTR-1.`
+      : 'Below the usual range for an intimation — but you are short-paid on this period either way, and interest runs on the difference.',
     action: 'Either pay the difference in this GSTR-3B before filing, or check whether an invoice in GSTR-1 is wrong.',
   }
 }
