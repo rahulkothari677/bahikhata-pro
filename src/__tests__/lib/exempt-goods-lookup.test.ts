@@ -15,6 +15,7 @@ import {
   lookupExemption,
   UNKEYED_EXEMPTIONS,
   EXEMPT_TABLE_INFO,
+  CONDITION_QUESTION,
 } from '@/lib/exempt-goods-lookup'
 import { CONDITION_TEXT } from '@/lib/hsn-rate-lookup'
 import { readCode } from '@/test-support/read-source'
@@ -187,39 +188,85 @@ describe('the item screen ASKS when the answer is conditional (#93)', () => {
      *
      * Replacing the hand-written exempt list stopped the app answering
      * "exempt" for loose rice — correctly, because 1006 is exempt only "other
-     * than pre-packaged and labelled" and no HSN carries that. But nothing
-     * then asked, so a 0% rice landed on the schema default of 'taxable'.
-     * That traded one silent wrong answer for another: verified live, HSN
-     * 1006 at 0% came back gstTreatment 'taxable'.
-     *
-     * Asserted on the RENDER, via readCode, which strips comments — the note
-     * above quotes every phrase involved.
+     * than pre-packaged and labelled". But nothing then asked, so a 0% rice
+     * landed on the schema default of 'taxable'. Verified live: HSN 1006 at 0%
+     * came back gstTreatment 'taxable'. One silent wrong answer for another.
      */
     expect(ui).toContain("exemption?.outcome === 'needs-confirmation'")
-    expect(ui).toContain('Is this sold loose, or pre-packaged and labelled?')
+    expect(ui).toContain('CONDITION_QUESTION')
   })
 
-  test('both answers are offered, and neither is pre-selected', () => {
-    // "Force the choice, no silent default" is the whole of #93. One button
-    // would be a default wearing a question mark.
-    expect(ui).toContain('Sold loose — exempt')
-    expect(ui).toContain('Pre-packaged &amp; labelled — taxable')
+  test('the question comes from the condition, never hard-coded', () => {
+    /*
+     * MY SECOND BUG HERE, shipped and then caught while starting #94.
+     *
+     * The first version asked "Is this sold loose, or pre-packaged and
+     * labelled?" for EVERY conditional entry. Only 41 of 99 conditional rules
+     * are about packaging; 26 turn on fresh-or-chilled, 13 on who sells it,
+     * 11 on seed quality. So a potato seller was asked about packaging when
+     * the notification asks about freshness, and their answer set a treatment
+     * on a question the law never posed.
+     *
+     * The literal string must NOT appear in the rendered component — the
+     * wording now lives in CONDITION_QUESTION, keyed by condition.
+     */
+    expect(ui).not.toContain('Is this sold loose, or pre-packaged and labelled?')
+    expect(ui).toContain('q.question')
+    expect(ui).toContain('q.exemptLabel')
+    expect(ui).toContain('q.taxableLabel')
+  })
+
+  test('every condition the data emits has a question with both answers', () => {
+    /*
+     * The join between parser and screen. A condition added to the parser and
+     * not given wording renders as nothing at all — the buttons simply do not
+     * appear, and the shopkeeper sees a panel with no way to answer it.
+     */
+    const seen = new Set<string>()
+    for (let ch = 1; ch <= 99; ch++) {
+      lookupExemption(String(ch).padStart(2, '0'))
+        .rules.forEach(r => r.conditions.forEach(c => seen.add(c)))
+    }
+    const missing = [...seen].filter(c => {
+      const q = CONDITION_QUESTION[c]
+      return !q?.question || !q?.exemptLabel || !q?.taxableLabel
+    })
+    expect({ missing }).toEqual({ missing: [] })
+  })
+
+  test('the mirrored condition is not asked backwards', () => {
+    /*
+     * "other than fresh or chilled" EXEMPTS the frozen/processed form, while
+     * "fresh or chilled" exempts the fresh one. A single shared yes/no would
+     * invert one of them, silently, on 26 + 17 rules.
+     */
+    expect(CONDITION_QUESTION['fresh-or-chilled-only'].exemptLabel).toBe('Fresh or chilled')
+    expect(CONDITION_QUESTION['not-fresh-or-chilled'].exemptLabel).toBe('Frozen or processed')
+  })
+
+  test('a rule with two conditions needs BOTH answered the exempt way', () => {
+    /*
+     * 17 rules read "other than fresh or chilled, other than pre-packaged and
+     * labelled" — two tests, cumulative. Answering one and defaulting the
+     * other would grant an exemption on half the evidence.
+     */
+    expect(ui).toContain("requiredConditions.every(c => conditionAnswers[c] === 'exempt')")
+    expect(ui).toContain('requiredConditions.every(c => conditionAnswers[c])')
+  })
+
+  test('answers do not carry over to the next item', () => {
+    // The dialog instance is reused. An inherited "sold loose" would silently
+    // exempt the next product the shopkeeper adds.
+    expect(ui).toContain('setConditionAnswers({})')
   })
 
   test('the question cites the notification it came from', () => {
-    // §0 — every figure shows receipts that open the real record. A tax
-    // question with no source is just the app asserting something.
+    // §0 — every figure shows receipts that open the real record.
     expect(ui).toContain('exemption.source')
     expect(ui).toContain('exemption.rules[0].serial')
   })
 
   test('a rate above zero settles it, and nothing is asked', () => {
-    /*
-     * A typed rate means the shopkeeper has said they charge tax. The screen
-     * must use the same precedence as suggestGstTreatment on the server, or
-     * the two disagree about one product — which is the "two things describing
-     * one thing" class that caused four earlier bugs.
-     */
     expect(ui).toMatch(/if \(rate > 0\) return null/)
   })
 })

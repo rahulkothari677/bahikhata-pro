@@ -17,6 +17,7 @@ import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn } from '@/lib/utils'
 import { isService } from '@/lib/inventory-tracking'
 import { ProductDialog } from './ProductDialog'
+import { ExemptReclassifyReview } from './ExemptReclassifyReview'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { EmptyState } from '@/components/common/EmptyState'
 import { WakingUpState } from '@/components/common/WakingUpState'
@@ -181,6 +182,15 @@ export function Inventory() {
           </>
         )}
       </div>
+
+      {/*
+        * #94 — items classified under the cancelled exemption notification.
+        * Above the catalogue because it is a thing to DO, not a thing to
+        * browse; below the summary cards because it is not an emergency. The
+        * component renders nothing when there is nothing to review, so a
+        * healthy shop never sees it.
+        */}
+      <ExemptReclassifyReview />
 
       {/* Category navigation */}
       <Card className="shadow-card border-border/60">

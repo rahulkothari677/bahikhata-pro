@@ -20,7 +20,7 @@ import { readError } from '@/lib/read-error'
 import { useSetting } from '@/hooks/use-setting'
 import { defaultTracksInventory } from '@/lib/inventory-tracking'
 import { GST_RATES } from '@/lib/gst-rates'
-import { lookupExemption } from '@/lib/exempt-goods-lookup'
+import { lookupExemption, CONDITION_QUESTION } from '@/lib/exempt-goods-lookup'
 
 
 const UNITS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'm', 'box', 'dozen', 'packet']
@@ -79,6 +79,45 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
     const r = lookupExemption(code)
     return r.outcome === 'not-listed' ? null : r
   }, [form.hsn, form.gstRate])
+
+  /*
+   * One answer per condition, because a rule can carry two ("other than fresh
+   * or chilled, other than pre-packaged and labelled") and BOTH must hold for
+   * the exemption to apply.
+   */
+  const [conditionAnswers, setConditionAnswers] = useState<Record<string, 'exempt' | 'taxable'>>({})
+
+  /* Memoised: a fresh array each render would re-fire the effect below on
+     every keystroke, and it is the effect that writes the treatment. */
+  const requiredConditions = useMemo(
+    () => exemption?.outcome === 'needs-confirmation'
+      ? exemption.rules[0].conditions.filter(c => CONDITION_QUESTION[c])
+      : [],
+    [exemption],
+  )
+  const allConditionsAnswered =
+    requiredConditions.length > 0 && requiredConditions.every(c => conditionAnswers[c])
+
+  /*
+   * Exempt only if EVERY condition was answered the exempt way. One "no" and
+   * the exemption is lost, which is how the notification reads — the
+   * conditions are cumulative, not alternatives.
+   *
+   * Written as an effect rather than inside the button handler because with
+   * two conditions no single click knows whether the other has been answered.
+   */
+  useEffect(() => {
+    if (!allConditionsAnswered) return
+    const exempt = requiredConditions.every(c => conditionAnswers[c] === 'exempt')
+    setForm(f => (
+      f.gstTreatment === (exempt ? 'exempt' : 'taxable')
+        ? f
+        : { ...f, gstTreatment: exempt ? 'exempt' : 'taxable' }
+    ))
+  }, [allConditionsAnswered, conditionAnswers, requiredConditions])
+
+  /* A different item is a different question — never inherit the last answer. */
+  useEffect(() => { setConditionAnswers({}) }, [form.hsn, form.gstRate])
 
   // Sync form when dialog opens or product changes
   useEffect(() => {
@@ -372,35 +411,64 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           {exemption?.outcome === 'needs-confirmation' && (
             <div className="sm:col-span-2 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-3">
               <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-                Is this sold loose, or pre-packaged and labelled?
+                This is GST-free only under a condition
               </p>
-              <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1">
-                {exemption.rules[0].description}
+              <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1 italic">
+                “{exemption.rules[0].description}”
               </p>
-              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-1">
-                Sold loose it is exempt. Pre-packaged and labelled, it is taxable — and the two go in
-                different boxes of your GSTR-1, so this decides whether your return is right.
+
+              {/*
+                * ONE QUESTION PER CONDITION, each in its own words.
+                *
+                * My first version asked "Is this sold loose, or pre-packaged?"
+                * for every conditional entry. Only 41 of 99 are about
+                * packaging — 26 turn on fresh-or-chilled, 13 on who sells it,
+                * 11 on seed quality. A potato seller was being asked about
+                * packaging when the law asks about freshness, and their answer
+                * set a treatment on a question that was never posed.
+                *
+                * A rule with two conditions needs BOTH satisfied ("other than
+                * fresh or chilled, other than pre-packaged and labelled"), so
+                * each is asked separately rather than collapsed into one.
+                */}
+              {exemption.rules[0].conditions.map(code => {
+                const q = CONDITION_QUESTION[code]
+                if (!q) return null
+                return (
+                  <div key={code} className="mt-3">
+                    <p className="text-2xs font-medium text-amber-900 dark:text-amber-200">{q.question}</p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <Button
+                        type="button" size="sm" variant="outline"
+                        /* 48dp, not 44. §4's touch-target bar, and these are
+                           the only controls here that decide a tax treatment. */
+                        className="h-12"
+                        onClick={() => setConditionAnswers(a => ({ ...a, [code]: 'exempt' }))}
+                      >
+                        {q.exemptLabel}
+                      </Button>
+                      <Button
+                        type="button" size="sm" variant="outline"
+                        className="h-12"
+                        onClick={() => setConditionAnswers(a => ({ ...a, [code]: 'taxable' }))}
+                      >
+                        {q.taxableLabel}
+                      </Button>
+                      {conditionAnswers[code] && (
+                        <span className="self-center text-2xs text-amber-900 dark:text-amber-200">
+                          ✓ {conditionAnswers[code] === 'exempt' ? q.exemptLabel : q.taxableLabel}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-3">
+                {allConditionsAnswered
+                  ? `Answered — this item is set to ${form.gstTreatment === 'exempt' ? 'Exempt' : 'Taxable'}.`
+                  : 'Exempt and taxable go in different boxes of your GSTR-1, so this decides whether your return is right.'}
               </p>
-              <div className="flex flex-wrap gap-2 mt-3">
-                <Button
-                  type="button" size="sm" variant="outline"
-                  /* 48dp, not 44. §4's touch-target bar, and these two are the
-                     only controls on the screen that decide a tax treatment. */
-                  className="h-12"
-                  onClick={() => setForm(f => ({ ...f, gstTreatment: 'exempt', gstRate: '0' }))}
-                >
-                  Sold loose — exempt
-                </Button>
-                <Button
-                  type="button" size="sm" variant="outline"
-                  /* 48dp, not 44. §4's touch-target bar, and these two are the
-                     only controls on the screen that decide a tax treatment. */
-                  className="h-12"
-                  onClick={() => setForm(f => ({ ...f, gstTreatment: 'taxable' }))}
-                >
-                  Pre-packaged &amp; labelled — taxable
-                </Button>
-              </div>
               <p className="text-3xs text-amber-700 dark:text-amber-400 mt-2">
                 {exemption.source} · entry {exemption.rules[0].serial}
               </p>

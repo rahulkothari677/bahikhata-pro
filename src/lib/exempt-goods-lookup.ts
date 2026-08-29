@@ -163,6 +163,92 @@ export function lookupExemption(hsn: string | null | undefined): ExemptLookupRes
   }
 }
 
+/**
+ * The QUESTION each condition asks, and what each answer means.
+ *
+ * ── WHY THIS EXISTS: I SHIPPED THE WRONG QUESTION (29 Aug 2026) ─────────
+ *
+ * The first version of the item-screen panel asked one hard-coded question —
+ * "Is this sold loose, or pre-packaged and labelled?" — for EVERY conditional
+ * entry. Only 41 of the 99 conditional rules are about packaging. The rest:
+ *
+ *     26  fresh-or-chilled-only    potatoes, tomatoes, onions, carrots
+ *     13  seller-specific          stamp papers, khadi through KVIC
+ *     11  seed-quality-only        the same grain as seed vs as food
+ *      2  unprocessed-only         fresh ginger, fresh turmeric
+ *      2  listed-in-annexure       drugs named in Annexure I
+ *
+ * So a shop selling potatoes was asked whether they were pre-packaged, when
+ * the notification actually turns on whether they are fresh or chilled. The
+ * answer would have set a treatment on a question the law never asked.
+ *
+ * That is worse than not asking, and I had already written the reason down in
+ * the parser: a shopkeeper asked something with no bearing on the answer
+ * learns to dismiss the question, including the times it decides a rate. I
+ * wrote that warning and then shipped the thing it warns about.
+ *
+ * ALL conditions on a rule must be satisfied for the exemption to hold —
+ * "All goods, other than fresh or chilled, other than pre-packaged and
+ * labelled" is two tests, not one — so the screen asks each of them.
+ */
+export interface ConditionQuestion {
+  /** Asked in the shopkeeper's words, about the item in front of them. */
+  question: string
+  /** The answer that KEEPS the exemption. */
+  exemptLabel: string
+  /** The answer that loses it. */
+  taxableLabel: string
+}
+
+export const CONDITION_QUESTION: Record<string, ConditionQuestion> = {
+  'pre-packaged-and-labelled': {
+    question: 'Is this sold loose, or pre-packaged and labelled?',
+    exemptLabel: 'Sold loose',
+    taxableLabel: 'Pre-packaged & labelled',
+  },
+  'fresh-or-chilled-only': {
+    question: 'Is this sold fresh or chilled, or frozen or processed?',
+    exemptLabel: 'Fresh or chilled',
+    taxableLabel: 'Frozen or processed',
+  },
+  'not-fresh-or-chilled': {
+    /*
+     * The mirror image, and the reason each condition needs its own answers
+     * rather than a shared yes/no. Here the exemption applies to goods that
+     * are NOT fresh — so "fresh or chilled" is the answer that loses it.
+     * A generic "does the condition apply?" would invert this half the time.
+     */
+    question: 'Is this frozen or processed, or sold fresh or chilled?',
+    exemptLabel: 'Frozen or processed',
+    taxableLabel: 'Fresh or chilled',
+  },
+  'unprocessed-only': {
+    question: 'Is this sold in its natural form, or processed?',
+    exemptLabel: 'Natural, unprocessed',
+    taxableLabel: 'Processed',
+  },
+  'seed-quality-only': {
+    question: 'Is this sold as seed for sowing, or as food?',
+    exemptLabel: 'Seed for sowing',
+    taxableLabel: 'Sold as food',
+  },
+  'seller-specific': {
+    question: 'Are you an authorised seller of this, as the notification describes?',
+    exemptLabel: 'Yes, authorised',
+    taxableLabel: 'No, ordinary sale',
+  },
+  'listed-in-annexure': {
+    question: 'Is this exact item named in the notification’s annexure?',
+    exemptLabel: 'Yes, it is named',
+    taxableLabel: 'No, or not sure',
+  },
+  'has-exclusion': {
+    question: 'This entry excludes some goods — read it above. Is yours covered?',
+    exemptLabel: 'Yes, covered',
+    taxableLabel: 'No, or not sure',
+  },
+}
+
 /** Counts, for the screen that explains where an answer came from. */
 export const EXEMPT_TABLE_INFO = {
   notification: table.source.notification,
