@@ -206,6 +206,16 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         notes: form.notes.trim() || null,
         priceIncludesGst: form.priceIncludesGst,
         gstTreatment: form.gstTreatment,  // 🔒 V17 Audit §4.2
+        /*
+         * Only true when the shopkeeper actually answered EVERY condition on
+         * this screen (#94). Sending it unconditionally would mark items
+         * confirmed that nobody looked at, which is the silent decision this
+         * whole task exists to remove — and it would empty the review list by
+         * hiding rows rather than by resolving them.
+         *
+         * A flag, not a timestamp: the server owns the clock.
+         */
+        gstTreatmentConfirmed: allConditionsAnswered || undefined,
         tracksInventory: form.tracksInventory,
         /*
          * 🔒 #29 (2026-08-13): the stamp this product carried when it was

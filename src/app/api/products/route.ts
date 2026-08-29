@@ -189,6 +189,13 @@ export async function POST(req: NextRequest) {
         gstTreatment: v.gstTreatment && v.gstTreatment !== 'taxable'
           ? v.gstTreatment
           : (suggestGstTreatment(v.hsn, v.gstRate ?? 0) ?? v.gstTreatment),
+        /*
+         * Stamped SERVER-SIDE from a flag, never from a client timestamp
+         * (#94). Without this, a product whose condition was answered on the
+         * item screen would still be listed by the review as unconfirmed, and
+         * the shopkeeper would be asked the same question twice.
+         */
+        gstTreatmentConfirmedAt: v.gstTreatmentConfirmed ? new Date() : null,
       },
     })
     return NextResponse.json({ product })
@@ -287,6 +294,14 @@ export async function PUT(req: NextRequest) {
         ? v.gstTreatment
         : (suggestGstTreatment(v.hsn, v.gstRate ?? 0) ?? v.gstTreatment)
     }
+    /*
+     * Only ever SET on edit, never cleared (#94). An edit that did not answer
+     * the condition — a price change, a rename — says nothing about whether
+     * the treatment is still right, and clearing the stamp would put the item
+     * back on the review list for no reason. Re-asking after a price change
+     * is exactly the noise that gets a compliance screen ignored.
+     */
+    if (v.gstTreatmentConfirmed) updateData.gstTreatmentConfirmedAt = new Date()
 
     /*
      * 🔒 V26 R11 (Phase 5): Concurrent-edit warning.

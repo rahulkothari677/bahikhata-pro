@@ -172,6 +172,18 @@ model Product {
   // nil-rated vs exempt vs non-GST outward supplies. Before this, exemptValue
   // was hardcoded to 0 because there was no way to mark a product as exempt.
   gstTreatment      String   @default("taxable") // taxable | nil | exempt | nonGst
+  /// When a PERSON last confirmed this treatment against the CURRENT exemption
+  /// notification (#94, migration 20260829000002).
+  ///
+  /// NULL = never confirmed under the current rules, which is right for every
+  /// row created before 29 Aug 2026: all were decided against Notification
+  /// 2/2017, superseded by 10/2025.
+  ///
+  /// Compared against EXEMPT_RULES_ADOPTED_ON rather than merely checked for
+  /// null, so that when the Council issues the NEXT notification, bumping one
+  /// constant expires every confirmation and asks again. A confirmation is
+  /// against a specific set of rules, not forever.
+  gstTreatmentConfirmedAt DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

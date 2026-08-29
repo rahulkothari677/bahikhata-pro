@@ -225,6 +225,14 @@ export const createProductSchema = z.object({
   // and taxable (default). Used by GSTR-3B 3.1(c) to break out nil/exempt/non-GST.
   // Enum validation prevents arbitrary strings from being stored.
   gstTreatment: z.enum(['taxable', 'nil', 'exempt', 'nonGst']).optional().default('taxable'),
+  /*
+   * The shopkeeper ANSWERED the exemption condition on screen (#94).
+   *
+   * A flag, never a timestamp: the server owns the clock. A client-supplied
+   * confirmation time would let a wrong clock — or a replayed request — mark a
+   * product confirmed against rules it was never checked against.
+   */
+  gstTreatmentConfirmed: z.coerce.boolean().optional(),
   // 🔒 V17 Audit Phase 1 P1.5: Reject contradictory gstRate + gstTreatment combos.
   // 'exempt' and 'nonGst' products must have gstRate=0 (they're not taxable).
   // 'taxable' and 'nil' can have any gstRate (nil is 0% but still taxable).
@@ -292,6 +300,14 @@ export const updateProductSchema = z.object({
   priceIncludesGst: z.coerce.boolean().optional(),
   // 🔒 V17 Audit §4.2: GST treatment (optional on update; if omitted, unchanged).
   gstTreatment: z.enum(['taxable', 'nil', 'exempt', 'nonGst']).optional(),
+  /*
+   * The shopkeeper ANSWERED the exemption condition on screen (#94).
+   *
+   * A flag, never a timestamp: the server owns the clock. A client-supplied
+   * confirmation time would let a wrong clock — or a replayed request — mark a
+   * product confirmed against rules it was never checked against.
+   */
+  gstTreatmentConfirmed: z.coerce.boolean().optional(),
 })
 
 /**

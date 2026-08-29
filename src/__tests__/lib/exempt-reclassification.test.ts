@@ -191,3 +191,80 @@ describe('the review never writes on its own', () => {
     expect(ui).toContain('zeroRatedScanned')
   })
 })
+
+describe('a row a person has answered does not come back', () => {
+  /*
+   * FOUND BY USING THE SCREEN, not by any test.
+   *
+   * I answered "sold loose" on the live app, the row saved as exempt, and on
+   * the next load THE SAME ROW came back — because a conditional entry looks
+   * identical whether or not a human has confirmed it. The comparison was
+   * stateless, so the list could never be emptied.
+   *
+   * A review list that cannot be finished is worse than no list: it teaches
+   * people to ignore the one screen that matters.
+   */
+  const CONFIRMED = new Date('2026-08-30T10:00:00.000Z')      // after adoption
+  const STALE = new Date('2026-01-15T10:00:00.000Z')          // before it
+
+  test('a confirmed conditional item is no longer flagged', () => {
+    expect(reviewProduct({
+      hsn: '1006', gstRate: 0, gstTreatment: 'exempt', gstTreatmentConfirmedAt: CONFIRMED,
+    }).verdict).toBe('ok')
+  })
+
+  test('...whichever way they answered it', () => {
+    // "Taxable" is just as much an answer as "exempt". Re-asking someone who
+    // said pre-packaged is the same treadmill.
+    expect(reviewProduct({
+      hsn: '0701', gstRate: 0, gstTreatment: 'taxable', gstTreatmentConfirmedAt: CONFIRMED,
+    }).verdict).toBe('ok')
+  })
+
+  test('a confirmation made BEFORE we adopted the notification does not count', () => {
+    /*
+     * The point of comparing against a date rather than checking for null.
+     * Between 17 Sep 2025 and 29 Aug 2026 this app was still applying the
+     * cancelled 2/2017, so anything confirmed in that window was confirmed
+     * against the wrong rules.
+     *
+     * It is also the migration path for the next Council meeting: bump
+     * EXEMPT_RULES_ADOPTED_ON and every confirmation expires.
+     */
+    expect(reviewProduct({
+      hsn: '1006', gstRate: 0, gstTreatment: 'exempt', gstTreatmentConfirmedAt: STALE,
+    }).verdict).toBe('needs-answer')
+  })
+
+  test('confirmation does not silence a CONTRADICTION', () => {
+    /*
+     * 'should-be-exempt' and 'no-longer-listed' are wrong data, not open
+     * questions — an outright-exempt good filed as nil-rated is in the wrong
+     * GSTR-1 box whoever confirmed it. Only conditional rows get the reprieve,
+     * or "confirmed" would become a way to hide real errors.
+     */
+    expect(reviewProduct({
+      hsn: '2501', gstRate: 0, gstTreatment: 'nil', gstTreatmentConfirmedAt: CONFIRMED,
+    }).verdict).toBe('should-be-exempt')
+    expect(reviewProduct({
+      hsn: '8471', gstRate: 0, gstTreatment: 'exempt', gstTreatmentConfirmedAt: CONFIRMED,
+    }).verdict).toBe('no-longer-listed')
+  })
+
+  test('the server stamps the clock, never the client', () => {
+    const api = readCode('src/app/api/products/exempt-review/route.ts')
+    const products = readCode('src/app/api/products/route.ts')
+    // A client-supplied timestamp could be wrong, or replayed, and would mark
+    // a product confirmed against rules it was never checked against.
+    expect(api).toContain('gstTreatmentConfirmedAt: new Date()')
+    expect(products).toContain('gstTreatmentConfirmed ? new Date()')
+    expect(products).not.toMatch(/gstTreatmentConfirmedAt:\s*v\.gstTreatmentConfirmedAt/)
+  })
+
+  test('the item screen only claims a confirmation when one was given', () => {
+    const ui = readCode('src/components/inventory/ProductDialog.tsx')
+    // Sending it unconditionally would mark items confirmed that nobody looked
+    // at — emptying the list by hiding rows instead of resolving them.
+    expect(ui).toContain('gstTreatmentConfirmed: allConditionsAnswered || undefined')
+  })
+})

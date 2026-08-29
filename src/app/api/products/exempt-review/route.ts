@@ -55,7 +55,10 @@ export async function GET() {
      */
     const rows = await db.product.findMany({
       where: { userId, gstRate: 0 },
-      select: { id: true, name: true, hsn: true, gstRate: true, gstTreatment: true, category: true },
+      select: {
+        id: true, name: true, hsn: true, gstRate: true, gstTreatment: true,
+        category: true, gstTreatmentConfirmedAt: true,
+      },
       orderBy: { name: 'asc' },
       take: SCAN_CAP + 1,
     })
@@ -133,7 +136,13 @@ export async function POST(req: NextRequest) {
      */
     const result = await db.product.updateMany({
       where: { id: productId, userId: auth.userId },
-      data: { gstTreatment },
+      /*
+       * The timestamp is the point of the write, as much as the treatment.
+       * Without it the row reappears on the next load — a conditional entry
+       * looks the same whether or not a person has answered it, so the list
+       * could never be emptied and would train people to ignore it.
+       */
+      data: { gstTreatment, gstTreatmentConfirmedAt: new Date() },
     })
     if (result.count === 0) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })

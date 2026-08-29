@@ -41,10 +41,43 @@ export type ReclassifyVerdict =
   /** The notification's answer depends on something only the shop knows. */
   | 'needs-answer'
 
+/**
+ * When THIS APP started using Notification 10/2025.
+ *
+ * Not the notification's own date (17 Sep 2025) — that is when the law
+ * changed, not when we began applying it. Between those two dates the app was
+ * still classifying against the cancelled 2/2017, so a confirmation made in
+ * that window was made under the wrong rules and must not count.
+ *
+ * BUMP THIS when the next notification is adopted. Every confirmation expires
+ * and every conditional item is asked again, which is correct: a confirmation
+ * is against a specific set of rules, never forever. One constant is the whole
+ * migration path for the next Council meeting.
+ */
+export const EXEMPT_RULES_ADOPTED_ON = new Date('2026-08-29T00:00:00.000Z')
+
 export interface ProductForReview {
   hsn: string | null | undefined
   gstRate: number
   gstTreatment: string | null | undefined
+  /** When a person last confirmed this treatment. NULL = never. */
+  gstTreatmentConfirmedAt?: Date | string | null
+}
+
+/**
+ * Has a person confirmed this against the rules we are applying now?
+ *
+ * A confirmation older than the adoption date was made against the cancelled
+ * notification, so it carries no weight — the same reasoning that makes every
+ * pre-existing row a finding in the first place.
+ */
+export function confirmedUnderCurrentRules(p: ProductForReview): boolean {
+  if (!p.gstTreatmentConfirmedAt) return false
+  const at = p.gstTreatmentConfirmedAt instanceof Date
+    ? p.gstTreatmentConfirmedAt
+    : new Date(p.gstTreatmentConfirmedAt)
+  if (Number.isNaN(at.getTime())) return false
+  return at >= EXEMPT_RULES_ADOPTED_ON
 }
 
 export interface ReclassifyResult {
@@ -128,6 +161,22 @@ export function reviewProduct(p: ProductForReview): ReclassifyResult {
   }
 
   if (ex.outcome === 'needs-confirmation') {
+    /*
+     * ALREADY ANSWERED BY A PERSON — say nothing.
+     *
+     * Found by using the screen: a shopkeeper answered "sold loose", the row
+     * saved as exempt, and on the next load the same row came back, because a
+     * conditional entry looks identical whether or not anyone has confirmed
+     * it. A review list that cannot be emptied is worse than no list; it
+     * teaches people to ignore the one screen that matters.
+     *
+     * Only conditional rows get this reprieve. 'should-be-exempt' and
+     * 'no-longer-listed' are contradictions in the data rather than questions
+     * of fact, and they stop being findings when the data is fixed — no
+     * confirmation needed or wanted.
+     */
+    if (confirmedUnderCurrentRules(p)) return OK
+
     /*
      * THE BIG GROUP, and the reason this task exists. The old list marked
      * eleven of these prefixes exempt with no condition at all — rice, atta,

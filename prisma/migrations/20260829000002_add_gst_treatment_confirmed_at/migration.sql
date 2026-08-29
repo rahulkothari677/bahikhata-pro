@@ -1,0 +1,18 @@
+-- When a PERSON last confirmed this product's GST treatment against the
+-- current exemption notification.
+--
+-- WHY. #94 finds products classified under Notification 2/2017, which was
+-- superseded by 10/2025. It compares each stored treatment against the live
+-- notification, because Product carried nothing saying who or what set it.
+--
+-- That comparison is stateless, and it showed: a shopkeeper answered "sold
+-- loose", the row was saved as exempt, and on the next load the SAME row came
+-- back — because a conditional entry looks identical whether or not a human
+-- has confirmed it. A review list that never empties is worse than none; it
+-- teaches people to ignore the one screen that matters.
+--
+-- NULL means "never confirmed against the current rules", which is the correct
+-- state for every existing row: all of them were decided under the cancelled
+-- notification. No backfill, deliberately - backfilling would mark them
+-- confirmed when nobody has looked.
+ALTER TABLE "Product" ADD COLUMN "gstTreatmentConfirmedAt" TIMESTAMP(3);
