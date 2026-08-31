@@ -19,7 +19,7 @@ import { formatINR } from '@/lib/utils'
 import { readError } from '@/lib/read-error'
 import { useSetting } from '@/hooks/use-setting'
 import { defaultTracksInventory } from '@/lib/inventory-tracking'
-import { GST_RATES } from '@/lib/gst-rates'
+import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 import { lookupExemption, CONDITION_QUESTION } from '@/lib/exempt-goods-lookup'
 
 
@@ -396,7 +396,15 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
             <Select value={form.gstRate} onValueChange={(v) => setForm({ ...form, gstRate: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {GST_RATES.map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                {/* Current slabs only, PLUS this product's own rate if it is a legacy
+                    one (#86). Passing the value is what stops a pre-September
+                    12% product being silently reset the moment someone opens
+                    it to fix a typo. */}
+                {ratesForPicker(parseFloat(form.gstRate)).map(r => (
+                  <SelectItem key={r} value={String(r)}>
+                    {r}%{isLegacyGstRate(r) ? ' (old rate)' : ''}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

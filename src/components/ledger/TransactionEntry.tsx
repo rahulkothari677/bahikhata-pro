@@ -56,7 +56,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
-import { GST_RATES } from '@/lib/gst-rates'
+import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -1978,7 +1978,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {GST_RATES.map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                              {/* See #86 — the line's own rate stays on the list so an old bill
+                                  being edited keeps its 12%. */}
+                              {ratesForPicker(item.gstRate).map(r => (
+                                <SelectItem key={r} value={String(r)}>
+                                  {r}%{isLegacyGstRate(r) ? ' (old rate)' : ''}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>

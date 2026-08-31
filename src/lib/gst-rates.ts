@@ -57,6 +57,65 @@ export const GST_RATE_SLABS = [0, 3, 5, 12, 18, 28, 40] as const
 /** Mutable copy for callers that map over it (charts, exports, pickers). */
 export const GST_RATES: number[] = [...GST_RATE_SLABS]
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * CURRENT vs HISTORICAL — one list was doing two jobs (#86)
+ *
+ * `GST_RATE_SLABS` above answers "what rate might I meet in this shop's data?".
+ * A picker needs a different question: "what rate may I charge on a sale I am
+ * writing today?". They are not the same list, and using one for both is why
+ * 12% still appears on a new bill.
+ *
+ * 12% WAS REMOVED FOR GOODS by Notification 09/2025-CT(R), effective
+ * 22 Sep 2025. Verified against the notification this repo actually holds
+ * rather than from commentary: of 1,351 parsed rate rows, ZERO are 12%. The
+ * live rates in that document are 0.25, 1.5, 3, 5, 18, 28 and 40.
+ *
+ * BUT 12% MUST STAY AVAILABLE, and that is the half a naive fix gets wrong. A
+ * shopkeeper entering last year's purchase bill, or raising a credit note
+ * against an invoice from before 22 September, needs it. Deleting it from the
+ * list would make correct historical data unenterable — and worse, would
+ * silently reset an existing 12% product the moment someone opened it to edit
+ * the name.
+ *
+ * So: NEW bills offer the current slabs; existing data keeps whatever it has;
+ * validation and reporting keep the full historical set.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/** What a NEW sale may be charged at. 12% is gone from here, and only here. */
+export const CURRENT_GST_RATE_SLABS = [0, 3, 5, 18, 28, 40] as const
+
+/**
+ * Rates no longer live, kept so old bills remain enterable and editable.
+ *
+ * Not "deprecated" in the sense of unusable — an invoice dated before
+ * 22 Sep 2025 is correctly 12%, and so is a credit note against it.
+ */
+export const LEGACY_GST_RATES = [12] as const
+
+export function isLegacyGstRate(rate: number): boolean {
+  return LEGACY_GST_RATES.includes(rate as (typeof LEGACY_GST_RATES)[number])
+}
+
+/**
+ * The options a picker should show, given what the row already holds.
+ *
+ * THE SAFETY THAT MAKES THIS CHANGE SAFE. A shadcn Select whose value has no
+ * matching option renders blank, and the next save writes whatever the user
+ * then picks — so simply dropping 12% would quietly rewrite the rate on every
+ * pre-September product the moment somebody opened it to fix a typo.
+ *
+ * Passing the row's own rate keeps it on the list for that row only. A new
+ * bill, which passes nothing, never sees 12% at all.
+ */
+export function ratesForPicker(currentValue?: number | null): number[] {
+  const base = [...CURRENT_GST_RATE_SLABS]
+  const v = Number(currentValue)
+  if (Number.isFinite(v) && v > 0 && !base.includes(v as (typeof CURRENT_GST_RATE_SLABS)[number])) {
+    return [...base, v].sort((a, b) => a - b)
+  }
+  return base
+}
+
 /**
  * Is this a slab a picker should offer?
  *
