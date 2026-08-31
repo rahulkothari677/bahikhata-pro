@@ -31,6 +31,7 @@
  * @see EKBOOK-MASTER-PLAN §5.3 for the row-by-row spec, taken from a real form
  */
 import { roundMoney } from '@/lib/money'
+import { splitItc, type ItcSplit, type ItcSplitInput } from '@/lib/itc-category'
 
 /** One month's filed GSTR-3B, as stored in GstReturn. */
 export interface FiledMonth3b {
@@ -155,8 +156,15 @@ export interface Gstr9Result {
    */
   table6: {
     totalItcPer3bA: TaxAmounts
-    /** True when the three-way split is unavailable — always true today. */
+    /**
+     * True when NO purchase in the year carries a category — the state before
+     * #36. Kept as its own flag rather than inferred from the split, because
+     * "we never recorded this" and "some of it is recorded" are different
+     * things to tell a CA.
+     */
     splitUnavailable: boolean
+    /** The three-way split, plus whatever predates the column. */
+    split: ItcSplit | null
   }
   /** Table 9 — tax paid, per the filed GSTR-3B. */
   table9: {
@@ -237,6 +245,12 @@ export function buildGstr9(input: {
   fy: string
   months3b: FiledMonth3b[]
   months1: FiledMonth1[]
+  /*
+   * Purchases of the year, for Table 6's three-way split (#36). Optional so
+   * every existing caller and test keeps working — absent means the split is
+   * unavailable, which is exactly what it meant before this column existed.
+   */
+  purchases?: ItcSplitInput[]
 }): Gstr9Result {
   const expected = financialYearMonths(input.fy)
 
@@ -329,7 +343,24 @@ export function buildGstr9(input: {
     coverage: { expected, filed3b, filed1, missing, complete: missing.length === 0 },
     table4: { b2c, b2b, rcmInward, subTotalH, creditNotesI: creditNotes, debitNotesJ: debitNotes, subTotalM, totalN },
     table5: { exemptedD: exempted, nilRatedE: nilRated, nonGstF: nonGst, subTotalG, totalM: totalM5, totalTurnoverN },
-    table6: { totalItcPer3bA: itcClaimed, splitUnavailable: true },
+    table6: (() => {
+      /*
+       * The split is only offered when something is actually recorded.
+       * Returning three zeroes and an "unclassified" bucket holding the whole
+       * year would be technically true and read as a broken report.
+       */
+      const rows = input.purchases ?? []
+      if (rows.length === 0) return { totalItcPer3bA: itcClaimed, splitUnavailable: true, split: null }
+      const split = splitItc(rows)
+      const recorded = split.inputs.cgst + split.inputs.sgst + split.inputs.igst
+        + split.capitalGoods.cgst + split.capitalGoods.sgst + split.capitalGoods.igst
+        + split.services.cgst + split.services.sgst + split.services.igst
+      return {
+        totalItcPer3bA: itcClaimed,
+        splitUnavailable: recorded === 0,
+        split: recorded === 0 ? null : split,
+      }
+    })(),
     table9: { outputTax, itcClaimed },
     checks,
   }

@@ -1,0 +1,16 @@
+-- Inputs / Capital Goods / Input Services, for GSTR-9 Table 6 (#36).
+--
+-- The form splits ITC three ways and we have never recorded it, so
+-- gstr9-builder reports the total with splitUnavailable = true. This is the
+-- column that closes that.
+--
+-- NULL means "recorded before this column existed". Deliberately NOT
+-- backfilled to 'inputs': that would be a guess wearing the appearance of
+-- data, and it would make Table 6 look complete when most of it was assumed.
+-- splitItc() reports the NULL part separately for exactly this reason.
+--
+-- The values are inputs | capitalGoods | services. 'capitalGoods' is never
+-- derived - section 2(19) defines capital goods as goods CAPITALISED IN THE
+-- BOOKS, which is the shopkeeper's own accounting decision and cannot be read
+-- off an invoice.
+ALTER TABLE "Transaction" ADD COLUMN "itcCategory" TEXT;

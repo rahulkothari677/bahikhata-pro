@@ -363,6 +363,15 @@ model Transaction {
    * | compositionSupplier | other
    */
   itcBlockedReason         String?
+  /// Inputs / Capital Goods / Input Services, for GSTR-9 Table 6 (#36,
+  /// migration 20260829000003). NULL = recorded before this column existed.
+  ///
+  /// Never backfilled, and 'capitalGoods' is never derived: section 2(19)
+  /// defines capital goods as goods CAPITALISED IN THE BOOKS, which is the
+  /// buyer's accounting decision, not a property of the thing bought. The
+  /// same fridge is stock to an appliance dealer and a capital asset to a
+  /// chemist, so only the shopkeeper can say.
+  itcCategory              String?
 
   // 🔒 M6: Unique invoice number per user (GST compliance — no duplicates)
   @@unique([userId, invoiceNo])

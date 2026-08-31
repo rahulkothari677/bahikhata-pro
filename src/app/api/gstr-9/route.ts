@@ -72,10 +72,29 @@ export async function GET(req: NextRequest) {
       db.gstr1Snapshot.findMany({ where: { userId, monthYear: { in: months } }, take: 12 }),
     ])
 
+    /*
+     * Purchases of the year, for Table 6's three-way split (#36).
+     *
+     * Bounded by the financial year on an indexed column, and only the four
+     * fields the split needs are selected — this must not drag a year of
+     * invoice lines into memory to add up three numbers.
+     */
+    const fyStartYear = Number(fy.slice(0, 4))
+    const purchases = await db.transaction.findMany({
+      where: {
+        userId,
+        type: 'purchase',
+        deletedAt: null,
+        date: { gte: new Date(fyStartYear, 3, 1), lt: new Date(fyStartYear + 1, 3, 1) },
+      },
+      select: { itcCategory: true, cgst: true, sgst: true, igst: true },
+    })
+
     const result = buildGstr9({
       fy,
       months3b: months3b as never,
       months1: months1 as never,
+      purchases,
     })
 
     const turnover = result.table5.totalTurnoverN

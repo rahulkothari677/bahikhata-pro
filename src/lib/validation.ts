@@ -145,6 +145,15 @@ export const createTransactionSchema = z.object({
     .nullable()
     .optional(),
   /*
+   * Inputs / Capital Goods / Input Services, for GSTR-9 Table 6 (#36).
+   *
+   * Optional: the server derives services from a SAC and defaults goods to
+   * inputs. Only 'capitalGoods' has to be stated, because section 2(19) makes
+   * it depend on whether the buyer capitalises the thing — which no invoice
+   * can tell us.
+   */
+  itcCategory: z.enum(['inputs', 'capitalGoods', 'services']).nullable().optional(),
+  /*
    * On a PURCHASE, write each line's price back to the product as its new cost.
    *
    * Deliberately a boolean and not a list of prices: the server already has the

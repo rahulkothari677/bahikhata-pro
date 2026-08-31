@@ -8,6 +8,7 @@ import { withCache, noStore } from '@/lib/cache'
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, createTransactionSchema } from '@/lib/validation'
+import { deriveItcCategory } from '@/lib/itc-category'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { getOrCreateWalkInParty } from '@/lib/walk-in-party'
 import { apiError } from '@/lib/api-error'
@@ -304,7 +305,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const { type, partyId: requestedPartyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge, updateProductCosts, itcBlockedReason } = validation.data as any
+    const { type, partyId: requestedPartyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge, updateProductCosts, itcBlockedReason, itcCategory } = validation.data as any
 
     /*
      * A counter return lands on the shop's reserved "Walk-in Customer".
@@ -912,6 +913,20 @@ export async function POST(req: NextRequest) {
           // credit to block, so the field is forced null there rather than
           // trusted from the client.
           itcBlockedReason: type === 'purchase' ? (itcBlockedReason || null) : null,
+          /*
+           * GSTR-9 Table 6's three-way split (#36).
+           *
+           * Derived server-side so it cannot be forgotten by a client, and so
+           * the same rule decides it everywhere. An explicit choice wins —
+           * that is the only way 'capitalGoods' can ever be set, because
+           * section 2(19) makes it depend on whether the shopkeeper
+           * capitalises the thing, which no invoice reveals.
+           *
+           * Purchases only: a sale claims no input credit.
+           */
+          itcCategory: type === 'purchase'
+            ? (itcCategory || deriveItcCategory(items?.[0]?.hsn ?? null))
+            : null,
           notes: notes || null,
           invoiceNo: finalInvoiceNo,
           invoiceSequence,
