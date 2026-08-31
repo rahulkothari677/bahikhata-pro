@@ -115,6 +115,52 @@ export function Gstr3bReport() {
   }
 
   // CSV download
+  /*
+   * Builds the pack server-side and puts it on the clipboard (#33).
+   *
+   * Clipboard rather than a download because the destination is WhatsApp. A
+   * downloaded .txt on a phone lands somewhere the shopkeeper then has to go
+   * and find; text on the clipboard is one paste away from the person who
+   * asked for it. The download is offered as the fallback when the clipboard
+   * is unavailable — an insecure context, or a browser that refuses.
+   */
+  const [packing, setPacking] = useState(false)
+  const handleCaPack = async () => {
+    setPacking(true)
+    try {
+      const r = await offlineFetch(`/api/ca-pack?month=${month}`)
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        sonnerToast.error(j.error || j.message || 'Could not build the pack')
+        return
+      }
+      const { text, warningCount } = await r.json()
+      try {
+        await navigator.clipboard.writeText(text)
+        haptic.success()
+        sonnerToast.success(
+          warningCount > 0
+            ? `Copied — ${warningCount} thing${warningCount === 1 ? '' : 's'} flagged for your CA`
+            : 'Copied. Paste it to your CA.',
+        )
+      } catch {
+        /* Clipboard refused — fall back to a file rather than losing the pack. */
+        const blob = new Blob([text], { type: 'text/plain' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `GST_Pack_${month}.txt`
+        a.click()
+        URL.revokeObjectURL(url)
+        sonnerToast.success('Downloaded — your browser would not let us copy it')
+      }
+    } catch (e: any) {
+      sonnerToast.error(e?.message || 'Could not build the pack')
+    } finally {
+      setPacking(false)
+    }
+  }
+
   const handleDownloadCSV = () => {
     if (!data) return
     const rows: string[] = []
@@ -224,6 +270,20 @@ export function Gstr3bReport() {
           )}
           <Button variant="outline" size="sm" className="gap-2" onClick={handleDownloadCSV}>
             <Download className="w-4 h-4" /> CSV
+          </Button>
+          {/*
+            * #33 — the month in the form a CA actually asks for.
+            *
+            * CA *access* already exists (a read-only login). This is the other
+            * thing: most CAs will not create an account in a client's app, they
+            * ask for the figures over WhatsApp once a month. Plain text so it
+            * pastes into a chat and is readable where it lands — a zip is a
+            * file they must save, move and unpack before knowing if it was
+            * worth opening.
+            */}
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleCaPack} disabled={packing}>
+            {packing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            Send to CA
           </Button>
         </div>
       </div>
