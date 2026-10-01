@@ -15,7 +15,8 @@ the person who caught my mistakes. That is the defect this file fixes.
 
 1. **Open** `C:\Users\rjrah\Downloads\EKBOOK-MASTER-PLAN-V2.md` — read §0 and §4.
 2. **Open** `EKBOOK-TASKLOG.md` — where does this task sit? Does anything logged
-   (#1–#59) overlap? Overlapping work is merged, never duplicated.
+   (every row, including the FULL GST AUDIT table) overlap? Overlapping work is
+   merged, never duplicated.
 3. **Open** `EKBOOK-OPERATING-MODEL.md` and `EKBOOK-RULEBOOK.md`.
 4. **Write these three answers in the reply, before any edit:**
 
@@ -143,7 +144,9 @@ save.
   green before pushing.
 - Push and deploy directly. **Then verify in the browser — compulsory, before
   reporting.**
-- Reports are `.md` files saved to `C:\Users\rjrah\Downloads\`, in simple words.
+- Reports go to `C:\Users\rjrah\Downloads\`, in simple words. **A detailed
+  report is an HTML page** (Rahul, 8 Sep); short notes, the tasklog and this
+  rulebook stay Markdown. Every report ends with a Summary section.
 - Test data is authorised (not launched yet) — but say what was created and
   clean it up.
 - **A stale bundle looks exactly like a bug.** Hard-reload before believing it.
@@ -210,6 +213,49 @@ survives me.
 
 ---
 
+## IT IS AN APP, NOT A NOTEBOOK
+
+*Rahul, 30 Sep: "it's app and not a notebook… the earlier agent added a lot of
+explanation in many places. it should not be done… if something is important
+and user needs to know then add that in encircled i."* He first asked on
+15 Aug ("always add with info button so the design look clean. everywhere"),
+`InfoHint` was built that day — and then used on 13 screens out of 100+. A
+sweep on 1 Oct counted ~17,000 words of prose inside screen components.
+
+- **On screen:** the label, the number, the action. At most **one short line**
+  when the label alone would mislead.
+- **Behind ⓘ (`InfoHint` / `SettingLabel`):** anything longer that a user
+  genuinely needs. Never hide the NAME of a thing — only its explanation.
+- **Never on screen:** why the app was built this way, what the law says in
+  general, what an earlier version did wrong. That belongs in code comments,
+  the tasklog, or a report.
+- **Every phase that touches a screen removes that screen's prose**, and the
+  prose-budget guard keeps it out.
+
+## VERIFY THE LAW — AND VERIFY THE CA
+
+*Rahul, 30 Sep: "don't blindly follow anything. always recheck and re-verify
+everything and once everything is absolutely correct then proceed."*
+
+- **The verified law lives in** `Downloads\reports\GST law verified September
+  2026.md` (checked 30 Sep against CBIC/GSTN primary text). Read the relevant
+  section before touching any GST rule. If it is older than the newest GST
+  Council meeting, re-check that topic first.
+- **Every rule in code names its instrument, series and date** — "19/2025-CT(R),
+  from 1 Feb 2026". Central Tax and Central Tax (Rate) reuse numbers.
+- **Build only on what is notified.** "Announced", "targeted", blog-reported or
+  on-hold items stay switched off (the report keeps the list).
+- **Council/GSTN thresholds are settings, not literals** (₹25 lakh / 20%, the
+  one-period Pending window, the 30-day e-invoice limit).
+- **The CA is checked too.** A practitioner's answer is strong evidence, not
+  proof. When the CA and a rule's text disagree (#123: Section 34 vs Rule
+  53(1A)), log it and ask — never silently pick either.
+- **Sweep the whole domain, not examples.** `lookupHsn` passed every
+  hand-picked test; a sweep of all 9,700 headings found 3,724 answered by junk
+  keys (#120). For any table or lookup, test every key it can be asked.
+
+---
+
 ## THE RULES ARE A FLOOR, NOT A CEILING
 
 *Rahul, 12 Aug: "if you find any other changes which can improve the
@@ -243,6 +289,14 @@ cause**, never as a new line at the bottom.
 · Claimed I couldn't read a video; ffmpeg was installed and I never checked
 · Started building PDF export, and voice parsing, that already existed
 · 12 Aug: cited §0/§4 in Gate 1 *from memory* for several tasks without opening them
+· **29–31 Aug: built GSTR-1A, the GSTIN-amendment block and the TCS change
+  without reading the CA's Q4 answers.** I searched only the 15 Aug first-round
+  answers (`EKBOOK-CA-QUESTIONS-NEW (1).docx`), where Q4 was blank, and missed
+  the full review (`BahiKhata Pro - GST CA Review (Answers + Product
+  Recommendations).docx`, text in `_ca2.txt`), then
+  published a false "the CA never said that" correction and drafted questions
+  he had already answered (#99–#102). **Before acting on "the CA said / did not
+  say", grep every CA file.**
 
 **Cause 2 — Two things describing one thing**
 · Parties filtered in one route, not another · Settle's allowlist lacked 'ask'
