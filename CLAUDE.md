@@ -176,6 +176,10 @@ save.
 - Test data is authorised (not launched yet) — but say what was created and
   clean it up.
 - **A stale bundle looks exactly like a bug.** Hard-reload before believing it.
+- **Commit messages go through a file** (`git commit -F msg.txt`). On 1 Oct a
+  PowerShell here-string containing double quotes was split by Windows
+  PowerShell 5.1 into pathspecs; the commit failed, the next command switched to
+  `main` with the changes still staged. Never pass a quoted message inline.
 - **I cannot verify on a real phone** (§4.2 requires it). Say "checked at mobile
   width", never "verified on mobile", and ask Rahul for a phone check.
 - **A simulated network is not a network.** I "verified" offline behaviour by
