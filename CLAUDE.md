@@ -167,6 +167,9 @@ save.
   `main`, which deploys. **Then verify on the live demo account — compulsory,
   before reporting.** One phase = its own commits, so a bad deploy is undone by
   Vercel's instant rollback or `git revert`.
+- **After a merge, create the next branch BEFORE the first edit.** On 1 Oct I
+  merged 1a and then edited 1b on `main` for an hour; caught it before
+  committing. `git branch --show-current` before touching a file.
 - **Do not push unfinished branches** until it is confirmed that Vercel Preview
   builds use a separate database: `npm run build` runs migrations, so a preview
   on the production `DATABASE_URL` would change the live database before merge.
