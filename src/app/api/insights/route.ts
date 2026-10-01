@@ -8,6 +8,7 @@ import { activeTransactionWhere } from '@/lib/query-helpers'
 import { getReceivablePayable } from '@/lib/party-balance'
 import { computeInvoiceDue } from '@/lib/invoice-due'
 import { apiError } from '@/lib/api-error'
+import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
 
 // ⏱️ Vercel serverless timeout — insights aggregates dashboard data and
 // may call AI for smart alerts. Set explicit maxDuration.
@@ -132,7 +133,7 @@ export async function GET() {
         SELECT
           ti."productName",
           ti."productId",
-          SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0))::bigint AS "totalRevenuePaise",
+          SUM(${LINE_GROSS_SQL})::bigint AS "totalRevenuePaise",
           SUM(ti."quantity") AS "totalQty"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id

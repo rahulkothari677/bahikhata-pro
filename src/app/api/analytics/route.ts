@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { shouldHideProfit } from '@/lib/profit-visibility'
 import { apiError } from '@/lib/api-error'
+import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
 
 /**
  * GET /api/analytics
@@ -54,8 +55,8 @@ export async function GET() {
         ti."productName",
         SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQty",
         SUM(CASE WHEN t."type" = 'sale'
-                 THEN ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0)
-                 ELSE -ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0) END) AS "totalRevenuePaise"
+                 THEN ${LINE_GROSS_SQL}
+                 ELSE -${LINE_GROSS_SQL} END) AS "totalRevenuePaise"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       WHERE t."userId" = ${userId}

@@ -21,6 +21,7 @@
  */
 
 import { roundMoney } from '@/lib/money'
+import { lineTaxable } from '@/lib/line-taxable'
 import { deriveStateCode } from '@/lib/gst'
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -37,6 +38,8 @@ export interface EInvoiceItem {
   sgst: number
   igst: number
   csamt: number
+  /** Stored line total; when present the amounts are taken from it exactly (#98). */
+  total?: number
 }
 
 export interface EInvoiceTransaction {
@@ -274,8 +277,23 @@ export function buildIrnRequest(
 
   // Build item list
   const itemList: IRNRequest['ItemList'] = txn.items.map((item, i) => {
-    const grossAmt = roundMoney(item.quantity * item.unitPrice)
-    const assAmt = roundMoney(grossAmt - (item.discountAmount || 0))
+    /*
+     * With the stored total, the assessable value is exact (total − taxes) and
+     * the unit price is derived from it to 3 decimals, so Qty × UnitPrice stays
+     * within NIC's rounding tolerance even for GST-inclusive (MRP) lines, whose
+     * stored unitPrice is rounded to the paisa (#98). The tolerance figure was
+     * not re-verified against the current NIC validation list.
+     */
+    const exact = typeof item.total === 'number'
+    const assAmt = exact
+      ? lineTaxable({ ...item, total: item.total as number })
+      : roundMoney(item.quantity * item.unitPrice - (item.discountAmount || 0))
+    const grossAmt = exact
+      ? roundMoney(assAmt + (item.discountAmount || 0))
+      : roundMoney(item.quantity * item.unitPrice)
+    const unitPriceOut = exact && item.quantity > 0
+      ? Math.round((grossAmt / item.quantity) * 1000) / 1000
+      : roundMoney(item.unitPrice)
     const totItemVal = roundMoney(assAmt + item.cgst + item.sgst + item.igst + (item.csamt || 0))
     return {
       SlNo: String(i + 1),
@@ -301,7 +319,7 @@ export function buildIrnRequest(
       HsnCd: String(item.hsn).trim(),  // guaranteed present by the check above
       Qty: roundMoney(item.quantity),
       Unit: mapUnitToNicUqc(item.unit),
-      UnitPrice: roundMoney(item.unitPrice),
+      UnitPrice: unitPriceOut,
       TotAmt: grossAmt,
       Discount: roundMoney(item.discountAmount || 0),
       AssAmt: assAmt,

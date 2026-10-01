@@ -10,6 +10,7 @@ import { validateBody, updatePartySchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { apiError } from '@/lib/api-error'
 import { describeEditConflict } from '@/lib/edit-conflict'
+import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
 
 // GET /api/parties/[id] - get party with paginated transactions + SQL aggregates
 // ⚡ PERFORMANCE (Audit fix H4): Was loading ALL transactions with items into
@@ -169,7 +170,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         SELECT
           ti."productName",
           SUM(ti."quantity") AS "totalQuantity",
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0)) AS "totalAmountPaise"
+          SUM(${LINE_GROSS_SQL}) AS "totalAmountPaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}

@@ -10,6 +10,7 @@ import { roundMoney, fromPaise } from '@/lib/money'
 import { getReceivablePayable } from '@/lib/party-balance'
 import { istDayStart, istMonthStart, getISTDateParts, IST_OFFSET_MS } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
+import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
 
 // ⚡ PERFORMANCE (V6 SC3): KPIs + charts are now computed via SQL aggregate
 // queries. Was: a single findMany loaded range + previous-range transactions
@@ -372,7 +373,7 @@ export async function GET(req: NextRequest) {
           ti."productName",
           ti."productId",
           SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQuantity",
-          SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0) END) AS "totalRevenuePaise"
+          SUM(CASE WHEN t."type" = 'sale' THEN ${LINE_GROSS_SQL} ELSE -${LINE_GROSS_SQL} END) AS "totalRevenuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
@@ -392,7 +393,7 @@ export async function GET(req: NextRequest) {
       db.$queryRaw<Array<{ category: string | null; totalValuePaise: string }>>`
         SELECT
           COALESCE(p."category", 'Other') AS category,
-          SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0) END) AS "totalValuePaise"
+          SUM(CASE WHEN t."type" = 'sale' THEN ${LINE_GROSS_SQL} ELSE -${LINE_GROSS_SQL} END) AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id

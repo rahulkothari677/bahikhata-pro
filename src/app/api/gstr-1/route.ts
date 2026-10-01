@@ -192,6 +192,7 @@ export async function GET(req: NextRequest) {
         sgst: roundMoney(item.sgst),
         igst: roundMoney(item.igst),
         csamt: roundMoney(item.csamt || 0),
+        total: roundMoney(item.total),  // exact taxable = total − taxes (#98)
       })),
     }))
 
@@ -685,6 +686,7 @@ export async function POST(req: NextRequest) {
         sgst: roundMoney(item.sgst),
         igst: roundMoney(item.igst),
         csamt: roundMoney(item.csamt || 0),
+        total: roundMoney(item.total),  // exact taxable = total − taxes (#98)
       })),
     }))
 

@@ -10,6 +10,7 @@ import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
+import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 
 /**
  * GET /api/gstr-3b?month=2026-07
@@ -107,7 +108,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       SELECT ti."gstTreatment" AS "treatment",
              ti."gstRate" AS "gstRate",
              COALESCE(SUM(
-               ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
+               ${LINE_TAXABLE_SQL}
              ), 0)::text AS "totalValuePaise"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id

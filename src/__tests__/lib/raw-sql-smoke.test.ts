@@ -143,7 +143,10 @@ describe('V6 PP6/CR1 — raw SQL smoke tests (party route)', () => {
     // Find the query that has "totalAmount" in it (the top-products query)
     const topProductsQuery = queries.find(q => q.includes('totalAmount'))
     if (!topProductsQuery) return  // query shape changed; not our concern
-    expect(topProductsQuery).toContain('SUM(ROUND(')
+    // Since #98 (1 Oct 2026) the per-line value is the stored exact figure
+    // (lib/line-taxable-sql.ts), so there is nothing left to ROUND per row.
+    // What this test protects is unchanged: the SUM wraps the per-row value.
+    expect(topProductsQuery).toContain('SUM(${LINE_GROSS_SQL})')
     expect(topProductsQuery).not.toMatch(/SUM\s+ROUND\s*\(/)
   })
 })
@@ -261,8 +264,9 @@ describe('V17 Phase 2A — paise-read-pattern regression guard (insights route)'
   it('top-product query returns paise (alias "totalRevenuePaise", not "totalRevenue")', () => {
     if (skip) return
     const queries = extractRawSql(source)
-    // The top-product query is the one that references unitPrice in a SUM
-    const topProductQuery = queries.find(q => q.includes('unitPrice') && q.includes('SUM'))
+    // The top-product query is the one that sums the shared line value
+    // (it referenced unitPrice before #98 moved it to lib/line-taxable-sql.ts)
+    const topProductQuery = queries.find(q => q.includes('LINE_GROSS_SQL') && q.includes('SUM'))
     if (!topProductQuery) {
       throw new Error(
         'Could not find the top-product query in insights/route.ts. ' +

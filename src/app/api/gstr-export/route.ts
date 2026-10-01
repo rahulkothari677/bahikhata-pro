@@ -11,6 +11,7 @@ import { deriveStateCode } from '@/lib/gst'
 // gstr1-builder uses, not a literal repeated here. See the note at its use.
 import { B2CL_INVOICE_VALUE_THRESHOLD } from '@/lib/gstr1-builder'
 import { getPriorFYBounds } from '@/lib/fiscal-year'
+import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
 // in a period and generates CSV/JSON. Can take several seconds at scale.
@@ -171,7 +172,7 @@ export async function GET(req: NextRequest) {
         SELECT
           ti."transactionId",
           ti."gstRate",
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxableValuePaise",
+          SUM(${LINE_TAXABLE_SQL}) AS "taxableValuePaise",
           SUM(COALESCE(ti."cgst", 0)::numeric) AS "cgstPaise",
           SUM(COALESCE(ti."sgst", 0)::numeric) AS "sgstPaise",
           SUM(COALESCE(ti."igst", 0)::numeric) AS "igstPaise",
@@ -293,7 +294,7 @@ export async function GET(req: NextRequest) {
         SELECT
           ti."transactionId",
           ti."gstRate",
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxableValuePaise",
+          SUM(${LINE_TAXABLE_SQL}) AS "taxableValuePaise",
           SUM(COALESCE(ti."cgst", 0)::numeric) AS "cgstPaise",
           SUM(COALESCE(ti."sgst", 0)::numeric) AS "sgstPaise",
           SUM(COALESCE(ti."igst", 0)::numeric) AS "igstPaise",

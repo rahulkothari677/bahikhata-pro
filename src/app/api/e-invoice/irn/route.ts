@@ -107,6 +107,7 @@ export async function GET(req: NextRequest) {
         sgst: roundMoney(item.sgst),
         igst: roundMoney(item.igst),
         csamt: roundMoney(item.csamt || 0),
+        total: roundMoney(item.total),  // exact assessable value (#98)
       })),
     }
 

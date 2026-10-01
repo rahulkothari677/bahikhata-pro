@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
+import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 
 /**
  * "Can I file this month, and if not, what do I fix?"
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
      */
     const [missingHsn] = await db.$queryRaw<Array<{ lineCount: bigint; taxableValue: bigint; names: string | null }>>`
       SELECT COUNT(*) AS "lineCount",
-             COALESCE(SUM(ti."unitPrice" * ti."quantity" - ti."discountAmount"), 0) AS "taxableValue",
+             COALESCE(SUM(${LINE_TAXABLE_SQL}), 0) AS "taxableValue",
              STRING_AGG(DISTINCT ti."productName", ', ') AS "names"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t."id"

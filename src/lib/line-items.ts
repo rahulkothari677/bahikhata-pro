@@ -142,16 +142,43 @@ export function computeLineItems(opts: {
     // to match the old roundMoney behavior. Converting to paise after roundMoney
     // preserves the exact same unitPrice value.
     const includesGst = item.priceIncludesGst ?? product?.priceIncludesGst ?? false
-    const unitPriceRupees = includesGst && gstRate > 0
+    const inclusive = includesGst && gstRate > 0
+    const unitPriceRupees = inclusive
       ? roundMoney((enteredPriceRupees * 100) / (100 + gstRate))
       : enteredPriceRupees
     const unitPricePaise = toPaise(unitPriceRupees)
-    return { item, product, quantity, unit, gstRate, unitPriceRupees, unitPricePaise, rawQuantity, rawUnit }
+    /*
+     * GST-INCLUSIVE (MRP) LINES ARE WORKED FROM THE LINE, NOT FROM A ROUNDED UNIT.
+     *
+     * WHY (#98, 1 Oct 2026). The taxable unit price above is rounded to the
+     * paisa, and the line used to be `quantity × that rounded price`. The
+     * rounding error is multiplied by the quantity and then GST is added on
+     * top, so the customer paid more than the printed price: 100 × ₹1 at 18%
+     * billed ₹100.30; 20 × ₹230 at 5% showed "= ₹4,600.05" on the screen.
+     * Legal Metrology forbids charging above MRP.
+     *
+     * Now the line's GST-inclusive amount (quantity × entered price) is the
+     * fact, the taxable value is taken out of it once, and the GST is the
+     * difference — so the line total is exactly quantity × MRP.
+     *
+     * `unitPrice` is still stored (rounded) for display. Every report reads the
+     * line's taxable value as `total − taxes` (see lib/line-taxable.ts), never
+     * as `quantity × unitPrice`, which for these lines is off by up to half a
+     * paisa per unit.
+     */
+    const inclusiveGrossPaise = inclusive ? multiplyPaise(quantity, toPaise(enteredPriceRupees)) : 0
+    const grossTaxablePaise = inclusive
+      ? Math.round((inclusiveGrossPaise * 100) / (100 + gstRate))
+      : multiplyPaise(quantity, unitPricePaise)
+    return {
+      item, product, quantity, unit, gstRate, unitPriceRupees, unitPricePaise, rawQuantity, rawUnit,
+      inclusive, inclusiveGrossPaise, grossTaxablePaise,
+    }
   })
 
-  // Step 2: pre-discount taxable value per line = quantity × taxable unit price (in paise).
-  // 🔒 V17 Phase 3: multiplyPaise does Math.round(qty * pricePaise) — integer result, no drift.
-  const grossAmountsPaise = prepared.map((p) => multiplyPaise(p.quantity, p.unitPricePaise))
+  // Step 2: pre-discount taxable value per line (in paise) — for exclusive lines
+  // quantity × unit price; for GST-inclusive lines taken out of quantity × MRP.
+  const grossAmountsPaise = prepared.map((p) => p.grossTaxablePaise)
   // 🔒 V17 Phase 3: distributeDiscountProportionally works in rupees (roundMoney-based).
   // Convert gross amounts to rupees for the distribution, then convert the per-item
   // discounts back to paise. This preserves the exact same proportional distribution
@@ -195,7 +222,12 @@ export function computeLineItems(opts: {
     const grossAmountPaise = grossAmountsPaise[idx]
     const itemDiscountPaise = perItemDiscountsPaise[idx]
     const taxableAmountPaise = grossAmountPaise - itemDiscountPaise  // integer subtraction, exact
-    const itemGstPaise = calculateGstPaise(taxableAmountPaise, p.gstRate)  // integer GST
+    // An undiscounted MRP line: GST is whatever is left of quantity × MRP, so
+    // the line total is exactly what the customer was quoted (#98). With a
+    // discount the price has changed, and GST is charged on the discounted value.
+    const itemGstPaise = p.inclusive && itemDiscountPaise === 0
+      ? p.inclusiveGrossPaise - taxableAmountPaise
+      : calculateGstPaise(taxableAmountPaise, p.gstRate)  // integer GST
     const itemTotalPaise = taxableAmountPaise + itemGstPaise  // integer addition, exact
     subtotalPaise = addPaise(subtotalPaise, grossAmountPaise)
 

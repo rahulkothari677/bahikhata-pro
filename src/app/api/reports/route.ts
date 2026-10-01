@@ -16,6 +16,7 @@ import {
   netPurchasesTaxable,
   type TypeAggregates,
 } from '@/lib/net-sales'
+import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 
 // ⏱️ Vercel serverless timeout — reports can aggregate thousands of
 // transactions and generate large responses. Set explicit maxDuration.
@@ -272,7 +273,7 @@ export async function GET(req: NextRequest) {
           SELECT
             ti."gstRate",
             t."isInterState",
-            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)) AS "taxablePaise",
+            SUM(${LINE_TAXABLE_SQL}) AS "taxablePaise",
             SUM(COALESCE(ti."cgst", 0)::numeric) AS "cgstPaise",
             SUM(COALESCE(ti."sgst", 0)::numeric) AS "sgstPaise",
             SUM(COALESCE(ti."igst", 0)::numeric) AS "igstPaise",
@@ -298,7 +299,7 @@ export async function GET(req: NextRequest) {
         }>>`
           SELECT
             ti."gstRate",
-            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)) AS "taxablePaise",
+            SUM(${LINE_TAXABLE_SQL}) AS "taxablePaise",
             SUM(COALESCE(ti."cgst", 0)::numeric) AS "cgstPaise",
             SUM(COALESCE(ti."sgst", 0)::numeric) AS "sgstPaise",
             SUM(COALESCE(ti."igst", 0)::numeric) AS "igstPaise"
@@ -933,8 +934,8 @@ export async function GET(req: NextRequest) {
           SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQty",
           SUM(
             CASE WHEN t."type" = 'sale'
-              THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
-              ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+              THEN ${LINE_TAXABLE_SQL}
+              ELSE -${LINE_TAXABLE_SQL}
             END
           ) AS "taxableValue",
           SUM(
@@ -988,7 +989,7 @@ export async function GET(req: NextRequest) {
       }>>`
         SELECT
           COUNT(*) AS "lineCount",
-          COALESCE(SUM(ti."unitPrice" * ti."quantity" - ti."discountAmount"), 0) AS "taxableValue",
+          COALESCE(SUM(${LINE_TAXABLE_SQL}), 0) AS "taxableValue",
           STRING_AGG(DISTINCT ti."productName", ', ') AS "productNames"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t."id"
@@ -1288,8 +1289,8 @@ export async function GET(req: NextRequest) {
           SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQty",
           SUM(
             CASE WHEN t."type" = 'sale'
-              THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
-              ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+              THEN ${LINE_TAXABLE_SQL}
+              ELSE -${LINE_TAXABLE_SQL}
             END
           ) AS "revenue",
           SUM(

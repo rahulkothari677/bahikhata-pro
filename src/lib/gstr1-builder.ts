@@ -29,6 +29,7 @@
  */
 
 import { roundMoney } from '@/lib/money'
+import { lineTaxable } from '@/lib/line-taxable'
 import { deriveStateCode } from '@/lib/gst-states'
 import { classifySupplyLine, isTaxableSupply } from '@/lib/supply-classification'
 import { advanceTax, isTaxableAdvance, type AdvanceReceipt } from '@/lib/advance-tax'
@@ -94,6 +95,13 @@ export interface Gstr1Item {
   sgst: number
   igst: number
   csamt: number  // CESS
+  /**
+   * The line's stored total (taxable + every tax). When present, the taxable
+   * value is read as `total − taxes` — exact for GST-inclusive (MRP) lines,
+   * whose rounded `unitPrice` × quantity can be off by half a paisa per unit
+   * (#98). Every route that builds Gstr1Items from stored lines passes it.
+   */
+  total?: number
 }
 
 export interface ShopInfo {
@@ -275,6 +283,8 @@ function formatPortalDate(date: Date): string {
 
 /** Compute taxable value for an item: qty × unitPrice − discountAmount. */
 function itemTaxable(item: Gstr1Item): number {
+  // Exact when the stored total is known (lib/line-taxable.ts explains why).
+  if (typeof item.total === 'number') return lineTaxable({ ...item, total: item.total })
   return roundMoney(item.quantity * item.unitPrice - (item.discountAmount || 0))
 }
 

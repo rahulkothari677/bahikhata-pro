@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireFounder, isRepairAllowed } from '@/lib/debug-auth'
 import { apiError } from '@/lib/api-error'
+import { lineTaxable } from '@/lib/line-taxable'
 
 /**
  * 🔍 GSTR-1 Reconciliation Diagnostic + Repair endpoint.
@@ -92,7 +93,8 @@ export async function GET(req: NextRequest) {
     let computedDiscount = 0
 
     for (const item of txn.items) {
-      const grossAmount = Math.round(item.quantity * item.unitPrice * 100) / 100
+      // Pre-discount value from stored figures, not quantity × unitPrice (#98).
+      const grossAmount = Math.round((lineTaxable(item) + (item.discountAmount || 0)) * 100) / 100
       computedSubtotal = Math.round((computedSubtotal + grossAmount) * 100) / 100
       computedDiscount = Math.round((computedDiscount + (item.discountAmount || 0)) * 100) / 100
     }
@@ -195,7 +197,8 @@ export async function POST(req: NextRequest) {
       // The header is rebuilt by summing the stored line items — the same
       // relationship computeLineItems establishes when a bill is saved.
       for (const item of txn.items) {
-        const grossAmount = Math.round(item.quantity * item.unitPrice * 100) / 100
+        // Pre-discount value from stored figures, not quantity × unitPrice (#98).
+        const grossAmount = Math.round((lineTaxable(item) + (item.discountAmount || 0)) * 100) / 100
         subtotal = Math.round((subtotal + grossAmount) * 100) / 100
         discountAmount = Math.round((discountAmount + (item.discountAmount || 0)) * 100) / 100
         cgst = Math.round((cgst + (item.cgst || 0)) * 100) / 100

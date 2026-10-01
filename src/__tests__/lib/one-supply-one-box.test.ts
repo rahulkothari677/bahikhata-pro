@@ -27,12 +27,22 @@ import { buildB2B, buildB2CS, buildNIL, type Gstr1Transaction } from '@/lib/gstr
 const SHOP = { gstin: '27AAAPA1234A1Z5', state: 'Maharashtra', stateCode: '27' }
 
 function line(over: Partial<Gstr1Transaction['items'][0]> = {}) {
-  return {
+  const base = {
     productId: 'p1', productName: 'Item', hsn: '1006', quantity: 1, unit: 'pc',
     unitPrice: 100, gstRate: 0, discountAmount: 0,
-    cgst: 0, sgst: 0, igst: 0, csamt: 0, total: 100,
+    cgst: 0, sgst: 0, igst: 0, csamt: 0,
     ...over,
-  } as Gstr1Transaction['items'][0]
+  }
+  /*
+   * The total follows the line unless a test sets it. It was a fixed 100 while
+   * tests overrode the price to ₹1,259 — harmless while GSTR-1 recomputed the
+   * taxable value from quantity × unitPrice, wrong now that it reads the
+   * stored total (#98): a stored line always satisfies total = taxable + taxes.
+   */
+  const total = over.total ?? Math.round(
+    (base.quantity * base.unitPrice - base.discountAmount + base.cgst + base.sgst + base.igst + base.csamt) * 100,
+  ) / 100
+  return { ...base, total } as Gstr1Transaction['items'][0]
 }
 
 function sale(over: Partial<Gstr1Transaction> = {}): Gstr1Transaction {

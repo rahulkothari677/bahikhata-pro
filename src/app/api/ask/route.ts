@@ -24,6 +24,7 @@ import { Prisma } from '@prisma/client'
 import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
 import { withNavAction } from '@/lib/ask-nav-action'
 import { resolveName, normalise } from '@/lib/resolve-name'
+import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 
 /**
  * "Ask your books" — A MODEL CHOOSES THE QUESTION. IT NEVER TOUCHES THE MONEY.
@@ -923,8 +924,8 @@ export async function POST(req: NextRequest) {
                    SUM(CASE WHEN t."type" = 'sale'
                             THEN ti."quantity" ELSE -ti."quantity" END)::float8 AS qty,
                    SUM(CASE WHEN t."type" = 'sale'
-                            THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
-                            ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+                            THEN ${LINE_TAXABLE_SQL}
+                            ELSE -${LINE_TAXABLE_SQL}
                        END)::float8 AS value_paise
             FROM "TransactionItem" ti
             JOIN "Transaction" t ON t."id" = ti."transactionId"
@@ -1131,8 +1132,8 @@ export async function POST(req: NextRequest) {
                    SUM(CASE WHEN t."type" = 'sale'
                             THEN ti."quantity" ELSE -ti."quantity" END)::float8 AS qty,
                    SUM(CASE WHEN t."type" = 'sale'
-                            THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
-                            ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+                            THEN ${LINE_TAXABLE_SQL}
+                            ELSE -${LINE_TAXABLE_SQL}
                        END)::float8 AS revenue_paise,
                    SUM(CASE WHEN t."type" = 'sale'
                             THEN (ti."purchasePriceAtSale" * ti."quantity")
@@ -1283,8 +1284,8 @@ export async function POST(req: NextRequest) {
                    -- a template literal, and the backticks a JS comment
                    -- naturally wants to use would end the string.)
                    SUM(CASE WHEN t."type" = 'sale'
-                            THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
-                            ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+                            THEN ${LINE_TAXABLE_SQL}
+                            ELSE -${LINE_TAXABLE_SQL}
                        END)::float8 AS value_paise
             FROM "TransactionItem" ti
             JOIN "Transaction" t ON t."id" = ti."transactionId"
