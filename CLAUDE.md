@@ -142,8 +142,16 @@ save.
 - Two other agents work these repos — **rebase and check before pushing**.
 - `npm run verify` = lint + typecheck + tests + build (same as CI). Must be
   green before pushing.
-- Push and deploy directly. **Then verify in the browser — compulsory, before
-  reporting.**
+- **Local first, then live** (Rahul, 1 Oct: "do it locally first and once
+  everything is verified then push"). Work on a branch; prove it on the local
+  copy (`../local-db` embedded Postgres + `.env.local`, launch config
+  `ekbook-local`, localhost:3000) and with `npm run verify`; only then merge to
+  `main`, which deploys. **Then verify on the live demo account — compulsory,
+  before reporting.** One phase = its own commits, so a bad deploy is undone by
+  Vercel's instant rollback or `git revert`.
+- **Do not push unfinished branches** until it is confirmed that Vercel Preview
+  builds use a separate database: `npm run build` runs migrations, so a preview
+  on the production `DATABASE_URL` would change the live database before merge.
 - Reports go to `C:\Users\rjrah\Downloads\`, in simple words. **A detailed
   report is an HTML page** (Rahul, 8 Sep); short notes, the tasklog and this
   rulebook stay Markdown. Every report ends with a Summary section.
@@ -170,6 +178,13 @@ save.
 ## THE STANDING GOALS — in front of me every session
 
 **§0** — a compliance engine, not a register.
+**Most shops never see GST.** Rahul, 1 Oct: ~90% of Indian users are not
+GST-registered and use EkBook as a ledger. They get the best experience too:
+for a not-registered shop GST is invisible and is never charged (Section 32(1)
+CGST Act forbids an unregistered person collecting tax). GST is a layer that
+switches on with the shop's registration, never the default.
+**10x, built for the AI era** — not a copy of any app; speak/snap/forward
+instead of forms; AI understands, code calculates, nothing saves without a tap.
 **§2** — the moat is Rule 88C: we tell them whether the return will survive.
 **§4** — the design bar: 48dp targets, 16dp margins, 24dp icons, nothing under
 12px, money is the largest thing on screen.
