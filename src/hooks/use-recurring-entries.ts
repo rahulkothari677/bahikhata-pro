@@ -20,6 +20,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { toast as sonnerToast } from 'sonner'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
+import { istDateString } from '@/lib/timezone'
 
 const KEY = 'bahikhata:recurring-entries:v1'
 
@@ -102,7 +103,7 @@ export function useRecurringEntries() {
             paidAmount: entry.amount,
             paymentMode: entry.paymentMode,
             notes: entry.notes || `Recurring: ${entry.category}`,
-            date: new Date().toISOString().slice(0, 10),
+            date: istDateString(new Date()),
           }),
           offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/parties'] },
         })

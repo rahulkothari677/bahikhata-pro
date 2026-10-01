@@ -2,8 +2,11 @@
  * GSTR-9 — the annual return.
  *
  * WHAT IT IS. One return per financial year, summarising the twelve monthly
- * returns you already filed. Mandatory above ₹2 crore turnover, due 31
- * December, late fee ₹200/day capped at 0.25% of turnover.
+ * returns you already filed. Optional up to ₹2 crore turnover (standing
+ * exemption, Notification 15/2025-CT, "FY 2024-25 onwards" — not reissued each
+ * year), due 31 December. Late fee for turnover up to ₹5 crore is ₹50/day
+ * capped at 0.04% of turnover (Notification 07/2023-CT); ₹200/day / 0.25% is
+ * only the statutory maximum. (Corrected 1 Oct 2026, #127.)
  *
  * THE THING MOST IMPLEMENTATIONS GET WRONG. GSTR-9 is not a fresh calculation
  * from the books. Every table heading in the real form says the same words:

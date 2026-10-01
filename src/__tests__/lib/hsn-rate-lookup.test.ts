@@ -82,8 +82,9 @@ describe('rates read from the notification', () => {
      * confidently, with a schedule reference attached to make it look sound.
      *
      * It must now refuse. It deliberately does NOT answer 40% either: bidi
-     * stayed at 18% while the rest of heading 2403 moved, so a single number
-     * on the heading would be a new wrong answer replacing the old one.
+     * dropped to 18% (it had been 28% + cess) while the rest of heading 2403
+     * rose to 40%, so a single number on the heading would be a new wrong
+     * answer replacing the old one. (Was "bidi stayed at 18%" — wrong; #121.)
      */
     const r = lookupHsn('2402')   // cigarettes
     expect(r.outcome).toBe('superseded')

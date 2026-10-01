@@ -13,6 +13,8 @@
  * so a change to one cannot silently disagree with the other.
  */
 
+import { istDateString } from '@/lib/timezone'
+
 /**
  * How a bill is recognised across devices: invoice number, date and total.
  *
@@ -24,6 +26,10 @@
  * timestamp and the restored row is re-parsed from it, so comparing to the
  * millisecond would fail on rows that are plainly the same bill.
  *
+ * The day is the shop's IST calendar day (2026-10-01). It was the UTC day, so a
+ * bill made between 00:00 and 05:29 IST keyed as the day before. Both the
+ * export and the restore call this one function, so they stay in agreement.
+ *
  * It is not a perfect key. Two bills with no invoice number, on the same day,
  * for the same amount are indistinguishable — and callers must treat that as
  * "cannot be certain" rather than guessing, the same way an ambiguous party
@@ -34,6 +40,6 @@ export function billKey(bill: {
   date: Date | string
   totalAmount?: number | null
 }): string {
-  const day = new Date(bill.date).toISOString().slice(0, 10)
+  const day = istDateString(new Date(bill.date))
   return `${bill.invoiceNo || ''}|${day}|${bill.totalAmount ?? 0}`
 }

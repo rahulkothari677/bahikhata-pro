@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserIdOwnerOnly, assertNotImpersonated } from '@/lib/get-auth'
 import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
 import { apiError } from '@/lib/api-error'
+import { istDateString } from '@/lib/timezone'
 
 /**
  * GET /api/account/export
@@ -109,7 +110,7 @@ export async function GET() {
       auditLogs,
     }
 
-    const filename = `ekbook-export-${new Date().toISOString().split('T')[0]}.json`
+    const filename = `ekbook-export-${istDateString(new Date())}.json`
 
     return new NextResponse(JSON.stringify(exportData, null, 2), {
       status: 200,

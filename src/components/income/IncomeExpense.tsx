@@ -25,6 +25,7 @@ import {
   Plus, Wallet, Trash2, ArrowDownRight, ArrowUpRight, Receipt,
   Target, Edit2, X, Repeat, Calendar,
 } from 'lucide-react'
+import { istDateString } from '@/lib/timezone'
 
 const EXPENSE_CATEGORIES = ['Rent', 'Salary', 'Electricity', 'Water', 'Telephone', 'Internet', 'Transport', 'Packaging', 'Marketing', 'Maintenance', 'Bank Charges', 'Insurance', 'Taxes', 'Miscellaneous']
 const INCOME_CATEGORIES = ['Commission', 'Interest', 'Rent Received', 'Scrap Sale', 'Discount Received', 'Refund', 'Miscellaneous']
@@ -85,8 +86,8 @@ export function IncomeExpense() {
         return { from: new Date(2000, 0, 1), to: t }
     }
   })()
-  const fromStr = rangeFromTo.from.toISOString().slice(0, 10)
-  const toStr = rangeFromTo.to.toISOString().slice(0, 10)
+  const fromStr = istDateString(rangeFromTo.from)
+  const toStr = istDateString(rangeFromTo.to)
 
   // 🔒 R9-3 fix: Server-side summary — SQL aggregate over the full date range.
   // Was: client-side reduce over `?type=all&limit=200` — a busy shop fills the
@@ -749,7 +750,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
   const [category, setCategory] = useState('')
   const [customCategory, setCustomCategory] = useState('')
   const [isCustomCategory, setIsCustomCategory] = useState(false)
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(istDateString(new Date()))
   const [paymentMode, setPaymentMode] = useState('cash')
   const [notes, setNotes] = useState('')
   const [payeeName, setPayeeName] = useState('')
@@ -762,7 +763,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
       setCategory('')
       setCustomCategory('')
       setIsCustomCategory(false)
-      setDate(new Date().toISOString().slice(0, 10))
+      setDate(istDateString(new Date()))
       setPaymentMode('cash')
       setNotes('')
       setPayeeName('')

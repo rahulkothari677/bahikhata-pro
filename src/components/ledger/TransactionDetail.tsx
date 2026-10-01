@@ -45,6 +45,7 @@ import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { NumberField } from '@/components/ui/number-field'
 import { deriveInterStateFromStates } from '@/lib/gst-states'
 import { GST_RATES } from '@/lib/gst-rates'
+import { istDateString } from '@/lib/timezone'
 
 /**
  * Sentinel values for the party <Select> in the edit dialog.
@@ -511,7 +512,7 @@ export function TransactionDetail() {
                 data: {
                   partyId: txn.partyId,
                   partyName: txn.party?.name,
-                  date: new Date().toISOString().slice(0, 10),
+                  date: istDateString(new Date()),
                   originalTransactionId: txn.id,
                   noteType: 'C',
                   // 🔒 V17 Audit §1: Items are NOT pre-filled. The credit note form
@@ -547,7 +548,7 @@ export function TransactionDetail() {
                 data: {
                   partyId: txn.partyId,
                   partyName: txn.party?.name,
-                  date: new Date().toISOString().slice(0, 10),
+                  date: istDateString(new Date()),
                   originalTransactionId: txn.id,
                   noteType: 'D',
                 },
@@ -1237,7 +1238,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
     if (open && transaction) {
       setForm({
         partyId: transaction.partyId || '',
-        date: new Date(transaction.date).toISOString().slice(0, 10),
+        date: istDateString(new Date(transaction.date)),
         invoiceNo: transaction.invoiceNo || '',
         isInterState: transaction.isInterState || false,
         paymentMode: transaction.paymentMode || 'cash',

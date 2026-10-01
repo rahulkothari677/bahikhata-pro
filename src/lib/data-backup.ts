@@ -9,6 +9,7 @@
  */
 
 import { offlineFetch } from './offline-fetch'
+import { istDateString } from './timezone'
 
 /**
  * The backup file format. Bumped when the SHAPE changes, so a restore can tell
@@ -155,7 +156,7 @@ export async function exportBackup(): Promise<void> {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  const date = new Date().toISOString().slice(0, 10)
+  const date = istDateString(new Date())
   a.download = `bahikhata-backup-${date}.json`
   a.click()
   URL.revokeObjectURL(url)

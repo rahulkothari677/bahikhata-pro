@@ -2,9 +2,10 @@
  * Does this sale need an e-way bill before the goods move?
  *
  * WHY (2026-08-09). The app can store an e-way bill number but has never told a
- * shopkeeper when one is REQUIRED. Moving goods without one is a penalty of
- * ₹10,000 or the tax sought to be evaded, whichever is higher, and the vehicle
- * can be detained — so silence here is the expensive kind.
+ * shopkeeper when one is REQUIRED. Goods moving without one can be detained
+ * under Section 129: release costs 200% of the tax if the owner comes forward,
+ * otherwise the higher of 50% of the goods' value or 200% of the tax (since
+ * 1 Jan 2022; corrected 1 Oct 2026, #127) — so silence here is the expensive kind.
  *
  * THE RULE (Rule 138, CGST Rules):
  *

@@ -66,11 +66,17 @@ export const COMPOSITION_LIMITS = {
 /**
  * States with the lower ₹75 lakh ceiling for goods.
  *
+ * Exactly eight, per Notification 14/2019-Central Tax (7 Mar 2019, from
+ * 1 Apr 2019). Assam and Himachal Pradesh LEFT this list in 2019 — Assam was
+ * here until 1 Oct 2026 (#119), telling an Assam shop its limit was half the
+ * real one. Sources still listing Assam or Himachal are quoting the pre-2019
+ * list.
+ *
  * Listed by two-digit GST state code so the check cannot be fooled by spelling
  * — "Uttarakhand" and "Uttaranchal" are the same place to a shopkeeper and not
  * to a string comparison.
  */
-const SPECIAL_CATEGORY_STATE_CODES = new Set([
+export const SPECIAL_CATEGORY_STATE_CODES: ReadonlySet<string> = new Set([
   '12', // Arunachal Pradesh
   '13', // Nagaland
   '14', // Manipur
@@ -78,7 +84,6 @@ const SPECIAL_CATEGORY_STATE_CODES = new Set([
   '16', // Tripura
   '17', // Meghalaya
   '11', // Sikkim
-  '18', // Assam
   '05', // Uttarakhand
 ])
 

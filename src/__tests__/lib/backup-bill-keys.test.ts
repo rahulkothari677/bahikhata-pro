@@ -27,9 +27,18 @@ describe('the same bill produces the same key on both sides', () => {
     expect(billKey(fromFile)).toBe(billKey(fromDatabase))
   })
 
-  it('ignores the time of day', () => {
-    expect(billKey({ invoiceNo: 'INV-001', date: '2026-08-01T00:00:00.000Z', totalAmount: 1180 }))
-      .toBe(billKey({ invoiceNo: 'INV-001', date: '2026-08-01T23:59:59.000Z', totalAmount: 1180 }))
+  it('ignores the time of day within the shop\'s (IST) day', () => {
+    // Was written with UTC midnight and UTC 23:59 — which are 05:30 on 1 Aug and
+    // 05:29 on 2 Aug in India: two different days for the shop. The key is the
+    // IST calendar day (#158, 1 Oct 2026).
+    expect(billKey({ invoiceNo: 'INV-001', date: '2026-08-01T00:00:00+05:30', totalAmount: 1180 }))
+      .toBe(billKey({ invoiceNo: 'INV-001', date: '2026-08-01T23:59:59+05:30', totalAmount: 1180 }))
+  })
+
+  it('keys a bill made after midnight IST on that day, not the day before', () => {
+    // 00:30 IST on 2 Aug is 19:00 UTC on 1 Aug — the UTC day said "1 Aug".
+    expect(billKey({ invoiceNo: 'INV-001', date: '2026-08-02T00:30:00+05:30', totalAmount: 1180 }))
+      .toBe('INV-001|2026-08-02|1180')
   })
 })
 

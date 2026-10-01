@@ -4,15 +4,21 @@
  * ── WHAT CHANGED, AND WHY IT IS NOT JUST ANOTHER RECONCILIATION ─────────
  *
  * The portal now shows every invoice a supplier has filed against your GSTIN,
- * and you accept or reject each one. Section 38 was substituted by Notification
- * 16/2025-Central Tax (17 Sep 2025) so that input credit is built from what you
- * ACCEPT — and, critically:
+ * and you accept or reject each one. Section 38 was AMENDED (not substituted)
+ * by the Finance Act 2025, brought into force from 1 Oct 2025 by Notification
+ * 16/2025-Central Tax (17 Sep 2025), so GSTR-2B is built from what you ACCEPT —
+ * and, critically:
  *
  *     AN INVOICE YOU DO NOT ACT ON IS DEEMED ACCEPTED.
  *
  * Silence used to be neutral. It is now agreement — with the invoice AND with
- * the tax treatment the supplier put on it. Tied to ITC from 1 October 2025 and
- * compulsory for every GSTR-3B filer from 1 April 2026.
+ * the tax treatment the supplier put on it.
+ *
+ * IMS is NOT compulsory (corrected 1 Oct 2026, #127): GSTN Advisory 628
+ * (8 Oct 2025) says credit still auto-fills from GSTR-2B without any action.
+ * "Mandatory from 1 April 2026" is blog talk with no notification behind it,
+ * and Rule 67B was never notified. Source: Downloads/reports/GST law verified
+ * September 2026.
  *
  * ── WHY THIS FILE EXISTS WHEN /api/gstr-2b/reconcile ALREADY MATCHES ────
  *

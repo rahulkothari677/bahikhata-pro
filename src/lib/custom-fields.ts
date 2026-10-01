@@ -43,6 +43,8 @@
  * rewrite history on every old bill.
  */
 
+import { istDateString } from '@/lib/timezone'
+
 /**
  * What a field holds.
  *
@@ -206,7 +208,7 @@ export function parseCustomValue(
   // date — stored as YYYY-MM-DD, never a locale string.
   const d = new Date(s)
   if (isNaN(d.getTime())) return { ok: false, error: `${def.label} must be a date.` }
-  return { ok: true, value: d.toISOString().slice(0, 10) }
+  return { ok: true, value: istDateString(d) }
 }
 
 /**

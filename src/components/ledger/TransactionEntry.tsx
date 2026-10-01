@@ -57,6 +57,7 @@ import {
   AlertDialogTitle, AlertDialogDescription, AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
+import { istDateString } from '@/lib/timezone'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -131,7 +132,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // 🔒 V9 4.4: Persistent stock warning banner (not just a toast)
   const [stockWarnings, setStockWarnings] = useState<any[]>([])
 
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(istDateString(new Date()))
   const [invoiceNo, setInvoiceNo] = useState('')
   const [isInterState, setIsInterState] = useState(false)
   /* Purchases only — see the toggle in the details section. */
@@ -252,7 +253,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     if (draft.date) {
       try {
         const d = new Date(draft.date)
-        if (!isNaN(d.getTime())) setDate(d.toISOString().slice(0, 10))
+        if (!isNaN(d.getTime())) setDate(istDateString(d))
       } catch {}
     }
     if (draft.invoiceNo !== undefined) setInvoiceNo(draft.invoiceNo)
@@ -467,7 +468,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       if (stored.data.date) {
         try {
           const d = new Date(stored.data.date)
-          if (!isNaN(d.getTime())) setDate(d.toISOString().slice(0, 10))
+          if (!isNaN(d.getTime())) setDate(istDateString(d))
         } catch {}
       }
       if (stored.data.items?.length > 0) {
@@ -962,7 +963,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
            * genuinely do not know what time it happened, so the date-only value
            * stands and the UI shows no time rather than inventing one.
            */
-          date: date === new Date().toISOString().slice(0, 10)
+          date: date === istDateString(new Date())
             ? new Date().toISOString()
             : date,
           invoiceNo: invoiceNo || null,

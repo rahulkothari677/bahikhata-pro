@@ -64,7 +64,7 @@ export interface RateRule {
  * WHY THIS DOES NOT SIMPLY STATE 40%. I have verified that Notification
  * 19/2025-CT(R) dated 31.12.2025 moved these goods to 40% from 01.02.2026,
  * from two independent sources — but I do not hold that notification, and it
- * does not move them uniformly: **bidi stayed at 18%** while the rest of
+ * does not move them uniformly: **bidi dropped from 28% to 18%** while the rest of
  * heading 2403 went to 40%. Encoding "2403 → 40%" would therefore be a new
  * wrong answer replacing the old one, on a sub-code I cannot pin.
  *
@@ -86,7 +86,7 @@ export const RATE_AMENDMENTS: RateAmendment[] = [
     notification: '19/2025-Central Tax (Rate), dated 31.12.2025',
     effectiveFrom: '2026-02-01',
     note:
-      'Pan masala, gutkha, cigarettes and other tobacco moved to 40%. Bidi stayed at 18%, so the heading did not move as one — check the item before accepting any rate.',
+      'Pan masala, gutkha, cigarettes and other tobacco moved to 40%. Bidi went the other way, down to 18%, so the heading did not move as one — check the item before accepting any rate.',
   },
 ]
 

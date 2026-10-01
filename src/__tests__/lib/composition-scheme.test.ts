@@ -14,6 +14,7 @@
 import {
   COMPOSITION_RATES, COMPOSITION_LIMITS, compositionLimitFor, compositionTaxFor,
   canCollectTax, cmp08DueDate, BILL_OF_SUPPLY_DECLARATION, saleDocumentKind,
+  SPECIAL_CATEGORY_STATE_CODES,
 } from '@/lib/composition-scheme'
 
 describe('a composition dealer cannot collect tax', () => {
@@ -78,7 +79,20 @@ describe('turnover ceilings', () => {
     // Checked by STATE CODE, not name — "Uttarakhand" and "Uttaranchal" are the
     // same place to a shopkeeper and not to a string comparison.
     expect(compositionLimitFor('trader', '05')).toBe(COMPOSITION_LIMITS.goodsSpecialCategory)
-    expect(compositionLimitFor('trader', '18')).toBe(COMPOSITION_LIMITS.goodsSpecialCategory)
+  })
+
+  it('applies ₹75 lakh in exactly the eight states of Notification 14/2019-CT', () => {
+    // Arunachal 12, Nagaland 13, Manipur 14, Mizoram 15, Tripura 16,
+    // Meghalaya 17, Sikkim 11, Uttarakhand 05 — and no others.
+    expect([...SPECIAL_CATEGORY_STATE_CODES].sort()).toEqual(['05', '11', '12', '13', '14', '15', '16', '17'])
+    for (const code of ['05', '11', '12', '13', '14', '15', '16', '17']) {
+      expect(compositionLimitFor('trader', code)).toBe(COMPOSITION_LIMITS.goodsSpecialCategory)
+    }
+  })
+
+  it('gives Assam and Himachal the full ₹1.5 crore (they left the list in 2019, #119)', () => {
+    expect(compositionLimitFor('trader', '18')).toBe(COMPOSITION_LIMITS.goods) // Assam
+    expect(compositionLimitFor('trader', '02')).toBe(COMPOSITION_LIMITS.goods) // Himachal Pradesh
   })
 
   it('holds services to ₹50 lakh everywhere', () => {

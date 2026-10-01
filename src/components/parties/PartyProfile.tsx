@@ -38,6 +38,7 @@ import {
 } from '@/lib/statement-rows'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
+import { istDateString } from '@/lib/timezone'
 
 export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features, setSelectedTransactionId, pendingSettle, setPendingSettle } = useAppStore()
@@ -286,7 +287,7 @@ export function PartyProfile() {
       data: {
         partyId: party.id,
         partyName: party.name,
-        date: new Date().toISOString().slice(0, 10),
+        date: istDateString(new Date()),
       },
     }
     useAppStore.getState().setScannerBillType(type)

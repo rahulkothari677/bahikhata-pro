@@ -46,6 +46,7 @@ import { SignatureField } from '@/components/settings/SignatureField'
 import { PaymentQrField } from '@/components/settings/PaymentQrField'
 import { CustomFieldsCard } from '@/components/settings/CustomFieldsCard'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
+import { istDateString } from '@/lib/timezone'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
   {
@@ -345,7 +346,7 @@ export function Settings({
       setLockedUntil(lockVal || null)
       if (lockVal) {
         // Extract YYYY-MM-DD for the date input default
-        setLockDateInput(new Date(lockVal).toISOString().slice(0, 10))
+        setLockDateInput(istDateString(new Date(lockVal)))
       } else {
         setLockDateInput('')
       }
@@ -1348,7 +1349,7 @@ export function Settings({
                           value={lockDateInput}
                           onChange={(e) => setLockDateInput(e.target.value)}
                           className="mt-1"
-                          max={new Date().toISOString().slice(0, 10)}
+                          max={istDateString(new Date())}
                         />
                       </div>
                       <Button
