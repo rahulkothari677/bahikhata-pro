@@ -49,6 +49,11 @@ the person who caught my mistakes. That is the defect this file fixes.
 
 ## GATE 3 — before reporting. Run it, publish failures, THEN FIX THEM.
 
+- [ ] **Both layouts checked** — phone layout (375px; the Android app loads the
+      same site, so this IS the mobile app) AND desktop layout (≥1024px, sidebar).
+      Rahul, 1 Oct: they differ; verify both before calling anything done.
+      In the browser pane emulate 1024×680 for desktop (1280 crops badly).
+- [ ] Checked as a NOT-registered shop and as a GST shop when GST is involved
 - [ ] `npm run verify` green · pushed · deployed
 - [ ] **Screenshot taken — I have LOOKED at it**
 - [ ] Real UI, not just API calls · both 375px and 1280px
@@ -64,6 +69,19 @@ the person who caught my mistakes. That is the defect this file fixes.
 
 **Reporting a miss is not fixing it. Go and do the missed items before
 reporting.**
+
+### PHASE CLOSE — after every phase, before starting the next
+
+*Rahul, 1 Oct: "many a times the works got diverted or distracted… verify it
+after each phase… bugs get visible during work. don't skip those."*
+
+1. **Re-open** the master plan v3, `EKBOOK-TASKLOG.md` and this file. Is the
+   phase I just did the one the plan says? Did it drift? Say so if it did.
+2. **Bugs seen in passing** during the phase: every one fixed in-phase (if small
+   and in scope) or logged with a number — listed in the report either way.
+3. **New improvements** noticed: logged, and mapped to a phase in the master plan.
+4. **Rulebook**: anything I broke or learned goes in under its cause, today.
+5. **Next phase** is taken from the master plan, not from what feels urgent.
 
 ### A tick requires evidence in this session, not intention
 
