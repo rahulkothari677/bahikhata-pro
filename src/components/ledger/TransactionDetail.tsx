@@ -47,6 +47,8 @@ import { deriveInterStateFromStates } from '@/lib/gst-states'
 import { GST_RATES } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice } from '@/lib/refill-line'
+import { gstStatus, documentTitle, billCarriesGstColumns, claimsInputCredit } from '@/lib/shop-tax'
+import { purchaseRateFromCost } from '@/lib/unit-profit'
 
 /**
  * Sentinel values for the party <Select> in the edit dialog.
@@ -133,6 +135,8 @@ export function TransactionDetail() {
   const setting = settingData?.setting || {}
 
   const txn = data?.transaction
+  // Phase 1c-2: GST columns only on a bill that carries GST or a shop that charges it.
+  const billShowsGst = txn ? billCarriesGstColumns(txn, gstStatus(setting)) : true
 
   /**
    * Settlements recorded against THIS bill, oldest first — the API already
@@ -789,10 +793,12 @@ export function TransactionDetail() {
                   <span className="text-muted-foreground">Payment</span>
                   <Badge variant="secondary" className="uppercase text-3xs">{txn.paymentMode}</Badge>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">GST Type</span>
-                  <span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST+SGST'}</span>
-                </div>
+                {billShowsGst && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">GST Type</span>
+                    <span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST+SGST'}</span>
+                  </div>
+                )}
                 {txn.roundOff !== 0 && (
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Round Off</span>
@@ -831,7 +837,7 @@ export function TransactionDetail() {
                       <th className="py-2 px-2 font-medium">Product</th>
                       <th className="py-2 px-2 font-medium text-right">Qty</th>
                       <th className="py-2 px-2 font-medium text-right">Unit Price</th>
-                      <th className="py-2 px-2 font-medium text-right">GST</th>
+                      {billShowsGst && <th className="py-2 px-2 font-medium text-right">GST</th>}
                       <th className="py-2 px-2 font-medium text-right">Amount</th>
                     </tr>
                   </thead>
@@ -842,7 +848,7 @@ export function TransactionDetail() {
                         <td className="py-2.5 px-2 font-medium">{item.productName}</td>
                         <td className="py-2.5 px-2 text-right">{item.quantity}</td>
                         <td className="py-2.5 px-2 text-right">{formatINR(item.unitPrice)}</td>
-                        <td className="py-2.5 px-2 text-right">{item.gstRate}%</td>
+                        {billShowsGst && <td className="py-2.5 px-2 text-right">{item.gstRate}%</td>}
                         <td className="py-2.5 px-2 text-right font-semibold">{formatINR(item.total)}</td>
                       </tr>
                     ))}
@@ -1297,7 +1303,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
       const p = products.find(p => p.id === value)
       if (p) {
         newItems[index].productName = p.name
-        newItems[index].unitPrice = isSale ? p.salePrice : p.purchasePrice
+        newItems[index].unitPrice = isSale ? p.salePrice : purchaseRateFromCost(p, { claimsItc: claimsInputCredit(gstStatus(editSettingData?.setting)) })
         newItems[index].gstRate = p.gstRate
         newItems[index].unit = p.unit || undefined
         // A sale price follows the product's MRP flag; a supplier's cost
@@ -1701,7 +1707,13 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
   const shopName = setting?.shopName || 'My Shop'
   const shopAddress = setting?.address
   const shopPhone = setting?.phone
-  const shopGstin = setting?.gstin
+  // Phase 1c-2: a shop that is not registered prints no GSTIN, and the title
+  // follows the shop's GST status (lib/shop-tax.ts) — this said "Tax Invoice"
+  // on every sale, a composition shop's and a not-registered shop's included.
+  const shopStatus = gstStatus(setting)
+  const shopGstin = shopStatus === 'unregistered' ? null : setting?.gstin
+  const heading = documentTitle(txn.type, shopStatus)
+  const billShowsGst = billCarriesGstColumns(txn, shopStatus)
   const shopState = setting?.state
   const ownerName = setting?.ownerName || shopName
   return (
@@ -1723,7 +1735,8 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <h2 className="text-lg font-bold tracking-wide uppercase">{isSale ? 'Tax Invoice' : 'Purchase Bill'}</h2>
+          <h2 className="text-lg font-bold tracking-wide uppercase">{heading.title}</h2>
+          {heading.declaration && <p className="text-2xs text-gray-600 mt-0.5">{heading.declaration}</p>}
           <div className="text-xs text-gray-700 mt-1 space-y-0.5">
             <p><span className="text-gray-500">Invoice No:</span> <span className="font-mono font-medium">{txn.invoiceNo || txn.id.slice(-8)}</span></p>
             <p><span className="text-gray-500">Date:</span> <span className="font-medium">{formatDateMaybeTime(txn.date)}</span></p>
@@ -1745,7 +1758,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
         <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
           <p className="text-3xs text-gray-500 uppercase tracking-wider mb-1.5 font-semibold">Supply Details</p>
           <div className="text-xs space-y-1">
-            <div className="flex justify-between"><span className="text-gray-500">GST Type:</span><span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</span></div>
+            {billShowsGst && <div className="flex justify-between"><span className="text-gray-500">GST Type:</span><span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</span></div>}
             <div className="flex justify-between"><span className="text-gray-500">Items:</span><span className="font-medium">{txn.items.length}</span></div>
             {isSale && !hideProfit && txn.grossProfit !== undefined && (
               <div className="flex justify-between"><span className="text-gray-500">Profit:</span><span className="font-medium text-emerald-700 dark:text-emerald-300">₹{txn.grossProfit.toFixed(2)}</span></div>
@@ -1760,10 +1773,10 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
           <tr className="bg-orange-50 border-b border-gray-300">
             <th className="text-left py-2 px-2 font-semibold w-8">#</th>
             <th className="text-left py-2 px-2 font-semibold">Item / Description</th>
-            <th className="text-right py-2 px-2 font-semibold w-16">HSN</th>
+            {billShowsGst && <th className="text-right py-2 px-2 font-semibold w-16">HSN</th>}
             <th className="text-right py-2 px-2 font-semibold w-16">Qty</th>
             <th className="text-right py-2 px-2 font-semibold w-24">Unit Price</th>
-            <th className="text-right py-2 px-2 font-semibold w-16">GST%</th>
+            {billShowsGst && <th className="text-right py-2 px-2 font-semibold w-16">GST%</th>}
             <th className="text-right py-2 px-2 font-semibold w-28">Amount</th>
           </tr>
         </thead>
@@ -1772,10 +1785,10 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
             <tr key={i} className="border-b border-gray-200">
               <td className="py-2 px-2 text-gray-600">{i + 1}</td>
               <td className="py-2 px-2 font-medium">{item.productName}</td>
-              <td className="py-2 px-2 text-right text-gray-600">{item.hsnCode || '\u2014'}</td>
+              {billShowsGst && <td className="py-2 px-2 text-right text-gray-600">{item.hsnCode || '\u2014'}</td>}
               <td className="py-2 px-2 text-right">{item.quantity}</td>
               <td className="py-2 px-2 text-right">₹{item.unitPrice.toFixed(2)}</td>
-              <td className="py-2 px-2 text-right">{item.gstRate}%</td>
+              {billShowsGst && <td className="py-2 px-2 text-right">{item.gstRate}%</td>}
               <td className="py-2 px-2 text-right font-semibold">₹{item.total.toFixed(2)}</td>
             </tr>
           ))}

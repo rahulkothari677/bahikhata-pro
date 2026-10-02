@@ -57,6 +57,7 @@ import { refillPrice } from '@/lib/refill-line'
 import { todayMarginPct } from '@/lib/unit-profit'
 import { useCountUp } from '@/hooks/use-count-up'
 import { EmptyState } from '@/components/common/EmptyState'
+import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -308,6 +309,9 @@ export function Dashboard() {
   const hasGst = !!gstSummary
   const recentTransactions = data.recentTransactions || []
   const setting = data.setting || { shopName: 'My Shop' }
+  // Phase 1c-2: a shop that charges no GST (not registered, or composition)
+  // sees no GST wording and no GST cards here (lib/shop-tax.ts).
+  const showsGst = chargesGstOnSales(gstStatus(setting))
 
   const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
 
@@ -734,7 +738,7 @@ export function Dashboard() {
           // credit notes) while the P&L "Revenue" is taxable (ex-GST). Same word,
           // two numbers = instant distrust. Label the basis explicitly here and
           // on the P&L report so the difference reads as intentional.
-          subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')} • ${t('dash.incl_gst')}`}
+          subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')}${showsGst ? ` • ${t('dash.incl_gst')}` : ''}`}
           onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         {!hideProfit && (
@@ -757,7 +761,7 @@ export function Dashboard() {
           // 🐛 UI/UX Phase 3 Fix 5: Suppress trend arrow when growth is 0 (no prior
           // period to compare against). Was: always showed "↑ 0% vs prev" with an
           // up-arrow — misleading for new users + early-morning existing users.
-          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} (${t('dash.incl_gst')})${kpis.revenueGrowth !== 0 ? ` • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev` : ''}`}
+          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')}${showsGst ? ` (${t('dash.incl_gst')})` : ''}${kpis.revenueGrowth !== 0 ? ` • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev` : ''}`}
           trend={kpis.revenueGrowth !== 0 ? (kpis.revenueGrowth >= 0 ? 'up' : 'down') : undefined}
           onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
@@ -776,7 +780,7 @@ export function Dashboard() {
       </div>
 
       {/* Secondary KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+      <div className={cn('grid grid-cols-2 gap-3 lg:gap-4', showsGst ? 'lg:grid-cols-4' : 'lg:grid-cols-3')}>
         <MiniStatCard
           label={t('dash.receivable')}
           value={formatINR(kpis.totalReceivable)}
@@ -813,13 +817,15 @@ export function Dashboard() {
           color="text-amber-600 dark:text-amber-400"
           onClick={() => setView('inventory')}
         />
-        <MiniStatCard
-          label={`${t('dash.gst_summary')} (${rangeLabel})`}
-          value={hasGst ? formatINR(gstSummary.netPayable) : '—'}
-          icon={Receipt}
-          color="text-violet-600"
-          onClick={() => setView('reports')}
-        />
+        {showsGst && (
+          <MiniStatCard
+            label={`${t('dash.gst_summary')} (${rangeLabel})`}
+            value={hasGst ? formatINR(gstSummary.netPayable) : '—'}
+            icon={Receipt}
+            color="text-violet-600"
+            onClick={() => setView('reports')}
+          />
+        )}
       </div>
 
       {/* 🔒 AUDIT V25 FIX §3 row 9 (Batch 3): Removed duplicate Revenue Target
@@ -927,7 +933,7 @@ export function Dashboard() {
       </div>
 
       {/* Recent transactions & {t('dash.gst_summary')} summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className={cn('grid grid-cols-1 gap-4', showsGst && 'lg:grid-cols-2')}>
         {/* Recent transactions */}
         <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
@@ -1027,6 +1033,7 @@ export function Dashboard() {
             standalone full-width card below Business Goals) looked better.
             GST summary is back to being a standalone card in the right column
             of the Recent Transactions + GST summary 2-col grid. */}
+        {showsGst && (
         <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -1058,6 +1065,7 @@ export function Dashboard() {
             )}
           </CardContent>
         </Card>
+        )}
       </div>
 
       {/* Day-end summary card — shows after 6 PM with today's business summary */}

@@ -25,6 +25,7 @@
  *   const mainNav = getByFrequency('primary').filter(d => d.platforms.includes('desktop'))
  */
 
+import type { GstStatus } from './shop-tax'
 import {
   LayoutDashboard, ShoppingCart, Truck, Package, Wallet, Users,
   FileBarChart, ScanLine, FolderOpen, Bot, ShieldCheck, Lock,
@@ -191,6 +192,23 @@ export interface NavDestination {
   founderOnly?: boolean  // 🔒 V26 N7: gates behind founder email allowlist (not just 'owner' role)
   /** Gated by a feature flag */
   featureFlag?: FeatureKey
+  /**
+   * Phase 1c-2: only for a shop with this GST status (lib/shop-tax.ts).
+   * GSTR-1 / 3B / 2B / 9, GST and HSN summaries are a regular shop's returns;
+   * CMP-08 / GSTR-4 a composition shop's. A shop that is not registered has
+   * neither, so it sees none of them.
+   */
+  gstNeeds?: 'regular' | 'composition'
+}
+
+/**
+ * Does this menu entry show for this shop's GST status? Unknown status (the
+ * shop's settings not loaded yet) shows everything rather than hide a
+ * registered shop's returns for a moment.
+ */
+export function showsForGstStatus(d: Pick<NavDestination, 'gstNeeds'>, status: GstStatus | undefined): boolean {
+  if (!d.gstNeeds || !status) return true
+  return d.gstNeeds === status
 }
 
 // ─── Color constants (shared across surfaces for consistency) ──────────
@@ -738,6 +756,7 @@ export const NAV_REGISTRY: NavDestination[] = [
      * cannot find it.
      */
     id: 'composition-returns',
+    gstNeeds: 'composition',
     label: 'CMP-08 & GSTR-4',
     keywords: 'cmp08 cmp-08 gstr4 gstr-4 composition scheme',
     description: 'Composition scheme — quarterly payment and annual return',
@@ -755,6 +774,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'gstr-1',
+    gstNeeds: 'regular',
     label: 'GSTR-1',
     keywords: 'gstr1 gstr-1 sales return outward supplies gst filing',
     description: 'Outward supplies return — file monthly with GST portal',
@@ -774,6 +794,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'gstr-3b',
+    gstNeeds: 'regular',
     label: 'GSTR-3B',
     keywords: 'gstr3b gstr-3b summary return monthly gst filing tax payable',
     description: 'Monthly summary return — output tax vs input credit',
@@ -793,6 +814,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'gstr-2b',
+    gstNeeds: 'regular',
     label: 'GSTR-2B Reconciliation',
     keywords: 'gstr2b gstr-2b purchase reconcile input credit itc match',
     description: 'Match purchase ITC with auto-generated GSTR-2B',
@@ -812,6 +834,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'gst-summary',
+    gstNeeds: 'regular',
     label: 'GST Summary',
     keywords: 'gst summary tax summary total gst kitna gst',
     description: 'Tax liability by slab — 5/12/18/28%',
@@ -831,6 +854,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'hsn-summary',
+    gstNeeds: 'regular',
     label: 'HSN Summary',
     keywords: 'hsn sac code summary hsn wise',
     description: 'HSN/SAC-wise tax summary for GSTR-1 filing',
@@ -850,6 +874,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'gstr-9',
+    gstNeeds: 'regular',
     label: 'GSTR-9',
     keywords: 'gstr9 gstr-9 annual return yearly gst saal',
     description: 'Annual return — the whole year, from the returns you filed',
@@ -1164,7 +1189,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     // address, UPI — not the person's. The old name is why unrelated personal
     // preferences kept getting filed under it.
     label: 'Shop Profile',
-    description: 'Name, GSTIN, address, logo, UPI',
+    description: 'Name, GST registration, address, logo, UPI',
     icon: Store,
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-100',
@@ -1637,9 +1662,11 @@ export function filterByPermissions(
     isOwner: boolean
     platform?: 'mobile' | 'desktop'
     isFounder?: boolean  // 🔒 V26 P7-3: real founder check (from bootstrap)
+    gstStatus?: GstStatus  // Phase 1c-2: hide another status's GST returns
   }
 ): NavDestination[] {
   return destinations.filter(d => {
+    if (!showsForGstStatus(d, opts.gstStatus)) return false
     // 🔒 V26 N19: Platform gating — if a destination declares `platforms`,
     // honor it. Defaults to ['mobile','desktop'] (both) when omitted.
     if (opts.platform && d.platforms && !d.platforms.includes(opts.platform)) return false

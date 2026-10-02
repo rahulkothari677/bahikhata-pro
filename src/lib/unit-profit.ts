@@ -96,3 +96,21 @@ export function purchaseCostPerUnit(
   if (opts.claimsItc) return roundMoney(price)
   return roundMoney((price * (100 + (Number(line.gstRate) || 0))) / 100)
 }
+
+/**
+ * The supplier's before-GST rate implied by the product's saved cost — the
+ * inverse of purchaseCostPerUnit(), for pre-filling a purchase line.
+ *
+ * For a shop that cannot claim the GST back, the saved cost INCLUDES the GST
+ * (#175). Pre-filling that as the supplier's rate and adding GST again made
+ * each purchase raise the cost by another 5%: ₹241.50 → ₹253.58 → … (found
+ * first-hand, 2 Oct 2026). So the GST comes back out: ₹241.50 @5% → ₹230.
+ */
+export function purchaseRateFromCost(
+  product: { purchasePrice?: number | null; gstRate?: number | null },
+  opts: { claimsItc: boolean },
+): number {
+  const cost = Number(product.purchasePrice) || 0
+  if (opts.claimsItc) return cost
+  return roundMoney((cost * 100) / (100 + (Number(product.gstRate) || 0)))
+}

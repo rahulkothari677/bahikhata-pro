@@ -172,6 +172,10 @@ save.
   `main`, which deploys. **Then verify on the live demo account — compulsory,
   before reporting.** One phase = its own commits, so a bad deploy is undone by
   Vercel's instant rollback or `git revert`.
+- **Local migrations: the Prisma CLI does not read `.env.local`.** Run
+  `set -a; . ./.env.local; set +a` in the same shell first, then
+  `npx prisma migrate deploy && npx prisma generate` (2 Oct: validation failed
+  on a missing DIRECT_URL until the file was loaded).
 - **After a merge, create the next branch BEFORE the first edit.** On 1 Oct I
   merged 1a and then edited 1b on `main` for an hour; caught it before
   committing. `git branch --show-current` before touching a file.
@@ -351,6 +355,13 @@ cause**, never as a new line at the bottom.
 · `dataLivesAt` doing double duty as ViewType and destination id (#61, #68)
 · **The process docs themselves** — three files stating the same gates, which
   diverged within 24 hours. That is what this consolidation fixes.
+
+· **2 Oct: changed what a stored number MEANS and checked only where it is
+  shown.** #175 made a not-registered shop's saved cost include GST; every
+  purchase screen still READ that cost back as the supplier's before-GST rate
+  and added GST again — the cost crept 5% per purchase. Found first-hand the
+  same day. **When a change alters a stored value's meaning, grep every place
+  that reads it as an INPUT (pre-fills, defaults, copies), not just displays.**
 
 **Cause 3 — A refusal that isn't a refusal**
 · Advice/predictions returned null from the parser; the model answered them

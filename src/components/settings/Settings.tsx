@@ -1114,10 +1114,111 @@ export function Settings({
               <Label htmlFor="field-email">Email</Label>
               <Input id="field-email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
             </div>
-            <div>
-              <Label htmlFor="field-gstin">GSTIN</Label>
-              <Input id="field-gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="15-digit GST number" className="font-mono uppercase" />
+            {/*
+              * #207 (Phase 1c-2): the GST status lives next to the GST number —
+              * it decides whether any bill carries GST, and it was buried under
+              * Invoices & Bills → Rounding & tax. The GSTIN box shows only for a
+              * registered shop: a shop that is not registered has none.
+              */}
+            <div className="sm:col-span-2">
+          {/*
+            * GST REGISTRATION (#165, Phase 1c) — one choice for the shop's
+            * whole tax status: not registered, regular, or composition with
+            * its category. One control rather than a registration switch plus
+            * a composition dropdown, because two controls for one fact can be
+            * set to contradict each other (lib/shop-tax.ts reads them).
+            */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">GST registration</span>
+              <InfoHint
+                label="GST registration"
+                text="Not registered: your bills carry no GST (the law does not allow it) and the GST you pay suppliers is part of your cost. Regular: GST on your bills, and you claim back the GST you pay. Composition: only if you opted in with form CMP-02 — no GST on your bills, a small % of sales instead, and CMP-08 / GSTR-4 in place of GSTR-1 / GSTR-3B."
+              />
             </div>
+
+            <select
+              aria-label="GST registration"
+              className="mt-3 w-full h-11 rounded-lg border border-border/60 bg-background px-3 text-sm"
+              value={!gstRegistered ? 'none' : (compositionCategory ?? 'regular')}
+              onChange={(e) => {
+                const v = e.target.value
+                persistComposition(
+                  /* Leaving composition clears the exit date too — the server
+                     does the same. A leftover exit date is a trap waiting for
+                     the next time the shop opts in. */
+                  v === 'none'
+                    ? { gstRegistered: false, compositionCategory: null, compositionTo: null }
+                    : v === 'regular'
+                      ? { gstRegistered: true, compositionCategory: null, compositionTo: null }
+                      : { gstRegistered: true, compositionCategory: v },
+                  v === 'none' ? 'Saved — no GST on your bills'
+                    : v === 'regular' ? 'Saved — regular GST'
+                      : 'Saved — composition scheme',
+                )
+              }}
+            >
+              <option value="none">Not registered — no GST on my bills</option>
+              <option value="regular">Registered — regular GST</option>
+              <option value="trader">Composition — trader, 1% of turnover</option>
+              <option value="manufacturer">Composition — manufacturer, 1% of turnover</option>
+              <option value="restaurant">Composition — restaurant, no alcohol, 5%</option>
+              <option value="service">Composition — service provider, 6%</option>
+            </select>
+            {gstRegistered && !form.gstin && (
+              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                Add your GSTIN below — it must be printed on every bill.
+              </p>
+            )}
+
+            {/*
+              * THE FIELD THAT STOPS DOUBLE TAXATION.
+              *
+              * Crossing the turnover limit ends composition on the crossing day
+              * itself — there is no grace period, and from that moment the shop
+              * must issue tax invoices and charge full GST. Without this date
+              * CMP-08 charged 1% across the WHOLE quarter, on top of the GST
+              * already paid on post-crossing sales. Only shown once the scheme
+              * is on: an exit date with no scheme to exit is meaningless.
+              */}
+            {compositionCategory && (
+              <div className="mt-3">
+                <Label htmlFor="composition-to" className="text-xs">
+                  Date I left the scheme (leave blank if you are still in it)
+                </Label>
+                <Input
+                  id="composition-to"
+                  type="date"
+                  className="mt-1"
+                  value={compositionTo}
+                  onChange={(e) => setCompositionTo(e.target.value)}
+                  onBlur={(e) => {
+                    const v = e.target.value
+                    /* Compare against what the SERVER has, not against the
+                       bound state — see the note on savedCompositionTo. */
+                    if (v === savedCompositionTo.current) return
+                    persistComposition(
+                      { compositionTo: v || null },
+                      v ? 'Exit date saved' : 'Exit date cleared',
+                    )
+                  }}
+                />
+                <p className="text-2xs text-muted-foreground mt-1">
+                  Set this the day you cross the turnover limit. Your CMP-08 will then charge only
+                  up to that date, and everything after it goes into GSTR-1 and GSTR-3B — so you
+                  are not taxed twice on the same sales.
+                </p>
+              </div>
+            )}
+          </div>
+            </div>
+            {gstRegistered && (
+              <div>
+                <Label htmlFor="field-gstin">GSTIN</Label>
+                <Input id="field-gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="15-digit GST number" className="font-mono uppercase" />
+              </div>
+            )}
             <div>
               <Label htmlFor="field-state">State</Label>
               <Input id="field-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="e.g. Uttar Pradesh" />
@@ -2200,6 +2301,8 @@ export function Settings({
             * card, with a note saying it may not apply. Hiding it from a shop
             * that turns out to be liable is the worse mistake.
             */}
+          {/* Phase 1c-2: e-invoicing applies only to a shop that issues tax invoices. */}
+          {gstRegistered && !compositionCategory && (
           <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-muted-foreground" />
@@ -2218,113 +2321,9 @@ export function Settings({
               onCheckedChange={(checked) => persistEInvoice(checked)}
             />
           </div>
+          )}
 
-          {/*
-            * COMPOSITION SCHEME (#42).
-            *
-            * It lives HERE, next to e-invoicing, and not in Features &
-            * Preferences — where the Reports screen used to send people. Those
-            * toggles are display switches held in the browser; this one changes
-            * which returns exist, which tax rate applies, and whether the shop's
-            * bills may show GST at all. Putting a legal status among on/off
-            * conveniences invites someone to flip it to see what happens.
-            *
-            * A dropdown, not a switch, because the RATE depends on the answer:
-            * trader and manufacturer 1%, restaurant 5%, service provider 6%.
-            * A single "composition: on" would have to guess one of them, and a
-            * guessed rate is a wrong return that looks filed.
-            */}
-          {/*
-            * GST REGISTRATION (#165, Phase 1c) — one choice for the shop's
-            * whole tax status: not registered, regular, or composition with
-            * its category. One control rather than a registration switch plus
-            * a composition dropdown, because two controls for one fact can be
-            * set to contradict each other (lib/shop-tax.ts reads them).
-            */}
-          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium">GST registration</span>
-              <InfoHint
-                label="GST registration"
-                text="Not registered: your bills carry no GST (the law does not allow it) and the GST you pay suppliers is part of your cost. Regular: GST on your bills, and you claim back the GST you pay. Composition: only if you opted in with form CMP-02 — no GST on your bills, a small % of sales instead, and CMP-08 / GSTR-4 in place of GSTR-1 / GSTR-3B."
-              />
-            </div>
 
-            <select
-              aria-label="GST registration"
-              className="mt-3 w-full h-11 rounded-lg border border-border/60 bg-background px-3 text-sm"
-              value={!gstRegistered ? 'none' : (compositionCategory ?? 'regular')}
-              onChange={(e) => {
-                const v = e.target.value
-                persistComposition(
-                  /* Leaving composition clears the exit date too — the server
-                     does the same. A leftover exit date is a trap waiting for
-                     the next time the shop opts in. */
-                  v === 'none'
-                    ? { gstRegistered: false, compositionCategory: null, compositionTo: null }
-                    : v === 'regular'
-                      ? { gstRegistered: true, compositionCategory: null, compositionTo: null }
-                      : { gstRegistered: true, compositionCategory: v },
-                  v === 'none' ? 'Saved — no GST on your bills'
-                    : v === 'regular' ? 'Saved — regular GST'
-                      : 'Saved — composition scheme',
-                )
-              }}
-            >
-              <option value="none">Not registered — no GST on my bills</option>
-              <option value="regular">Registered — regular GST</option>
-              <option value="trader">Composition — trader, 1% of turnover</option>
-              <option value="manufacturer">Composition — manufacturer, 1% of turnover</option>
-              <option value="restaurant">Composition — restaurant, no alcohol, 5%</option>
-              <option value="service">Composition — service provider, 6%</option>
-            </select>
-            {gstRegistered && !form.gstin && (
-              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
-                Add your GSTIN in Shop profile — it must be printed on every bill.
-              </p>
-            )}
-
-            {/*
-              * THE FIELD THAT STOPS DOUBLE TAXATION.
-              *
-              * Crossing the turnover limit ends composition on the crossing day
-              * itself — there is no grace period, and from that moment the shop
-              * must issue tax invoices and charge full GST. Without this date
-              * CMP-08 charged 1% across the WHOLE quarter, on top of the GST
-              * already paid on post-crossing sales. Only shown once the scheme
-              * is on: an exit date with no scheme to exit is meaningless.
-              */}
-            {compositionCategory && (
-              <div className="mt-3">
-                <Label htmlFor="composition-to" className="text-xs">
-                  Date I left the scheme (leave blank if you are still in it)
-                </Label>
-                <Input
-                  id="composition-to"
-                  type="date"
-                  className="mt-1"
-                  value={compositionTo}
-                  onChange={(e) => setCompositionTo(e.target.value)}
-                  onBlur={(e) => {
-                    const v = e.target.value
-                    /* Compare against what the SERVER has, not against the
-                       bound state — see the note on savedCompositionTo. */
-                    if (v === savedCompositionTo.current) return
-                    persistComposition(
-                      { compositionTo: v || null },
-                      v ? 'Exit date saved' : 'Exit date cleared',
-                    )
-                  }}
-                />
-                <p className="text-2xs text-muted-foreground mt-1">
-                  Set this the day you cross the turnover limit. Your CMP-08 will then charge only
-                  up to that date, and everything after it goes into GSTR-1 and GSTR-3B — so you
-                  are not taxed twice on the same sales.
-                </p>
-              </div>
-            )}
-          </div>
         </CardContent>
       </Card>
       )}

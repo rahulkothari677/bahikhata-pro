@@ -353,7 +353,7 @@ export const translations = {
     'nav.desc.logout': 'Sign out of your account',
     'nav.desc.low-stock-alerts': 'Products running low — reorder now',
     'nav.desc.multi-shop-management': 'View your shop and GSTIN · switching coming soon',
-    'nav.desc.my-profile': 'Name, GSTIN, address, logo, UPI',
+    'nav.desc.my-profile': 'Name, GST registration, address, logo, UPI',
     'nav.desc.new-purchase': 'Record a purchase bill',
     'nav.desc.new-sale': 'Record a sale invoice',
     'nav.desc.parties': 'Customers & suppliers — track dues & balances',

@@ -497,7 +497,8 @@ function HeaderContent({
         )}
       </div>
       <div className="text-right flex-shrink-0">
-        <p className="text-xl font-bold">INVOICE</p>
+        <p className="text-xl font-bold">{doc.title}</p>
+        {doc.declaration && <p className="text-2xs font-medium" style={{ color: muted }}>{doc.declaration}</p>}
         <p className="text-sm font-medium" style={{ color: muted }}>
           {doc.invoiceNo} · {doc.dateLabel}{doc.timeLabel ? `, ${doc.timeLabel}` : ''}
         </p>

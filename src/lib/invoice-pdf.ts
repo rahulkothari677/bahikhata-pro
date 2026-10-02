@@ -321,11 +321,18 @@ export async function generateInvoicePDF(
    * were — a box drawn on top of a filled strip is just a box on a strip.
    */
   if (!filledHeader) {
-    const label = invoice.title === 'PURCHASE BILL' ? 'PURCHASE BILL' : 'TAX INVOICE - ORIGINAL FOR RECIPIENT'
+    // Rule 48: a tax invoice is marked ORIGINAL FOR RECIPIENT. Every other
+    // document prints its own title (lib/shop-tax.ts documentTitle).
+    const label = invoice.title === 'TAX INVOICE' ? 'TAX INVOICE - ORIGINAL FOR RECIPIENT' : invoice.title
     doc.setFont(THEME.font, 'bold')
     doc.setFontSize(10)
     doc.setTextColor(accent.r, accent.g, accent.b)
     doc.text(label, pageWidth - margin, 14, { align: 'right' })
+    if (invoice.declaration) {
+      doc.setFont(THEME.font, 'normal')
+      doc.setFontSize(7)
+      doc.text(invoice.declaration, pageWidth - margin, 18, { align: 'right' })
+    }
 
     /*
      * Label bold, value light, both right-aligned to the same edge — so the
@@ -352,11 +359,17 @@ export async function generateInvoicePDF(
   } else {
     doc.setFontSize(16)
     doc.setTextColor(headText.r, headText.g, headText.b)
-    doc.text('INVOICE', pageWidth - margin, 12, { align: 'right' })
+    // Phase 1c-2: the document's real title (TAX INVOICE / BILL OF SUPPLY /
+    // BILL / CREDIT NOTE …) — this band used to say "INVOICE" for all of them.
+    doc.text(invoice.title, pageWidth - margin, 12, { align: 'right' })
     doc.setFont(THEME.font, 'normal')
     doc.setFontSize(9)
     doc.setTextColor(headMuted.r, headMuted.g, headMuted.b)
     doc.text(`${invoice.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 18, { align: 'right' })
+    if (invoice.declaration) {
+      doc.setFontSize(6.5)
+      doc.text(invoice.declaration, pageWidth - margin, 22, { align: 'right' })
+    }
   }
 
   /*
@@ -370,7 +383,7 @@ export async function generateInvoicePDF(
   if (invoice.customFields.length) {
     doc.setFontSize(8)
     doc.setTextColor(headMuted.r, headMuted.g, headMuted.b)
-    let cfY = 23
+    let cfY = invoice.declaration ? 26 : 23
     for (const f of invoice.customFields.slice(0, 4)) {
       doc.text(`${f.label}: ${formatCustomValue(f)}`, pageWidth - margin, cfY, { align: 'right' })
       cfY += 4

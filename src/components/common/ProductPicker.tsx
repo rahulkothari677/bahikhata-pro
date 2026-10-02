@@ -12,6 +12,9 @@ import { isService } from '@/lib/inventory-tracking'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useAppStore } from '@/store/app-store'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
+import { useSetting } from '@/hooks/use-setting'
+import { gstStatus, claimsInputCredit } from '@/lib/shop-tax'
+import { purchaseRateFromCost } from '@/lib/unit-profit'
 
 export type ProductSelectValue = {
   productId: string
@@ -31,6 +34,7 @@ export function ProductPicker({
   onChange: (v: ProductSelectValue) => void
   isSale: boolean
 }) {
+  const { setting: shopSetting } = useSetting()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
@@ -80,7 +84,7 @@ export function ProductPicker({
       productId: product.id,
       productName: product.name,
       quantity: value.quantity || 1,
-      unitPrice: isSale ? product.salePrice : product.purchasePrice,
+      unitPrice: isSale ? product.salePrice : purchaseRateFromCost(product, { claimsItc: claimsInputCredit(gstStatus(shopSetting)) }),
       gstRate: product.gstRate,
       unit: product.unit,
     })

@@ -15,6 +15,8 @@ import { handleNavAction } from '@/lib/handle-nav-action'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSession } from 'next-auth/react'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
+import { gstStatus } from '@/lib/shop-tax'
+import { useSetting } from '@/hooks/use-setting'
 
 type SearchResult = {
   type: 'product' | 'party' | 'transaction'
@@ -142,15 +144,18 @@ export function GlobalSearch() {
   // for modules they can't access). Now: same filtering as every other surface.
   const isOwner = session?.user?.role === 'owner'
   const isFounder = useAppStore((s) => s.isFounder)
+  // Phase 1c-2: hide GST returns that are not this shop's (lib/shop-tax.ts).
+  const { setting: shopSetting } = useSetting()
+  const shopGst = shopSetting ? gstStatus(shopSetting) : undefined
   const allCommands = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('global-search')),
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner, isFounder }
+      }, isOwner, isFounder, gstStatus: shopGst }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isOwner, isFounder])
+  }, [canAccess, isOwner, isFounder, shopGst])
 
   // Filter commands by query — match label, description, or keywords.
   // 🔒 V26 N22: Also match the TRANSLATED label/description (via t(labelKey) /

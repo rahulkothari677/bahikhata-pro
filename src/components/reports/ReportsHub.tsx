@@ -25,10 +25,12 @@ import { haptic } from '@/lib/haptic'
 import { cn } from '@/lib/utils'
 import { useMemo } from 'react'
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 5): ReportsHub now renders from the NavRegistry.
-import { NAV_REGISTRY, groupBySubcategory, type NavDestination, type NavSubcategoryId } from '@/lib/nav-registry'
+import { NAV_REGISTRY, groupBySubcategory, showsForGstStatus, type NavDestination, type NavSubcategoryId } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { BarChart3, FileText, Package, Banknote, ChevronRight, type LucideIcon } from 'lucide-react'
 import { useTranslation } from '@/hooks/use-translation'
+import { gstStatus } from '@/lib/shop-tax'
+import { useSetting } from '@/hooks/use-setting'
 
 // Section metadata: maps subcategory → { title, titleIcon, accentColor } for ReportsHub.
 // Matches the 4 categories from the old CATEGORIES array.
@@ -41,11 +43,15 @@ const CATEGORY_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon
 
 export function ReportsHub() {
   const { t } = useTranslation()
+  const { setting: shopSetting } = useSetting()
+  const shopGst = shopSetting ? gstStatus(shopSetting) : undefined
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 5): Report items from NavRegistry, filtered
   // by surfaces: ['reports-hub'] + grouped by subcategory.
   const { categories } = useMemo(() => {
     const reportItems = NAV_REGISTRY
       .filter(d => d.surfaces?.includes('reports-hub'))
+      // Phase 1c-2: only this shop's GST returns (lib/shop-tax.ts).
+      .filter(d => showsForGstStatus(d, shopGst))
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
 
     const grouped = groupBySubcategory(reportItems)
@@ -62,7 +68,7 @@ export function ReportsHub() {
       }
     }
     return { categories: cats }
-  }, [])
+  }, [shopGst])
 
   return (
     <div className="space-y-5">

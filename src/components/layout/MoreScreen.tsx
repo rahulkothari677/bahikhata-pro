@@ -34,6 +34,8 @@ import {
 import type { ViewType } from '@/store/app-store'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from '@/hooks/use-translation'
+import { gstStatus } from '@/lib/shop-tax'
+import { useSetting } from '@/hooks/use-setting'
 
 // 🔒 V26 P9: Section metadata with accentColor + display order.
 // Ordered by USER PRIORITY (what a shopkeeper uses most):
@@ -96,16 +98,19 @@ export function MoreScreen() {
 
   const isOwner = session?.user?.role === 'owner'
   const isFounder = useAppStore((s) => s.isFounder)
+  // Phase 1c-2: hide GST returns that are not this shop's (lib/shop-tax.ts).
+  const { setting: shopSetting } = useSetting()
+  const shopGst = shopSetting ? gstStatus(shopSetting) : undefined
   const moreItems = useMemo(() => {
     const filtered = filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('more')),
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner, isFounder, platform: 'mobile' }
+      }, isOwner, isFounder, platform: 'mobile', gstStatus: shopGst }
     )
     return filtered.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isOwner, isFounder])
+  }, [canAccess, isOwner, isFounder, shopGst])
 
   // 🔒 V26 P9: Build sections in SECTION_ORDER (user priority), not Map insertion order
   const sections = useMemo(() => {

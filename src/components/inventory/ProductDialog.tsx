@@ -60,6 +60,8 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
   // 🔒 R15-5 (Round 15): Read hideProfit so the margin preview box is hidden
   // for staff-with-hideProfit. Was: shown unconditionally when both prices > 0.
   const { hideProfit, setting } = useSetting()
+  // Phase 1c-2: GST-only fields show to the shops that need them.
+  const shopGst = gstStatus(setting)
 
   /*
    * What Notification 10/2025 says about this HSN (#84, #93).
@@ -166,6 +168,18 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
     if ((form.gstTreatment === 'exempt' || form.gstTreatment === 'nonGst') && gstRateNum > 0) {
       sonnerToast.error('Contradictory GST settings', {
         description: `${form.gstTreatment === 'exempt' ? 'Exempt' : 'Non-GST'} products must have GST rate 0%. Change the GST rate to 0% or set GST Treatment to Taxable/Nil-rated.`,
+      })
+      return
+    }
+    /*
+     * #136 (Phase 1c-2): for a REGULAR GST shop, "Taxable" at 0% contradicts
+     * itself — a taxable item at 0% is Nil-rated, a different box in GSTR-1.
+     * Only a regular shop: one that charges no GST on sales (not registered,
+     * composition) uses the rate just to pre-fill purchase bills.
+     */
+    if (gstStatus(setting) === 'regular' && form.gstTreatment === 'taxable' && gstRateNum === 0) {
+      sonnerToast.error('Choose a GST rate', {
+        description: 'A taxable item needs a GST rate. If it really carries 0%, set GST Treatment to Nil-rated.',
       })
       return
     }
@@ -431,6 +445,9 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
             *
             * Spans both columns because it is a question, not a field.
             */}
+          {/* Phase 1c-2: the exemption questions are about GST filing — not for a shop that is not registered. */}
+          {shopGst !== 'unregistered' && (
+          <>
           {exemption?.outcome === 'needs-confirmation' && (
             <div className="sm:col-span-2 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-3">
               <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
@@ -497,6 +514,8 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
               </p>
             </div>
           )}
+          </>
+          )}
 
           {/*
             * The confident case, shown for the same reason the question is:
@@ -504,6 +523,8 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
             * line of which notification says so. §0 — every figure shows
             * receipts that open the real record.
             */}
+          {shopGst !== 'unregistered' && (
+          <>
           {exemption?.outcome === 'exempt' && (
             <div className="sm:col-span-2 rounded-lg border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3">
               <p className="text-2xs text-emerald-900 dark:text-emerald-200">
@@ -514,8 +535,12 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
               </p>
             </div>
           )}
+          </>
+          )}
 
           {/* 🔒 V17 Audit §4.2: GST treatment — for GSTR-3B 3.1(c) nil/exempt/non-GST breakdown */}
+          {/* GST treatment decides GSTR boxes; a shop that is not registered files none. */}
+          {shopGst !== 'unregistered' && (
           <div>
             <Label htmlFor="field-gst-treatment">GST Treatment</Label>
             <Select value={form.gstTreatment} onValueChange={(v) => setForm({ ...form, gstTreatment: v })}>
@@ -532,9 +557,12 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
               </SelectContent>
             </Select>
           </div>
+          )}
           {/* 🔒 V12: MRP / GST-inclusive pricing. When on, the Sale Price is
               treated as already including GST (the Indian retail norm) and the
               taxable value is back-calculated at sale time. */}
+          {/* Only a shop that charges GST has an MRP to take GST out of. */}
+          {shopGst === 'regular' && (
           <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 p-3">
             <input
               id="priceIncludesGst"
@@ -550,6 +578,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
               </span>
             </label>
           </div>
+          )}
           {/* Goods or a service? The single question that decides whether this
               product is counted at all. Placed directly above the stock fields
               it controls, so the two boxes disappearing is an obvious

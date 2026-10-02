@@ -25,6 +25,7 @@ import { roundMoney } from './money'
 import { amountToWords } from './amount-to-words'
 import { isVisible, VISIBILITY_TOGGLES, type InvoiceVisibility } from './invoice-visibility'
 import { readCustomValues, type CustomFieldValue } from './custom-fields'
+import { gstStatus, documentTitle, type GstStatus } from './shop-tax'
 
 export interface InvoiceDocumentItem {
   name: string
@@ -87,6 +88,13 @@ export interface InvoiceShop {
    */
   paymentQrUrl?: string | null
   logoUrl?: string | null
+  /**
+   * The shop's GST status (Phase 1c-2, lib/shop-tax.ts). Decides the bill's
+   * title — TAX INVOICE, BILL OF SUPPLY or a plain BILL. Undefined (a shop
+   * built by hand, as tests and the dev page do) is read as regular, which
+   * is what every bill printed before this field existed.
+   */
+  gstStatus?: GstStatus
 
   /*
    * 📄 Phase 3 — what the shop puts ON the bill.
@@ -131,6 +139,11 @@ export type InvoiceStatus = 'paid' | 'partial' | 'due'
 
 export interface InvoiceDocument {
   title: string
+  /**
+   * A line the law requires on the face of this document, or null — the
+   * composition declaration on a Bill of Supply (lib/shop-tax.ts).
+   */
+  declaration: string | null
   invoiceNo: string
   date: Date
   dateLabel: string
@@ -327,7 +340,10 @@ export function invoiceShopFromSetting(setting: Record<string, unknown> | null |
     ownerName: s.ownerName,
     phone: s.phone,
     email: s.email,
-    gstin: s.gstin,
+    // A shop that is not registered has no GSTIN to print — a stale one
+    // left in settings must not appear on its bills (Phase 1c-2).
+    gstin: gstStatus(s) === 'unregistered' ? null : s.gstin,
+    gstStatus: gstStatus(s),
     address: s.address,
     state: s.state,
     upiId: s.upiId,
@@ -444,8 +460,12 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
     ? roundMoney(src.partyBalance)
     : null
 
+  // Phase 1c-2: was 'TAX INVOICE' for every non-purchase — a composition
+  // shop's bill, a not-registered shop's bill, a credit note and an estimate.
+  const heading = documentTitle(src.type, shop.gstStatus ?? 'regular')
   return {
-    title: src.type === 'purchase' ? 'PURCHASE BILL' : 'TAX INVOICE',
+    title: heading.title,
+    declaration: heading.declaration,
     invoiceNo: src.invoiceNo || '—',
     date,
     dateLabel: formatDate(date),

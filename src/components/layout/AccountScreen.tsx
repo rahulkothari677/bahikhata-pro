@@ -79,6 +79,7 @@ const SettingsComponent = lazy(() =>
 )
 // Type-only, so it does not pull the 2000-line Settings module into this chunk.
 import type { SettingsSection } from '@/components/settings/Settings'
+import { gstStatus } from '@/lib/shop-tax'
 // The plan comparison, shown inline on the Subscription page. Lazy for the
 // same reason Settings is: most visits to Account never open Subscription.
 const PricingPlansComponent = lazy(() =>
@@ -166,7 +167,9 @@ export function AccountScreen() {
       { label: t('account.field.shopName'), filled: !!(setting.shopName && setting.shopName.trim() && setting.shopName.trim() !== 'My Shop') },
       { label: t('account.field.ownerName'), filled: !!(setting.ownerName && setting.ownerName.trim()) },
       { label: t('account.field.phone'), filled: !!(setting.phone && setting.phone.trim()) },
-      { label: t('account.field.gstin'), filled: !!(setting.gstin && setting.gstin.trim()) },
+      // Phase 1c-2: a shop that is not registered has no GST number to add —
+      // asking for one tells it that it should have one.
+      ...(gstStatus(setting) === 'unregistered' ? [] : [{ label: t('account.field.gstin'), filled: !!(setting.gstin && setting.gstin.trim()) }]),
       { label: t('account.field.address'), filled: !!(setting.address && setting.address.trim()) },
       { label: t('account.field.email'), filled: !!email },
       { label: t('account.field.logo'), filled: !!setting.logoUrl },

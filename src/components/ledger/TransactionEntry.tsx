@@ -61,8 +61,8 @@ import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice, resolveLineIncludesGst } from '@/lib/refill-line'
 import { lineTaxable } from '@/lib/line-taxable'
-import { gstStatus, chargesGstOnSales, claimsInputCredit } from '@/lib/shop-tax'
-import { purchaseCostPerUnit } from '@/lib/unit-profit'
+import { gstStatus, chargesGstOnSales, claimsInputCredit, isOutwardDocument } from '@/lib/shop-tax'
+import { purchaseCostPerUnit, purchaseRateFromCost } from '@/lib/unit-profit'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -401,6 +401,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // composition shops put no GST on the bills they issue.
   const shopGstStatus = gstStatus(settingData?.setting)
   const shopChargesGst = chargesGstOnSales(shopGstStatus)
+  // Phase 1c-2: what this screen SHOWS about GST. The shop's own bills (sale,
+  // credit note, estimate) show it only when the shop charges GST. A
+  // supplier's bill always carries its GST, but the claim-back controls
+  // (bill number for GSTR-2B, reverse charge, blocked credit) need a shop that
+  // can claim it.
+  const showsGst = isOutwardDocument(actualType) ? shopChargesGst : true
+  const canClaimGst = claimsInputCredit(shopGstStatus)
 
   // Fetch parties
   const { data: partiesData, refetch: refetchParties } = useQuery({
@@ -695,7 +702,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         productId: product.id,
         productName: product.name,
         quantity: 1,
-        unitPrice: isSale ? product.salePrice : product.purchasePrice,
+        // #175: a non-claiming shop's saved cost includes GST — take it out
+        // before pre-filling the supplier's rate (purchaseRateFromCost).
+        unitPrice: isSale ? product.salePrice : purchaseRateFromCost(product, { claimsItc: canClaimGst }),
         gstRate: product.gstRate,
         gstTreatment: product.gstTreatment ?? null,
         unit: product.unit,
@@ -982,7 +991,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
      * point is that they find out now, while the bill is still in their hand,
      * rather than at filing time.
      */
-    if (!isSale && !isNote && !invoiceNo.trim()) {
+    if (!isSale && !isNote && canClaimGst && !invoiceNo.trim()) {
       const proceed = await confirmSave(
         'Without it, this purchase cannot be matched to your GSTR-2B, so you may not be able to claim the GST back on it.',
         { title: 'Save without the supplier’s bill number?', confirmLabel: 'Save anyway', destructive: false },
@@ -1503,7 +1512,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     productName: product?.name || item.productName || item.name,
                     quantity: roundMoney(resolved.quantity),
                     // If no price was spoken, use the catalog price (per product unit).
-                    unitPrice: spokenPrice > 0 ? spokenPrice : (product ? (isSale ? product.salePrice : product.purchasePrice) : 0),
+                    unitPrice: spokenPrice > 0 ? spokenPrice : (product ? (isSale ? product.salePrice : purchaseRateFromCost(product, { claimsItc: canClaimGst })) : 0),
                     gstRate: product?.gstRate ?? Number(item.gstRate) ?? 0,
                     unit: resolved.unit,
                   }
@@ -1704,8 +1713,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           <div className="flex items-center gap-2 text-2xs text-muted-foreground">
                             {p.category && <Badge variant="outline" className="text-3xs py-0">{p.category}</Badge>}
                             <span>{formatINR(isSale ? p.salePrice : p.purchasePrice)}/{p.unit}</span>
-                            <span>•</span>
-                            <span>GST {p.gstRate}%</span>
+                            {showsGst && (
+                              <>
+                                <span>•</span>
+                                <span>GST {p.gstRate}%</span>
+                              </>
+                            )}
                           </div>
                         </div>
                         {/* The stock column while billing. For a service this
@@ -1898,7 +1911,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                               productId: product?.id || '',
                               productName: item.productName || item.name,
                               quantity: Number(item.quantity) || 1,
-                              unitPrice: product ? (isSale ? product.salePrice : product.purchasePrice) : (Number(item.unitPrice) || 0),
+                              unitPrice: product ? (isSale ? product.salePrice : purchaseRateFromCost(product, { claimsItc: canClaimGst })) : (Number(item.unitPrice) || 0),
                               gstRate: product?.gstRate || 0,
                               unit: product?.unit || item.unit || 'pcs',
                             }
@@ -2038,6 +2051,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             decimals={2}
                             placeholder="Price"
                           />
+                          {showsGst && (
                           <Select
                             value={String(item.gstRate)}
                             onValueChange={(v) => handleUpdateItem(i, 'gstRate', parseFloat(v))}
@@ -2055,6 +2069,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                               ))}
                             </SelectContent>
                           </Select>
+                          )}
                         </div>
                         {/* 🔒 V12: Inline, self-verifying math so the shopkeeper
                             instantly sees the real per-unit calculation. */}
@@ -2408,11 +2423,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 <div className="mt-3 pt-3 border-t border-border">
                   <div className="flex items-center gap-1.5">
                     <Label htmlFor="field-supplier-bill-no">Supplier&apos;s bill no.</Label>
-                    <InfoHint
+                    {canClaimGst && <InfoHint
                       label="Supplier's bill no."
                       text="Copy it exactly as printed. GST matches your purchase to the supplier's filing by this number, so a different number will not match."
-                    />
-                    {!invoiceNo.trim() && (
+                    />}
+                    {canClaimGst && !invoiceNo.trim() && (
                       <span className="text-2xs font-normal text-amber-600">needed to claim GST</span>
                     )}
                   </div>
@@ -2516,7 +2531,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               </div>
 
               {/* 🔒 R10-1: the tax head is DERIVED, not chosen.
-                  Editable only while the app genuinely cannot tell. */}
+                  Editable only while the app genuinely cannot tell.
+                  Phase 1c-2: hidden on a bill that carries no GST. */}
+              {showsGst && (
               <div className="rounded-lg bg-muted/50 p-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -2547,6 +2564,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </p>
                 )}
               </div>
+              )}
 
               {/*
                * REVERSE CHARGE — purchases only.
@@ -2568,7 +2586,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                * GSTR-3B sums cgst/sgst/igst on these rows too. Nothing about
                * the money maths changes; only who hands it over.
                */}
-              {!isSale && !isNote && (
+              {!isSale && !isNote && shopGstStatus !== 'unregistered' && (
                 <div className="rounded-lg bg-muted/50 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -2606,7 +2624,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 * to blocked would quietly cost shopkeepers money — the mirror
                 * of the fault this fixes.
                 */}
-              {!isSale && !isNote && totalGst > 0 && (
+              {!isSale && !isNote && canClaimGst && totalGst > 0 && (
                 <div className="rounded-lg bg-muted/50 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -2846,20 +2864,24 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     <span className="font-medium text-rose-600">-{formatINR(totalDiscount)}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">GST Total</span>
-                  <span className="font-medium">{formatINR(totalGst)}</span>
-                </div>
-                {!isInterState ? (
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
-                    <span>CGST + SGST</span>
-                    <span>{formatINR(cgst)} + {formatINR(sgst)}</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
-                    <span>IGST</span>
-                    <span>{formatINR(igst)}</span>
-                  </div>
+                {showsGst && (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">GST Total</span>
+                      <span className="font-medium">{formatINR(totalGst)}</span>
+                    </div>
+                    {!isInterState ? (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
+                        <span>CGST + SGST</span>
+                        <span>{formatINR(cgst)} + {formatINR(sgst)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
+                        <span>IGST</span>
+                        <span>{formatINR(igst)}</span>
+                      </div>
+                    )}
+                  </>
                 )}
                 <div className="border-t border-border pt-2 flex items-center justify-between">
                   <span className="font-semibold">Total</span>

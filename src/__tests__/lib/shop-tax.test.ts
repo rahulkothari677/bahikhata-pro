@@ -199,3 +199,60 @@ describe('guard — every bill calculation passes the shop\'s GST status', () =>
     expect(calls).toBeGreaterThanOrEqual(5)
   })
 })
+
+import { purchaseRateFromCost } from '@/lib/unit-profit'
+
+describe('purchaseRateFromCost() — no cost creep for a shop that cannot claim GST', () => {
+  test('₹241.50 saved cost @5% pre-fills ₹230 for a non-claiming shop, ₹241.50 as-is with credit', () => {
+    expect(purchaseRateFromCost({ purchasePrice: 241.5, gstRate: 5 }, { claimsItc: false })).toBe(230)
+    expect(purchaseRateFromCost({ purchasePrice: 230, gstRate: 5 }, { claimsItc: true })).toBe(230)
+  })
+  test('the case seen first-hand no longer creeps: buy again at the pre-filled rate → cost unchanged', () => {
+    const rate = purchaseRateFromCost({ purchasePrice: 241.5, gstRate: 5 }, { claimsItc: false })
+    expect(purchaseCostPerUnit({ unitPrice: rate, gstRate: 5 }, { claimsItc: false })).toBe(241.5)
+  })
+  test('sweep: ten purchase cycles never move the cost more than a paisa, every rate × many costs', () => {
+    const failures: string[] = []
+    for (const r of [0, 0.25, 3, 5, 12, 18, 28, 40]) {
+      for (let c = 1; c <= 3000; c += 7.37) {
+        const start = Math.round(c * 100) / 100
+        let cost = start
+        for (let i = 0; i < 10; i++) {
+          cost = purchaseCostPerUnit({ unitPrice: purchaseRateFromCost({ purchasePrice: cost, gstRate: r }, { claimsItc: false }), gstRate: r }, { claimsItc: false })
+        }
+        if (Math.abs(Math.round(cost * 100) - Math.round(start * 100)) > 1) {
+          failures.push(`₹${start} @${r}% → ₹${cost} after 10 purchases`)
+          if (failures.length > 10) break
+        }
+      }
+    }
+    expect(failures).toEqual([])
+  })
+})
+
+/** No purchase line pre-fills the product's cost directly (it must go through purchaseRateFromCost). */
+const RAW_COST_PREFILL = /unitPrice[^\n]*\b(?:product|p|matched)\.purchasePrice\b/
+const PREFILL_ALLOWED: Record<string, { count: number; why: string }> = {
+  'src/lib/scanner-enrich.ts': { count: 1, why: 'Server-side scan matching, used only when the scanned bill printed no price; the shop status is not passed in — Phase 10 (AI scan).' },
+  'src/lib/seed.ts': { count: 1, why: 'Sample data: sample costs are saved before GST and the seed adds GST on top.' },
+}
+describe('guard — purchase pre-fills go through purchaseRateFromCost()', () => {
+  test('catches the old shape and passes the new one', () => {
+    expect(RAW_COST_PREFILL.test("unitPrice: isSale ? product.salePrice : product.purchasePrice,")).toBe(true)
+    expect(RAW_COST_PREFILL.test("unitPrice: isSale ? product.salePrice : purchaseRateFromCost(product, { claimsItc }),")).toBe(false)
+  })
+  test('sweep', () => {
+    const root = path.join(__dirname, '..', '..')
+    const counts: Record<string, number> = {}
+    for (const file of sourceFiles(root)) {
+      const rel = path.relative(path.join(root, '..'), file).replace(/\\/g, '/')
+      const code = fs.readFileSync(file, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, b => b.replace(/[^\n]/g, ''))
+        .replace(/(^|[ \t])\/\/[^\n]*/gm, (_m, lead) => lead)
+      const n = code.split(/\r?\n/).filter(l => RAW_COST_PREFILL.test(l)).length
+      if (n) counts[rel] = n
+    }
+    expect(Object.keys(counts).filter(k => !PREFILL_ALLOWED[k])).toEqual([])
+    for (const [rel, { count }] of Object.entries(PREFILL_ALLOWED)) expect(counts[rel] ?? 0).toBe(count)
+  })
+})

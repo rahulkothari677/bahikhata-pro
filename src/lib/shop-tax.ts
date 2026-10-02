@@ -24,6 +24,8 @@
  * every supplier balance.
  */
 
+import { BILL_OF_SUPPLY_DECLARATION } from './composition-scheme'
+
 export type GstStatus = 'unregistered' | 'regular' | 'composition'
 
 export interface ShopTaxSetting {
@@ -89,4 +91,47 @@ export function resolveGstRegistration(
   if (requested === false) return { gstRegistered: false, clearComposition: true }
   if (typeof category === 'string') return { gstRegistered: true, clearComposition: false }
   return { gstRegistered: requested as boolean | undefined, clearComposition: false }
+}
+
+/**
+ * What the shop's own sale document is called, and what it must say. (Phase 1c-2)
+ *
+ *   regular       TAX INVOICE (Section 31; Rule 46)
+ *   composition   BILL OF SUPPLY, with the prescribed declaration on its face
+ *                 (Section 10(4) forbids collecting tax; Rule 49)
+ *   unregistered  BILL — a person who is not registered issues no GST
+ *                 document at all, so a plain bill / cash memo
+ *
+ * Every renderer (PDF, share image, settings preview, print view) took this
+ * from a hard-coded "TAX INVOICE" — including a composition shop's bill.
+ */
+
+export function saleDocumentTitle(status: GstStatus): { title: string; declaration: string | null } {
+  if (status === 'composition') return { title: 'BILL OF SUPPLY', declaration: BILL_OF_SUPPLY_DECLARATION }
+  if (status === 'unregistered') return { title: 'BILL', declaration: null }
+  return { title: 'TAX INVOICE', declaration: null }
+}
+
+/** The title for any bill type: notes and estimates are never "tax invoices". */
+export function documentTitle(type: string | null | undefined, status: GstStatus): { title: string; declaration: string | null } {
+  if (type === 'purchase') return { title: 'PURCHASE BILL', declaration: null }
+  if (type === 'debit-note') return { title: 'DEBIT NOTE', declaration: null }
+  if (type === 'credit-note') return { title: 'CREDIT NOTE', declaration: null }
+  if (type === 'estimate') return { title: 'ESTIMATE', declaration: null }
+  return saleDocumentTitle(status)
+}
+
+/**
+ * Should a saved bill's screen and print show GST columns (rate, HSN, GST
+ * type)? Yes on a supplier's bill, on a shop that charges GST, and on any bill
+ * that actually carries tax — an old bill from before the shop's status
+ * changed keeps showing what it charged. (Phase 1c-2)
+ */
+export function billCarriesGstColumns(
+  bill: { type?: string | null; cgst?: number | null; sgst?: number | null; igst?: number | null },
+  status: GstStatus,
+): boolean {
+  if (!isOutwardDocument(bill.type || 'sale')) return true
+  if (chargesGstOnSales(status)) return true
+  return (Number(bill.cgst) || 0) + (Number(bill.sgst) || 0) + (Number(bill.igst) || 0) > 0
 }

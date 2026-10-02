@@ -36,6 +36,8 @@ import {
   FileText, BarChart3, Sparkles, Store,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { gstStatus } from '@/lib/shop-tax'
+import { useSetting } from '@/hooks/use-setting'
 
 // 🔒 V26 P9: Sub-headers for the Tools section, grouped by subcategory.
 // Same SECTION_META as MoreScreen — consistent visual language across platforms.
@@ -72,6 +74,9 @@ export function Sidebar() {
 
   const isOwner = session?.user?.role === 'owner'
   const isFounder = useAppStore((s) => s.isFounder)
+  // Phase 1c-2: hide GST returns that are not this shop's (lib/shop-tax.ts).
+  const { setting: shopSetting } = useSetting()
+  const shopGst = shopSetting ? gstStatus(shopSetting) : undefined
   // 🔒 V26 N3: Use the SAME feature-flag system as MoreScreen (app-store user toggles).
   // Was: used useFeatureFlags().isFlagEnabled (server kill-switches, snake_case)
   // → 'aiScanner' (camelCase) was undefined → ?? true → AI features NEVER hidden on desktop.
@@ -82,9 +87,9 @@ export function Sidebar() {
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner, isFounder, platform: 'desktop' }
+      }, isOwner, isFounder, platform: 'desktop', gstStatus: shopGst }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isOwner, isFounder])
+  }, [canAccess, isOwner, isFounder, shopGst])
 
   const toolsItems = useMemo(() => {
     return filterByPermissions(
@@ -92,9 +97,9 @@ export function Sidebar() {
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner, isFounder, platform: 'desktop' }
+      }, isOwner, isFounder, platform: 'desktop', gstStatus: shopGst }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isOwner, isFounder])
+  }, [canAccess, isOwner, isFounder, shopGst])
 
   // 🔒 V26 P9: Group tools by subcategory for sub-headers
   const groupedTools = useMemo(() => {

@@ -239,6 +239,12 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
     y + 44,
   )
   y += 100
+  // A Bill of Supply must carry the composition declaration (Phase 1c-2).
+  if (doc.declaration) {
+    font(ctx, 22, 400)
+    ctx.fillText(clip(ctx, doc.declaration, W - 2 * PAD), PAD, y - 18)
+    y += 30
+  }
 
   // ── billed to ────────────────────────────────────────────────────────
   if (doc.party) {

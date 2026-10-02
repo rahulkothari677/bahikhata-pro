@@ -5,8 +5,8 @@ import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-produ
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSetting } from '@/hooks/use-setting'
-import { unitProfit, stockPotentialProfit } from '@/lib/unit-profit'
-import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
+import { unitProfit, stockPotentialProfit, purchaseRateFromCost } from '@/lib/unit-profit'
+import { gstStatus, chargesGstOnSales, claimsInputCredit } from '@/lib/shop-tax'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -198,7 +198,9 @@ export function Inventory() {
         * component renders nothing when there is nothing to review, so a
         * healthy shop never sees it.
         */}
-      <ExemptReclassifyReview />
+      {/* Phase 1c-2: a shop that is not registered files no GST, so its
+          items need no GST-rules review. */}
+      {gstStatus(setting) !== 'unregistered' && <ExemptReclassifyReview />}
 
       {/* Category navigation */}
       <Card className="shadow-card border-border/60">
@@ -494,7 +496,7 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           productId: p.id,
           name: p.name,
           quantity: shortfall,
-          unitPrice: p.purchasePrice || 0,
+          unitPrice: purchaseRateFromCost(p, { claimsItc: claimsInputCredit(gstStatus(setting)) }),
           gstRate: p.gstRate || 0,
           unit: p.unit || 'pcs',
           // The stored cost is the before-GST figure (what profit and stock
