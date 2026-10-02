@@ -6,6 +6,7 @@ import { apiError } from '@/lib/api-error'
 import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
 import { canEnterCompositionFrom, financialYearStart } from '@/lib/composition-window'
 import { resolveGstRegistration } from '@/lib/shop-tax'
+import { GSTIN_PATTERN } from '@/lib/gst-states'
 
 // GET /api/settings
 export async function GET() {
@@ -39,7 +40,7 @@ export async function PUT(req: NextRequest) {
     // Now: sanitize each field with length limits + format validation.
     const MAX_NAME = 200
     const MAX_TEXT = 2000
-    const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+    const GSTIN_REGEX = GSTIN_PATTERN  // Phase 2b: the one copy, lib/gst-states.ts
 
     // 🔒 V26 R13 (Phase 5): Non-string fallthrough now rejects with 400.
     // Was: `typeof body.X === 'string' ? body.X.slice(0, N) : body.X` →

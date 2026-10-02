@@ -183,3 +183,53 @@ export function deriveInterStateFromStates(
   const k = supplyKind({ shop: { state: shopState }, party: { state: partyState } })
   return { isInterState: k.isInterState, indeterminate: k.indeterminate }
 }
+
+// ── GSTIN (Phase 2b, #143) ─────────────────────────────────────────────────
+
+/**
+ * The GSTIN format: 2-digit state code, 10-character PAN, entity number,
+ * the letter Z, and a check character. The ONE copy — it used to live in
+ * both lib/utils.ts and the settings route.
+ */
+export const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
+
+const GSTIN_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+/** The 15th (check) character GSTN computes from the first 14 (mod-36 Luhn). */
+export function gstinCheckChar(first14: string): string | null {
+  if (first14.length !== 14) return null
+  let sum = 0
+  for (let i = 0; i < 14; i++) {
+    const v = GSTIN_CHARS.indexOf(first14[i])
+    if (v < 0) return null
+    const p = v * ((i % 2) + 1)
+    sum += Math.floor(p / 36) + (p % 36)
+  }
+  return GSTIN_CHARS[(36 - (sum % 36)) % 36]
+}
+
+/**
+ * Is this a usable GSTIN, and which state is it from? Plain-words reasons, so
+ * a form can say what to fix. A wrong check character is reported but is a
+ * warning for the caller to show — old records can carry one.
+ */
+export function checkGstin(input: string | null | undefined): {
+  ok: boolean
+  reason: string | null
+  stateCode: string | null
+  checksumOk: boolean
+} {
+  const g = String(input || '').trim().toUpperCase()
+  if (!g) return { ok: false, reason: null, stateCode: null, checksumOk: false }
+  if (g.length !== 15) return { ok: false, reason: `A GSTIN has 15 characters — this has ${g.length}.`, stateCode: null, checksumOk: false }
+  if (!GSTIN_PATTERN.test(g)) return { ok: false, reason: 'This is not in the GSTIN format — check for a typo.', stateCode: null, checksumOk: false }
+  const stateCode = gstinStateCode(g)
+  if (!stateCode) return { ok: false, reason: `"${g.slice(0, 2)}" is not a state code in use.`, stateCode: null, checksumOk: false }
+  const checksumOk = gstinCheckChar(g.slice(0, 14)) === g[14]
+  return {
+    ok: true,
+    reason: checksumOk ? null : 'The last character does not match — check for a typo.',
+    stateCode,
+    checksumOk,
+  }
+}

@@ -63,6 +63,7 @@ import { refillPrice, resolveLineIncludesGst } from '@/lib/refill-line'
 import { lineTaxable } from '@/lib/line-taxable'
 import { gstStatus, chargesGstOnSales, claimsInputCredit, isOutwardDocument } from '@/lib/shop-tax'
 import { purchaseCostPerUnit, purchaseRateFromCost } from '@/lib/unit-profit'
+import { StateField, GstinField } from '@/components/common/StateField'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -3116,19 +3117,18 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
             <Label htmlFor="field-name">Name *</Label>
             <Input id="field-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="mt-1" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="field-phone">Phone</Label>
-              <Input id="field-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <Label htmlFor="field-state">State</Label>
-              <Input id="field-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className="mt-1" />
-            </div>
+          <div>
+            <Label htmlFor="field-phone">Phone</Label>
+            <Input id="field-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
           </div>
+          {/* GSTIN before State: its first two digits fill the state (Phase 2b). */}
           <div>
             <Label htmlFor="field-gstin">GSTIN</Label>
-            <Input id="field-gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} className="mt-1 font-mono" />
+            <GstinField id="field-gstin" value={form.gstin} onChange={(g, st) => setForm({ ...form, gstin: g, ...(st ? { state: st } : {}) })} />
+          </div>
+          <div>
+            <Label htmlFor="field-state">State</Label>
+            <StateField id="field-state" value={form.state} onChange={(v) => setForm({ ...form, state: v })} gstin={form.gstin} />
           </div>
           <div>
             <Label htmlFor="field-address">Address</Label>

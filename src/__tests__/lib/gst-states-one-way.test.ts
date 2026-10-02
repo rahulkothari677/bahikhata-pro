@@ -15,6 +15,7 @@ import fs from 'fs'
 import path from 'path'
 import {
   INDIAN_STATES, resolveStateCode, gstinStateCode, stateCodeOf, placeOfSupplyCode, supplyKind, stateNameForCode,
+  checkGstin, gstinCheckChar,
 } from '@/lib/gst-states'
 
 describe('the official list', () => {
@@ -155,5 +156,39 @@ describe('guard — states are compared by code, through named fields', () => {
       })
     }
     expect(offenders).toEqual([])
+  })
+})
+
+
+describe('checkGstin() — Phase 2b (#143)', () => {
+  test('published sample GSTINs pass, with their state', () => {
+    expect(checkGstin('27AAPFU0939F1ZV')).toMatchObject({ ok: true, checksumOk: true, stateCode: '27', reason: null })
+    expect(checkGstin('29aagcb7383j1z4')).toMatchObject({ ok: true, checksumOk: true, stateCode: '29' })
+  })
+  test('the check character is the mod-36 one GSTN computes', () => {
+    expect(gstinCheckChar('27AAPFU0939F1Z')).toBe('V')
+    expect(gstinCheckChar('short')).toBeNull()
+  })
+  test('a wrong check character is usable but flagged', () => {
+    expect(checkGstin('27AAPFU0939F1ZA')).toMatchObject({ ok: true, checksumOk: false, stateCode: '27' })
+    expect(checkGstin('27AAPFU0939F1ZA').reason).toMatch(/last character/)
+  })
+  test('wrong length, wrong format and a state code not in use are refused with the reason', () => {
+    expect(checkGstin('27AAPFU0939F1Z').reason).toMatch(/15 characters/)
+    expect(checkGstin('27AAPFU0939F1XV').reason).toMatch(/format/)
+    expect(checkGstin('28AAPFU0939F1ZV').reason).toMatch(/not a state code in use/)
+    expect(checkGstin('').ok).toBe(false)
+  })
+})
+
+describe('guard — no free-text state box, one GSTIN pattern', () => {
+  const root = path.join(__dirname, '..', '..')
+  const files = sourceFiles(root).map(f => ({ rel: path.relative(path.join(root, '..'), f).replace(/\\/g, '/'), src: fs.readFileSync(f, 'utf8') }))
+  test('no <Input id="field-state"> anywhere — states are chosen from the list', () => {
+    expect(files.filter(f => /<Input[^>]*id="field-state"/.test(f.src)).map(f => f.rel)).toEqual([])
+  })
+  test('the GSTIN format is written once, in gst-states.ts', () => {
+    const copies = files.filter(f => codeLines(f.src).some(l => /\[A-Z\]\{5\}\[0-9\]\{4\}/.test(l))).map(f => f.rel)
+    expect(copies).toEqual(['src/lib/gst-states.ts'])
   })
 })

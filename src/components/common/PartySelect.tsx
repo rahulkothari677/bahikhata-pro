@@ -13,6 +13,7 @@ import { cn, getInitials } from '@/lib/utils'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { readError } from '@/lib/read-error'
+import { StateField, GstinField } from '@/components/common/StateField'
 
 type PartyType = 'customer' | 'supplier' | 'both'
 
@@ -322,7 +323,7 @@ function AddPartyDialog({ open, onOpenChange, defaultType, onSuccess }: {
               <p className="text-xs text-rose-600 mt-1">{dupError.message}</p>
             )}
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <Label htmlFor="field-phone">Phone</Label>
             <Input
               id="field-phone"
@@ -337,12 +338,12 @@ function AddPartyDialog({ open, onOpenChange, defaultType, onSuccess }: {
             )}
           </div>
           <div>
-            <Label htmlFor="field-state">State</Label>
-            <Input id="field-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="e.g. Uttar Pradesh" />
-          </div>
-          <div className="sm:col-span-2">
             <Label htmlFor="field-gstin">GSTIN</Label>
-            <Input id="field-gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="15-digit GST number (optional)" className="font-mono" />
+            <GstinField id="field-gstin" value={form.gstin} onChange={(g, st) => setForm({ ...form, gstin: g, ...(st ? { state: st } : {}) })} placeholder="15-digit GST number (optional)" />
+          </div>
+          <div>
+            <Label htmlFor="field-state">State</Label>
+            <StateField id="field-state" value={form.state} onChange={(v) => setForm({ ...form, state: v })} gstin={form.gstin} />
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="field-address">Address</Label>

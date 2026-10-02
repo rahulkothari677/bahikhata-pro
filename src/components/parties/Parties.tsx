@@ -28,6 +28,7 @@ import { haptic } from '@/lib/haptic'
 import { BulkRemindersModal } from '@/components/parties/BulkRemindersModal'
 import { readError } from '@/lib/read-error'
 import { describeSaveOutcome } from '@/lib/edit-conflict'
+import { StateField, GstinField } from '@/components/common/StateField'
 
 export function Parties() {
   const {
@@ -627,7 +628,7 @@ function PartyDialog({ open, onOpenChange, onSuccess, party }: {
               placeholder={form.type === 'supplier' ? '0 (amount you owe them)' : '0 (amount they owe you)'}
             />
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <Label htmlFor="field-phone">Phone</Label>
             <Input
               id="field-phone"
@@ -642,12 +643,12 @@ function PartyDialog({ open, onOpenChange, onSuccess, party }: {
             )}
           </div>
           <div>
-            <Label htmlFor="field-state">State</Label>
-            <Input id="field-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="e.g. Uttar Pradesh" />
-          </div>
-          <div className="sm:col-span-2">
             <Label htmlFor="field-gstin">GSTIN</Label>
-            <Input id="field-gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="15-digit GST number" className="font-mono" />
+            <GstinField id="field-gstin" value={form.gstin} onChange={(g, st) => setForm({ ...form, gstin: g, ...(st ? { state: st } : {}) })} />
+          </div>
+          <div>
+            <Label htmlFor="field-state">State</Label>
+            <StateField id="field-state" value={form.state} onChange={(v) => setForm({ ...form, state: v })} gstin={form.gstin} />
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="field-address">Address</Label>

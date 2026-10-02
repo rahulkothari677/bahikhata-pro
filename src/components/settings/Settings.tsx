@@ -47,6 +47,7 @@ import { PaymentQrField } from '@/components/settings/PaymentQrField'
 import { CustomFieldsCard } from '@/components/settings/CustomFieldsCard'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
 import { istDateString } from '@/lib/timezone'
+import { StateField, GstinField } from '@/components/common/StateField'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
   {
@@ -1216,12 +1217,12 @@ export function Settings({
             {gstRegistered && (
               <div>
                 <Label htmlFor="field-gstin">GSTIN</Label>
-                <Input id="field-gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="15-digit GST number" className="font-mono uppercase" />
+                <GstinField id="field-gstin" value={form.gstin} onChange={(g, st) => setForm({ ...form, gstin: g, ...(st ? { state: st } : {}) })} />
               </div>
             )}
             <div>
               <Label htmlFor="field-state">State</Label>
-              <Input id="field-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="e.g. Uttar Pradesh" />
+              <StateField id="field-state" value={form.state} onChange={(v) => setForm({ ...form, state: v })} gstin={gstRegistered ? form.gstin : null} />
             </div>
             <div className="sm:col-span-2">
               <Label htmlFor="field-address">Address</Label>
