@@ -7,7 +7,7 @@ import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
-import { deriveStateCode } from '@/lib/gst'
+import { stateCodeOf } from '@/lib/gst'
 import { getAdvancesForPeriod } from '@/lib/advances-for-period'
 import { buildAmendments, filedInvoicesFrom, type AmendmentTables } from '@/lib/gstr1-amendments'
 import { gstr1aWindow, correctionFitsGstr1a } from '@/lib/gstr1a-window'
@@ -77,7 +77,16 @@ export async function GET(req: NextRequest) {
 
     const shopGstin = setting?.gstin || null
     const shopState = setting?.state || null
-    const shopStateCode = deriveStateCode(null, null, shopGstin, shopState)
+    const shopStateCode = stateCodeOf({ gstin: shopGstin, state: shopState })
+    // Phase 2 (#118): refuse rather than write place of supply "00", which
+    // the portal rejects. A registered shop's GSTIN always gives the code;
+    // this only stops a shop with neither a GSTIN nor a recognised state.
+    if (!shopStateCode) {
+      return NextResponse.json({
+        error: 'Shop state not set',
+        message: 'Add your GSTIN or your state in Shop profile — GSTR-1 needs it for the place of supply.',
+      }, { status: 400 })
+    }
 
     const shop: ShopInfo = {
       gstin: shopGstin,
@@ -294,7 +303,8 @@ export async function GET(req: NextRequest) {
 
       const current = new Map(
         live.map((t) => {
-          const partyState = deriveStateCode(t.party?.state || null, null, t.party?.gstin || null, null)
+          // Phase 2: named fields — this passed the state where the GSTIN goes.
+          const partyState = stateCodeOf(t.party)
           return [String(t.invoiceNo), {
             inum: String(t.invoiceNo),
             idt: formatPortalDateForAmendment(t.date),
@@ -418,7 +428,8 @@ export async function GET(req: NextRequest) {
         ])
         const ownCurrent = new Map(
           ownLive.map((t) => {
-            const partyState = deriveStateCode(t.party?.state || null, null, t.party?.gstin || null, null)
+            // Phase 2: named fields — this passed the state where the GSTIN goes.
+          const partyState = stateCodeOf(t.party)
             return [String(t.invoiceNo), {
               inum: String(t.invoiceNo),
               idt: formatPortalDateForAmendment(t.date),
@@ -584,7 +595,16 @@ export async function POST(req: NextRequest) {
     })
     const shopGstin = setting?.gstin || null
     const shopState = setting?.state || null
-    const shopStateCode = deriveStateCode(null, null, shopGstin, shopState)
+    const shopStateCode = stateCodeOf({ gstin: shopGstin, state: shopState })
+    // Phase 2 (#118): refuse rather than write place of supply "00", which
+    // the portal rejects. A registered shop's GSTIN always gives the code;
+    // this only stops a shop with neither a GSTIN nor a recognised state.
+    if (!shopStateCode) {
+      return NextResponse.json({
+        error: 'Shop state not set',
+        message: 'Add your GSTIN or your state in Shop profile — GSTR-1 needs it for the place of supply.',
+      }, { status: 400 })
+    }
     const shop: ShopInfo = { gstin: shopGstin, state: shopState, stateCode: shopStateCode }
 
     // 🔒 V26 N9: Fetch prior-FY outward turnover for the `gt` field (same as GET).

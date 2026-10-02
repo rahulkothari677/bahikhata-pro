@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { istMonthStartOffset } from '@/lib/timezone'
-import { deriveStateCode } from '@/lib/gst'
+import { stateCodeOf } from '@/lib/gst'
 import { apiError } from '@/lib/api-error'
 import { reconcileReturns } from '@/lib/gst-reconciliation'
 import { getAdvancesForPeriod } from '@/lib/advances-for-period'
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     const periodStart = istMonthStartOffset(monthDate, 0)
     const periodEnd = istMonthStartOffset(monthDate, 1)
     const setting = await db.setting.findUnique({ where: { userId }, select: { gstin: true, state: true } })
-    const shopStateCode = deriveStateCode(null, null, setting?.gstin || null, setting?.state || null)
+    const shopStateCode = stateCodeOf(setting)
     const { totals } = await getAdvancesForPeriod(userId, periodStart, periodEnd, shopStateCode)
 
     const result = reconcileReturns({

@@ -46,19 +46,29 @@ describe('deriveInterStateFromStates', () => {
     })
   })
 
-  test('a missing state on either side is indeterminate, never a silent guess', () => {
+  /*
+   * Phase 2 (2 Oct 2026) changed ONE case, by law, not by taste. A buyer with
+   * no recorded state is not "unknown": IGST Act s.10(1)(ca) puts the place of
+   * supply at the supplier's location when no address is recorded (verified,
+   * Downloadseports\GST law verified September 2026.md). So only a missing
+   * SHOP state is indeterminate now.
+   */
+  test('a missing SHOP state is indeterminate, never a silent guess', () => {
     for (const pair of [
-      ['Maharashtra', null],
-      ['Maharashtra', ''],
-      ['Maharashtra', '   '],
       [null, 'Gujarat'],
+      ['', 'Gujarat'],
+      ['   ', 'Gujarat'],
       [undefined, undefined],
     ] as Array<[string | null | undefined, string | null | undefined]>) {
       const result = deriveInterStateFromStates(pair[0], pair[1])
       expect(result.indeterminate).toBe(true)
-      // Indeterminate still defaults to intra-state, which is what the server
-      // has always stored — the UI is what asks the user in this case.
       expect(result.isInterState).toBe(false)
+    }
+  })
+
+  test("a buyer with no recorded state is at the shop's own state (s.10(1)(ca)) — intra-state, decided", () => {
+    for (const party of [null, '', '   ', undefined]) {
+      expect(deriveInterStateFromStates('Maharashtra', party)).toEqual({ isInterState: false, indeterminate: false })
     }
   })
 })
@@ -66,7 +76,7 @@ describe('deriveInterStateFromStates', () => {
 describe('one definition, used by both the screen and the server', () => {
   test('the server helper delegates to the shared rule instead of re-implementing it', () => {
     const gst = readStripped('lib/gst.ts')
-    expect(gst).toMatch(/deriveInterStateFromStates\(/)
+    expect(gst).toMatch(/supplyKind\(/)
     // The old inline comparison must be gone — two copies is how they drift.
     expect(gst).not.toMatch(/shopState\.toLowerCase\(\) !== partyState\.toLowerCase\(\)/)
   })
@@ -76,7 +86,7 @@ describe('one definition, used by both the screen and the server', () => {
     'components/ledger/TransactionDetail.tsx',
   ])('%s uses the shared rule', (rel) => {
     const src = readStripped(rel)
-    expect(src).toMatch(/deriveInterStateFromStates/)
+    expect(src).toMatch(/supplyKind\(/)
   })
 })
 

@@ -6,7 +6,7 @@ import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart, getISTDateParts, isSameISTMonth, istDateString, istYearMonth, IST_OFFSET_MS } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
-import { deriveStateCode } from '@/lib/gst'
+import { placeOfSupplyCode } from '@/lib/gst'
 // 🔒 AUDIT G4: the B2CL threshold must come from the SAME constant
 // gstr1-builder uses, not a literal repeated here. See the note at its use.
 import { B2CL_INVOICE_VALUE_THRESHOLD } from '@/lib/gstr1-builder'
@@ -343,7 +343,7 @@ export async function GET(req: NextRequest) {
         iamt: r.igst,
         qty: r.quantity,
       }))
-      const posCode = deriveStateCode(t.party?.gstin || null, t.party?.state || null, setting?.gstin || null, setting?.state || null) || '99'
+      const posCode = placeOfSupplyCode({ shop: setting, party: t.party }) || '99'
       const noteEntry = {
         nt_num: t.invoiceNo || t.id.slice(-8),
         nt_dt: istDateString(t.date),

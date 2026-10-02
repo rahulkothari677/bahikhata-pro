@@ -34,7 +34,7 @@ import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
 import { resolveInvoiceDesign } from '@/lib/invoice-presets'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
-import { deriveStateCode } from '@/lib/gst-states'
+import { stateCodeOf } from '@/lib/gst-states'
 import { buildInvoiceDocument, invoiceShopFromSetting } from '@/lib/invoice-document'
 import { CustomFieldInputs } from '@/components/common/CustomFieldInputs'
 import type { CustomFieldDef } from '@/lib/custom-fields'
@@ -43,7 +43,7 @@ import { useSetting } from '@/hooks/use-setting'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { NumberField } from '@/components/ui/number-field'
-import { deriveInterStateFromStates } from '@/lib/gst-states'
+import { supplyKind } from '@/lib/gst-states'
 import { GST_RATES } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice } from '@/lib/refill-line'
@@ -724,7 +724,7 @@ export function TransactionDetail() {
              * where the goods are moving. Absent, the check falls back to the
              * central ₹50,000 — safe in the direction that matters.
              */
-            stateCode={deriveStateCode(null, null, settingData?.setting?.gstin, settingData?.setting?.state)}
+            stateCode={stateCodeOf(settingData?.setting)}
           />
 
           {/* Party + meta info */}
@@ -1236,10 +1236,11 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   // Same derivation the server will run on save (see gst-states.ts), so the
   // GST type shown here cannot disagree with what gets stored.
   const editSelectedParty = parties.find((p: any) => p.id === form.partyId)
-  const editInterState = deriveInterStateFromStates(
-    editSettingData?.setting?.state,
-    editSelectedParty?.state,
-  )
+  // Phase 2: the same code-based rule as the bill screen and the server.
+  const editInterState = supplyKind({
+    shop: { gstin: editSettingData?.setting?.gstin, state: editSettingData?.setting?.state },
+    party: editSelectedParty ? { gstin: editSelectedParty.gstin, state: editSelectedParty.state } : null,
+  })
 
   useEffect(() => {
     if (open && transaction) {

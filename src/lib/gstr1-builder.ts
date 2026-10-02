@@ -30,7 +30,7 @@
 
 import { roundMoney } from '@/lib/money'
 import { lineTaxable } from '@/lib/line-taxable'
-import { deriveStateCode } from '@/lib/gst-states'
+import { placeOfSupplyCode } from '@/lib/gst-states'
 import { classifySupplyLine, isTaxableSupply } from '@/lib/supply-classification'
 import { advanceTax, isTaxableAdvance, type AdvanceReceipt } from '@/lib/advance-tax'
 
@@ -45,8 +45,11 @@ import { advanceTax, isTaxableAdvance, type AdvanceReceipt } from '@/lib/advance
 // code, so those are unchanged.
 function placeOfSupply(txn: Gstr1Transaction, shop: ShopInfo): string {
   return (
-    deriveStateCode(txn.partyGstin, txn.partyState, shop.gstin, shop.state) ||
+    placeOfSupplyCode({ shop: { gstin: shop.gstin, state: shop.state }, party: { gstin: txn.partyGstin, state: txn.partyState } }) ||
     shop.stateCode ||
+    // Never reached from the GSTR-1 route, which refuses to build without the
+    // shop's state (Phase 2, #118: "00" was written for B2C sales and the
+    // portal rejects it). Kept only so the pure builder stays total.
     '00'
   )
 }

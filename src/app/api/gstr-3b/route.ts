@@ -5,7 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { classifySupplyLine } from '@/lib/supply-classification'
 import { getAdvancesForPeriod } from '@/lib/advances-for-period'
-import { deriveStateCode } from '@/lib/gst'
+import { stateCodeOf } from '@/lib/gst'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
@@ -204,7 +204,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     where: { userId },
     select: { gstin: true, state: true },
   })
-  const shopStateCode = deriveStateCode(null, null, shopSetting?.gstin || null, shopSetting?.state || null)
+  const shopStateCode = stateCodeOf(shopSetting)
   const { totals: advanceTotals } = await getAdvancesForPeriod(userId, periodStart, periodEnd, shopStateCode)
 
   // === Compute structured 3B values ===

@@ -4,7 +4,7 @@ import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
-import { deriveStateCode } from '@/lib/gst'
+import { stateCodeOf } from '@/lib/gst'
 import { validateBody, createIrnSchema } from '@/lib/validation'
 import {
   buildIrnRequest,
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
 
     const shopGstin = setting?.gstin || null
     const shopState = setting?.state || null
-    const shopStateCode = deriveStateCode(null, null, shopGstin, shopState)
+    const shopStateCode = stateCodeOf({ gstin: shopGstin, state: shopState })
 
     const shop: EInvoiceShopInfo = {
       gstin: shopGstin,

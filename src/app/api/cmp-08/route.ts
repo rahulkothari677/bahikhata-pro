@@ -9,7 +9,7 @@ import {
   compositionTaxFor, compositionLimitFor, cmp08DueDate,
   COMPOSITION_RATES, type CompositionCategory,
 } from '@/lib/composition-scheme'
-import { deriveStateCode } from '@/lib/gst'
+import { stateCodeOf } from '@/lib/gst'
 
 /**
  * CMP-08 — the quarterly statement a composition dealer files.
@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
       (sales._sum.totalAmount || 0) - (creditNotes._sum.totalAmount || 0),
     )
     const tax = compositionTaxFor(turnover, category)
-    const stateCode = deriveStateCode(null, null, setting?.gstin || null, setting?.state || null)
+    const stateCode = stateCodeOf(setting)
     const limit = compositionLimitFor(category, stateCode)
 
     return NextResponse.json({

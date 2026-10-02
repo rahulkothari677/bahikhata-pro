@@ -29,7 +29,7 @@ import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { checkMixedSupply } from '@/lib/mixed-supply-invoice'
-import { deriveInterStateFromStates } from '@/lib/gst-states'
+import { supplyKind, stateCodeOf, stateNameForCode } from '@/lib/gst-states'
 import { useSetting } from '@/hooks/use-setting'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { track, EVENTS } from '@/lib/analytics'
@@ -577,7 +577,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   //
   // Same pure function the server calls, so the two cannot drift.
   const shopState: string | undefined = settingData?.setting?.state
-  const derivedInterState = deriveInterStateFromStates(shopState, selectedParty?.state)
+  // Phase 2 (#118): state CODES, GSTIN first — "UP" and "Uttar Pradesh" are
+  // one state, and a buyer with no state recorded is at the shop's own state
+  // (IGST Act s.10(1)(ca)). Same supplyKind() the server and GSTR-1 use.
+  const derivedInterState = supplyKind({
+    shop: { gstin: settingData?.setting?.gstin, state: shopState },
+    party: selectedParty ? { gstin: selectedParty.gstin, state: selectedParty.state } : null,
+  })
+  const partyHasNoState = !!selectedParty && !stateCodeOf({ gstin: selectedParty.gstin, state: selectedParty.state })
 
   /*
    * #91 — a registered buyer cannot take taxable and exempt items on ONE bill.
@@ -2540,10 +2547,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     <Label className="text-sm" htmlFor="field-inter-state-igst">GST type</Label>
                     <p className="text-2xs text-muted-foreground mt-0.5">
                       {derivedInterState.indeterminate
-                        ? 'Set the state to decide this automatically'
+                        ? 'Set your shop\u2019s state to decide this automatically'
                         : derivedInterState.isInterState
-                          ? `${shopState} \u2192 ${selectedParty?.state} \u2014 different states`
-                          : `Both in ${shopState}`}
+                          ? `${stateNameForCode(derivedInterState.shopCode)} \u2192 ${stateNameForCode(derivedInterState.posCode)} \u2014 different states`
+                          : `Both in ${stateNameForCode(derivedInterState.shopCode)}`}
                     </p>
                   </div>
                   {derivedInterState.indeterminate ? (
@@ -2554,13 +2561,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </Badge>
                   )}
                 </div>
-                {derivedInterState.indeterminate && (
+                {derivedInterState.indeterminate ? (
                   <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
-                    {!shopState
-                      ? 'Your shop\u2019s state is not set \u2014 add it in Settings so GST is worked out for you.'
-                      : selectedParty
-                        ? `${selectedParty.name} has no state saved \u2014 add it on their profile so GST is worked out for you.`
-                        : 'No customer selected, so this is treated as a local sale.'}
+                    Your shop&apos;s state is not set &mdash; add it in Shop profile so GST is worked out for you.
+                  </p>
+                ) : partyHasNoState && (
+                  <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                    {`${selectedParty?.name} has no state saved \u2014 counted as a local sale. Add it on their profile if they are in another state.`}
                   </p>
                 )}
               </div>

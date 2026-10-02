@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { deriveInterStateFromStates } from './gst-states'
+import { supplyKind } from './gst-states'
 
 /**
  * 🔒 AUDIT FIX H3 (v2 audit): Shared GST inter-state derivation helper.
@@ -57,16 +57,20 @@ export async function deriveInterStateStatus(
   // other warm instances for up to 5 min after a state change).
   const shopSetting = await db.setting.findUnique({
     where: { userId },
-    select: { state: true },
+    select: { state: true, gstin: true },
   })
   // 🔒 R10-1 (2026-07-22): the comparison itself now lives in the pure
   // gst-states module so the sale-entry screen can show the SAME answer this
   // function will compute. Duplicating the rule client-side is what let the
   // screen and the server disagree about the tax head.
-  const { isInterState, indeterminate } = deriveInterStateFromStates(
-    shopSetting?.state,
-    party?.state,
-  )
+  //
+  // Phase 2 (#118): compares state CODES — GSTIN prefix first, then the
+  // recorded state with aliases ("UP" = "Uttar Pradesh") — via supplyKind,
+  // the same rule GSTR-1 uses for the place of supply.
+  const { isInterState, indeterminate } = supplyKind({
+    shop: { gstin: shopSetting?.gstin, state: shopSetting?.state },
+    party: party ? { gstin: party.gstin, state: party.state } : null,
+  })
 
   return { isInterState, party, indeterminate }
 }
@@ -86,4 +90,4 @@ export async function deriveInterStateStatus(
 // module gst-states.ts (no db import) so gstr1-builder.ts stays pure and its
 // tests run without DATABASE_URL. Re-exported here so all existing call sites
 // (`import { deriveStateCode } from '@/lib/gst'`) keep working unchanged.
-export { stateNameToCode, deriveStateCode, deriveInterStateFromStates } from './gst-states'
+export { stateNameToCode, deriveStateCode, deriveInterStateFromStates, resolveStateCode, stateCodeOf, placeOfSupplyCode, supplyKind, gstinStateCode, stateNameForCode, INDIAN_STATES } from './gst-states'

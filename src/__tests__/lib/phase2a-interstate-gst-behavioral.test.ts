@@ -63,9 +63,12 @@ describe('🔒 Phase 2a — Inter-state GST derivation', () => {
   // ═════════════════════════════════════════════════════════════════
   // 4. Party state missing → indeterminate
   // ═════════════════════════════════════════════════════════════════
-  test('party state missing → indeterminate (client override honored)', () => {
+  // Phase 2 (2 Oct 2026): by IGST Act s.10(1)(ca) a buyer with no recorded
+  // address is at the supplier's location — decided, intra-state. Only a
+  // missing SHOP state leaves the answer open (see the cases below).
+  test('party state missing → intra-state at the shop, decided (s.10(1)(ca))', () => {
     const r = deriveInterStateFromStates('Maharashtra', null)
-    expect(r.indeterminate).toBe(true)
+    expect(r.indeterminate).toBe(false)
     expect(r.isInterState).toBe(false)
   })
 
@@ -104,9 +107,10 @@ describe('🔒 Phase 2a — Inter-state GST derivation', () => {
   // ═════════════════════════════════════════════════════════════════
   // 8. Empty string treated as missing → indeterminate
   // ═════════════════════════════════════════════════════════════════
-  test('empty string treated as missing → indeterminate', () => {
+  test('empty string treated as missing', () => {
     expect(deriveInterStateFromStates('', 'Gujarat').indeterminate).toBe(true)
-    expect(deriveInterStateFromStates('Maharashtra', '').indeterminate).toBe(true)
+    // A blank BUYER state is the shop's own state (s.10(1)(ca)) — decided.
+    expect(deriveInterStateFromStates('Maharashtra', '').indeterminate).toBe(false)
     expect(deriveInterStateFromStates('', '').indeterminate).toBe(true)
     expect(deriveInterStateFromStates('   ', 'Gujarat').indeterminate).toBe(true)
   })

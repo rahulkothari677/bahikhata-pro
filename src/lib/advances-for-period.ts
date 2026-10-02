@@ -11,7 +11,7 @@
  * So the query, the place-of-supply derivation, and the tax split all live here.
  */
 import { db } from '@/lib/db'
-import { deriveStateCode } from '@/lib/gst'
+import { stateCodeOf } from '@/lib/gst'
 import { advanceTax, isTaxableAdvance, type AdvanceReceipt } from '@/lib/advance-tax'
 import { roundMoney } from '@/lib/money'
 
@@ -78,7 +78,9 @@ export async function getAdvancesForPeriod(
   })
 
   const mapped: AdvanceReceipt[] = rows.map((p) => {
-    const partyStateCode = deriveStateCode(p.party?.state || null, null, p.party?.gstin || null, null)
+    // Phase 2: named fields — this passed the state where the GSTIN goes, so a
+    // party with only a state name got no place of supply.
+    const partyStateCode = stateCodeOf(p.party)
     const sum = (rs: typeof p.allocations) => rs.reduce((a, x) => a + x.amount, 0)
     return {
       id: p.id,

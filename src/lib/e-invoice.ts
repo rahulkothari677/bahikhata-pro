@@ -22,7 +22,7 @@
 
 import { roundMoney } from '@/lib/money'
 import { lineTaxable } from '@/lib/line-taxable'
-import { deriveStateCode } from '@/lib/gst'
+import { stateCodeOf, placeOfSupplyCode } from '@/lib/gst'
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -352,8 +352,8 @@ export function buildIrnRequest(
   const rndOffAmt = roundMoney(txn.totalAmount - (assVal + txn.cgst + txn.sgst + txn.igst))
 
   // Build seller and buyer details
-  const shopStateCode = shop.stateCode || deriveStateCode(null, null, shop.gstin, shop.state) || '00'
-  const buyerStateCode = deriveStateCode(txn.partyGstin, txn.partyState, shop.gstin, shop.state) || '00'
+  const shopStateCode = shop.stateCode || stateCodeOf({ gstin: shop.gstin, state: shop.state }) || '00'
+  const buyerStateCode = placeOfSupplyCode({ shop: { gstin: shop.gstin, state: shop.state }, party: { gstin: txn.partyGstin, state: txn.partyState } }) || '00'
   const pos = txn.isInterState ? buyerStateCode : shopStateCode
 
   const request: IRNRequest = {

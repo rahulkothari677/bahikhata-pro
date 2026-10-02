@@ -97,8 +97,9 @@ export function resolveGstRegistration(
  * What the shop's own sale document is called, and what it must say. (Phase 1c-2)
  *
  *   regular       TAX INVOICE (Section 31; Rule 46)
- *   composition   BILL OF SUPPLY, with the prescribed declaration on its face
- *                 (Section 10(4) forbids collecting tax; Rule 49)
+ *   composition   BILL OF SUPPLY (Rule 49), with the prescribed declaration
+ *                 at the top (Rule 5(1)(f)); Section 10(4) forbids
+ *                 collecting tax. Verified against the law report, 2 Oct.
  *   unregistered  BILL — a person who is not registered issues no GST
  *                 document at all, so a plain bill / cash memo
  *
