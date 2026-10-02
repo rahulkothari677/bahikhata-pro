@@ -54,6 +54,7 @@ const AnalyticsInsights = dynamic(() => import('@/components/dashboard/Analytics
 import { useRecurringEntries } from '@/hooks/use-recurring-entries'
 import { toast as sonnerToast } from 'sonner'
 import { refillPrice } from '@/lib/refill-line'
+import { todayMarginPct } from '@/lib/unit-profit'
 import { useCountUp } from '@/hooks/use-count-up'
 import { EmptyState } from '@/components/common/EmptyState'
 
@@ -317,7 +318,7 @@ export function Dashboard() {
   const handleShareSummary = () => {
     const shopName = setting?.shopName || 'My Shop'
     const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-    const margin = kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : '0'
+    const margin = todayMarginPct(kpis).toFixed(1)
 
     const lines = [
       `📊 *${shopName} — Daily Summary*`,
@@ -743,7 +744,7 @@ export function Dashboard() {
             animateValue={kpis.todayProfit}
             icon={TrendingUp}
             gradient="from-emerald-500 to-teal-600"
-            subtitle={`${t('stat.margin')} ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
+            subtitle={`${t('stat.margin')} ${todayMarginPct(kpis).toFixed(1)}%`}
             onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
           />
         )}

@@ -42,6 +42,7 @@ import { TrialBalance } from '@/components/reports/TrialBalance'
 import { ItemWiseProfit } from '@/components/reports/ItemWiseProfit'
 import { ReportsHub } from '@/components/reports/ReportsHub'
 import { EmptyState } from '@/components/common/EmptyState'
+import { InfoHint } from '@/components/common/InfoHint'
 import { GST_RATES } from '@/lib/gst-rates'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
@@ -877,6 +878,12 @@ function StockReport({ data }: { data: any }) {
   const totalStockValue = data?.totalStockValue ?? 0
   const totalPotentialValue = data?.totalPotentialValue ?? 0
   const potentialProfit = data?.potentialProfit ?? 0
+  // #134: profit is worked on the sale value BEFORE GST, so "sale value −
+  // stock value" no longer equals it for MRP items. The ⓘ shows the working.
+  const potentialBeforeGst = data?.totalPotentialBeforeGst
+  const profitHint = typeof potentialBeforeGst === 'number' && Math.abs(potentialBeforeGst - totalPotentialValue) >= 0.01
+    ? `Sale value before GST ${formatINR(potentialBeforeGst)} minus stock value ${formatINR(totalStockValue)}. The GST inside MRP prices goes to the government, so it is not profit.`
+    : undefined
   const lowStockCount = data?.lowStockCount ?? 0
   const products = data?.products || []
   // 🔒 V26 FIX N6: When "hide profit from staff" is on, the API omits the
@@ -889,7 +896,7 @@ function StockReport({ data }: { data: any }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {!hideCost && <ReportStatCard label="Total Stock Value" value={formatINR(totalStockValue)} icon={Package} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />}
         <ReportStatCard label="Potential Sale Value" value={formatINR(totalPotentialValue)} icon={IndianRupee} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100" />
-        {!hideCost && <ReportStatCard label="Potential Profit" value={formatINR(potentialProfit)} icon={TrendingUp} color="text-violet-600" bg="bg-violet-100" />}
+        {!hideCost && <ReportStatCard label="Potential Profit" hint={profitHint} value={formatINR(potentialProfit)} icon={TrendingUp} color="text-violet-600" bg="bg-violet-100" />}
         <ReportStatCard label="Low Stock Items" value={String(lowStockCount)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
       </div>
 
@@ -996,7 +1003,7 @@ function PartyReport({ data }: { data: any }) {
   )
 }
 
-function ReportStatCard({ label, value, icon: Icon, color, bg }: { label: string; value: string; icon: any; color: string; bg: string }) {
+function ReportStatCard({ label, value, icon: Icon, color, bg, hint }: { label: string; value: string; icon: any; color: string; bg: string; hint?: string }) {
   // Map bg to gradient for icon
   const gradient = bg.includes('amber') ? 'from-amber-500 to-orange-600'
     : bg.includes('emerald') ? 'from-emerald-500 to-teal-600'
@@ -1018,6 +1025,7 @@ function ReportStatCard({ label, value, icon: Icon, color, bg }: { label: string
             <Icon className="w-4 h-4 text-white" />
           </div>
           <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold leading-tight">{label}</p>
+          {hint && <InfoHint text={hint} label={label} />}
         </div>
         <p className={cn('text-xl font-bold tracking-tight tabular-nums', textColor)}>{value}</p>
       </div>

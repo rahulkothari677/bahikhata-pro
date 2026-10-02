@@ -452,16 +452,31 @@ export async function GET(req: NextRequest) {
       // ═══════════════════════════════════════════════════════════════════
       const STOCK_REPORT_LIMIT = 5000
 
+      // #134 (2 Oct 2026): potential PROFIT is worked on the sale price BEFORE
+      // GST — the same rule as lib/unit-profit.ts and the bill screen. It was
+      // (stock × price incl. GST) − (stock × cost before GST), so the GST inside
+      // every MRP price was reported as profit. A shop that charges no GST
+      // (composition) keeps the whole price, as line-items.ts charges it 0%.
+      const stockSetting = await db.setting.findUnique({ where: { userId }, select: { compositionCategory: true } })
+      const chargesGst = !stockSetting?.compositionCategory
+
       const [stockTotalsRows, productRows] = await Promise.all([
         db.$queryRaw<Array<{
           totalStockValuePaise: string
           totalPotentialPaise: string
+          totalPotentialBeforeGstPaise: string
           lowStockCount: bigint
           productCount: bigint
         }>>`
           SELECT
             COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric)), 0)::numeric AS "totalStockValuePaise",
             COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * "salePrice"::numeric)), 0)::numeric AS "totalPotentialPaise",
+            COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * (
+              CASE WHEN ${chargesGst} AND "priceIncludesGst" AND "gstRate" > 0
+                THEN "salePrice"::numeric * 100 / (100 + "gstRate"::numeric)
+                ELSE "salePrice"::numeric
+              END
+            ))), 0)::numeric AS "totalPotentialBeforeGstPaise",
             COUNT(*) FILTER (WHERE "currentStock" <= "lowStockThreshold")::bigint AS "lowStockCount",
             COUNT(*)::bigint AS "productCount"
           FROM "Product"
@@ -524,6 +539,7 @@ export async function GET(req: NextRequest) {
       // a slow report, because it looks authoritative.
       const totalStockValue = roundMoney(fromPaise(Number(stockTotalsRows[0]?.totalStockValuePaise ?? 0)))
       const totalPotentialValue = roundMoney(fromPaise(Number(stockTotalsRows[0]?.totalPotentialPaise ?? 0)))
+      const totalPotentialBeforeGst = roundMoney(fromPaise(Number(stockTotalsRows[0]?.totalPotentialBeforeGstPaise ?? 0)))
       const stockLowStockCount = Number(stockTotalsRows[0]?.lowStockCount ?? 0)
 
       // 🔒 V26 FIX N6 (V23 §3 residual): The stock report leaked cost & margin
@@ -563,7 +579,9 @@ export async function GET(req: NextRequest) {
         products: stockReport,
         totalStockValue,
         totalPotentialValue,
-        potentialProfit: roundMoney(totalPotentialValue - totalStockValue),
+        potentialProfit: roundMoney(totalPotentialBeforeGst - totalStockValue),
+        // Shown behind the ⓘ on Potential Profit so the cards add up on screen.
+        totalPotentialBeforeGst,
         lowStockCount: stockLowStockCount,
       })
     }

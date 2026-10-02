@@ -18,6 +18,7 @@ import { TrendingUp } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
 import { readError } from '@/lib/read-error'
 import { useSetting } from '@/hooks/use-setting'
+import { unitProfit } from '@/lib/unit-profit'
 import { defaultTracksInventory } from '@/lib/inventory-tracking'
 import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 import { lookupExemption, CONDITION_QUESTION } from '@/lib/exempt-goods-lookup'
@@ -57,7 +58,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
   const [saving, setSaving] = useState(false)
   // 🔒 R15-5 (Round 15): Read hideProfit so the margin preview box is hidden
   // for staff-with-hideProfit. Was: shown unconditionally when both prices > 0.
-  const { hideProfit } = useSetting()
+  const { hideProfit, setting } = useSetting()
 
   /*
    * What Notification 10/2025 says about this HSN (#84, #93).
@@ -281,8 +282,11 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
 
   const purchasePrice = parseFloat(form.purchasePrice) || 0
   const salePrice = parseFloat(form.salePrice) || 0
-  const profit = salePrice - purchasePrice
-  const margin = salePrice > 0 ? (profit / salePrice) * 100 : 0
+  // #134: on the price BEFORE GST — the GST in an MRP price is not profit.
+  const { profit, margin } = unitProfit(
+    { salePrice, purchasePrice, gstRate: parseFloat(form.gstRate) || 0, priceIncludesGst: form.priceIncludesGst },
+    { chargesGst: !setting?.compositionCategory },
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

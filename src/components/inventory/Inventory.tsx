@@ -5,6 +5,7 @@ import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-produ
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSetting } from '@/hooks/use-setting'
+import { unitProfit, stockPotentialProfit } from '@/lib/unit-profit'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,7 +43,9 @@ export function Inventory() {
   // them for billing), so the client must hide computed profit. Was: profit
   // displayed unconditionally → staff-with-hideProfit saw every product's
   // margin + the shop's total potential profit.
-  const { hideProfit } = useSetting()
+  const { hideProfit, setting } = useSetting()
+  // #134: a shop that charges no GST keeps the whole price (same as line-items).
+  const profitOpts = { chargesGst: !setting?.compositionCategory }
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -123,7 +126,10 @@ export function Inventory() {
   // Was: `(p.currentStock || 0) * margin` — an oversold product (stock -50,
   // margin ₹10) contributed -₹500, dragging the total down. The dashboard
   // already clamps at 0 for stock value; Inventory should match.
-  const totalPotentialProfit = products.reduce((s, p) => s + (Math.max(0, p.currentStock || 0) * ((p.salePrice || 0) - (p.purchasePrice || 0))), 0)
+  //
+  // #134: per product on the price BEFORE GST (stockPotentialProfit) — the
+  // GST inside an MRP price was being counted as profit.
+  const totalPotentialProfit = products.reduce((s, p) => s + stockPotentialProfit(p, profitOpts), 0)
 
   return (
     <div className="space-y-4">
@@ -366,8 +372,7 @@ export function Inventory() {
               </thead>
               <tbody>
                 {filtered.map((p) => {
-                  const profit = (p.salePrice || 0) - (p.purchasePrice || 0)
-                  const margin = p.salePrice > 0 ? (profit / p.salePrice) * 100 : 0
+                  const { profit, margin } = unitProfit(p, profitOpts)
                   return (
                     <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30 group">
                       <td className="py-3 px-4">
@@ -466,9 +471,9 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
   // 🔒 R15-3 (Round 15): Read hideProfit inside the grid card (it's a separate
   // component, not a child of Inventory's render scope). Was: profit shown
   // unconditionally on every product card → staff-with-hideProfit saw margins.
-  const { hideProfit } = useSetting()
-  const profit = (p.salePrice || 0) - (p.purchasePrice || 0)
-  const margin = p.salePrice > 0 ? (profit / p.salePrice) * 100 : 0
+  const { hideProfit, setting } = useSetting()
+  // #134: on the price BEFORE GST, same rule as the table and the bill screen.
+  const { profit, margin } = unitProfit(p, { chargesGst: !setting?.compositionCategory })
   const stockPct = p.lowStockThreshold > 0
     ? Math.min(100, Math.max(0, (p.currentStock / (p.lowStockThreshold * 2)) * 100))
     : p.currentStock > 0 ? 100 : 0

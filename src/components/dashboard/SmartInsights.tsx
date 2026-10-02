@@ -26,6 +26,7 @@ import { offlineFetch } from '@/lib/offline-fetch'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useTranslation } from '@/hooks/use-translation'
+import { todayMarginPct } from '@/lib/unit-profit'
 
 export function SmartInsights() {
   const { setView, setPreviousView, refreshKey } = useAppStore()
@@ -267,7 +268,7 @@ function computeInsights(data: any, lang: string = 'en'): Insight[] {
 
   // ─── 2. Profit Margin Alerts ─────────────────────────────────
   if (kpis) {
-    const margin = kpis.todayRevenue > 0 ? (kpis.todayProfit / kpis.todayRevenue) * 100 : 0
+    const margin = todayMarginPct(kpis)
     if (kpis.todayRevenue > 0 && margin < 10 && margin >= 0) {
       const text = insightText(lang,
         { title: `📊 Profit margin is thin (${margin.toFixed(1)}%)`, description: `Today's margin is below 10%. Revenue: ${formatINR(kpis.todayRevenue)}, Profit: ${formatINR(kpis.todayProfit)}. Consider reviewing your pricing.` },

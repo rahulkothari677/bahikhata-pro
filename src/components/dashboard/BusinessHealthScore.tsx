@@ -21,6 +21,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { useCountUp } from '@/hooks/use-count-up'
+import { todayMarginPct } from '@/lib/unit-profit'
 
 export function BusinessHealthScore({ kpis }: { kpis: any }) {
   // 🔒 V21-005: Detect low-data accounts (new users with <5 transactions).
@@ -37,9 +38,8 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
       : Math.max(0, 50 + kpis.revenueGrowth * 2)
   ))
 
-  const marginPct = kpis.todayRevenue > 0
-    ? (kpis.todayProfit / kpis.todayRevenue) * 100
-    : 0
+  // #134: margin on today's sales BEFORE GST, same as the dashboard card.
+  const marginPct = todayMarginPct(kpis)
   const profitScore = Math.min(100, Math.max(0, marginPct * 4))
 
   const cashFlowScore = Math.min(100, Math.max(0,

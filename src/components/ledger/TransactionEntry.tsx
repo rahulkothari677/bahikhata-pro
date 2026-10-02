@@ -60,6 +60,7 @@ import {
 import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice, resolveLineIncludesGst } from '@/lib/refill-line'
+import { lineTaxable } from '@/lib/line-taxable'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -848,6 +849,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // so cost=0 → whole sale = profit (wrong value in memory). Now: skip the
   // calc entirely when hideProfit is true.
   const totalProfit = hideProfit ? 0 : preview.grossProfit
+  // #134: margin on the value BEFORE GST (the GST is not the shop's), the
+  // same basis as the product form and inventory (lib/unit-profit.ts).
+  const taxableTotal = preview.txItems.reduce((s, l) => s + lineTaxable(l), 0)
+  const marginPct = (amount: number) => taxableTotal > 0 ? ((amount / taxableTotal) * 100).toFixed(1) : 0
   // 🔒 FIX C5: Apply round-off on the client too, so the preview matches the
   // server exactly. Was: `totalAmount = preview.totalBeforeRoundOff` — the
   // client used the pre-round-off total, but the server applied round-off.
@@ -2676,7 +2681,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       <NumberField id="field-refund-amount"
                         value={paidAmount}
                         onValueChange={(v) => { markDirty(); setPaidAmount(v) }}
-                        placeholder={`Full refund: ${totalAmount.toFixed(0)}`}
+                        placeholder={`Full refund: ${formatINR(totalAmount, false)}`}
                         className="mt-1"
                         min={0}
                         step={10}
@@ -2703,7 +2708,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                      * NOTHING. A shopkeeper recording udhaar did exactly as the
                      * hint said and the debt was stored as fully paid.
                      */
-                    placeholder={paymentMode === 'credit' ? 'Unpaid: 0' : `Full: ${totalAmount.toFixed(0)}`}
+                    placeholder={paymentMode === 'credit' ? 'Unpaid: 0' : `Full: ${formatINR(totalAmount, false)}`}
                     className="mt-1"
                     min={0}
                     step={10}
@@ -2889,7 +2894,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </span>
                     <span className="font-bold text-emerald-700 dark:text-emerald-300">
                       {formatINR(totalProfit)}
-                      <span className="text-3xs ml-1">({totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}%)</span>
+                      <span className="text-3xs ml-1">({marginPct(totalProfit)}%)</span>
                     </span>
                   </div>
                 )}
@@ -2905,7 +2910,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </span>
                     <span className="font-bold text-rose-700 dark:text-rose-300">
                       −{formatINR(Math.abs(totalProfit))}
-                      <span className="text-3xs ml-1">({totalAmount > 0 ? ((Math.abs(totalProfit) / totalAmount) * 100).toFixed(1) : 0}%)</span>
+                      <span className="text-3xs ml-1">({marginPct(Math.abs(totalProfit))}%)</span>
                     </span>
                   </div>
                 )}

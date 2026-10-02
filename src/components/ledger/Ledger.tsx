@@ -375,6 +375,14 @@ export function Ledger({ type }: { type: LedgerType }) {
     if (t.type === 'sale') return s + (t.grossProfit || 0)
     return s
   }, 0)
+  // #134: the margin % is on sales BEFORE GST, net of returns — the same base
+  // as the bill screen and the reports. totalAmount includes GST.
+  const totalNetSales = filtered.reduce((s, t) => {
+    const net = (t.subtotal || 0) - (t.discountAmount || 0)
+    if (t.type === 'sale') return s + net
+    if (t.type === 'credit-note') return s - net
+    return s
+  }, 0)
   // 🔒 V17 Audit Phase 0 FIX: Same net-of-returns pattern for paidAmount.
   // Credit notes have paidAmount (the refund issued) — SUBTRACT for sales.
   // Debit notes have paidAmount (the refund received) — SUBTRACT for purchases.
@@ -550,7 +558,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                 <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
               </div>
               <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatINR(totalProfit)}</p>
-              <p className="text-2xs text-muted-foreground">{totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}% margin</p>
+              <p className="text-2xs text-muted-foreground">{totalNetSales > 0 ? ((totalProfit / totalNetSales) * 100).toFixed(1) : 0}% margin</p>
             </div>
           </div>
         )}

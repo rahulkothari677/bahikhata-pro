@@ -53,6 +53,11 @@ the person who caught my mistakes. That is the defect this file fixes.
       same site, so this IS the mobile app) AND desktop layout (≥1024px, sidebar).
       Rahul, 1 Oct: they differ; verify both before calling anything done.
       In the browser pane emulate 1024×680 for desktop (1280 crops badly).
+- [ ] **UX & design pass** — every screen I opened judged as a shopkeeper on a
+      phone would: is it simple, smooth one-handed, and does it look good?
+      Every weakness (existing screens too) logged in the tasklog's UX & DESIGN
+      OBSERVATIONS, tagged Usability / Phone / Design, mapped to a phase
+      (Rahul, 2 Oct: "focus on all aspects").
 - [ ] Checked as a NOT-registered shop and as a GST shop when GST is involved
 - [ ] `npm run verify` green · pushed · deployed
 - [ ] **Screenshot taken — I have LOOKED at it**
@@ -271,8 +276,8 @@ sweep on 1 Oct counted ~17,000 words of prose inside screen components.
   the tasklog, or a report.
 - **Every phase that touches a screen removes that screen's prose** — at least
   in the parts it touched. A prose-budget guard is meant to keep it out, but
-  **it does not exist yet** (#177, found 2 Oct: this line claimed it did). It is
-  built in Phase 3; until then, the screen you touched is checked by eye.
+  **it does not exist yet** (#177, found 2 Oct: this line claimed it did). Master
+  plan v3 builds it in Phase 4; until then, the screen you touched is checked by eye.
 
 ## VERIFY THE LAW — AND VERIFY THE CA
 

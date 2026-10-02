@@ -267,10 +267,11 @@ export function computeLineItems(opts: {
     let itemProfitPaise = 0
     if ((type === 'sale' || type === 'credit-note') && p.product) {
       purchasePriceAtSale = p.product.purchasePrice
-      const taxableAmountRupees = fromPaise(taxableAmountPaise)
-      const realizedUnitPriceRupees = p.quantity > 0 ? roundMoney(taxableAmountRupees / p.quantity) : 0
-      const itemProfitRupees = roundMoney((realizedUnitPriceRupees - p.product.purchasePrice) * p.quantity)
-      itemProfitPaise = toPaise(itemProfitRupees)
+      // #134 (2 Oct 2026): the line's taxable value minus the cost of what was
+      // sold — no per-unit rounding. It was (round(taxable / qty) − cost) × qty,
+      // which multiplied a rounded unit price by the quantity: 10 MRP packs at
+      // ₹2,428.57 taxable and ₹230 cost booked ₹128.60 profit, not ₹128.57.
+      itemProfitPaise = taxableAmountPaise - multiplyPaise(p.quantity, toPaise(p.product.purchasePrice))
       // Credit notes NEGATE the profit (they reverse the original sale's profit).
       // Sales ADD the profit. This way, sale + credit-note = net profit.
       grossProfitPaise = type === 'credit-note'

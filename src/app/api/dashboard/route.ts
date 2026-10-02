@@ -244,6 +244,7 @@ export async function GET(req: NextRequest) {
       // just applies: raw AS raw_paise.
       db.$queryRaw<Array<{
         today_revenue_paise: string; today_profit_paise: string;
+        today_net_sales_paise: string;
         today_count: bigint;
         today_credit_note_count: bigint;
         range_revenue_paise: string; range_profit_paise: string;
@@ -260,6 +261,10 @@ export async function GET(req: NextRequest) {
             - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS today_revenue,
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric
             + COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric AS today_profit,
+            -- #134: today's sales BEFORE GST, net of returns — the base for the
+            -- margin %. today_revenue includes GST, and the GST is not the shop's.
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "subtotal" - "discountAmount" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "subtotal" - "discountAmount" ELSE 0 END), 0)::numeric AS today_net_sales,
             COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_count,
             COUNT(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_credit_note_count,
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
@@ -299,6 +304,7 @@ export async function GET(req: NextRequest) {
         SELECT
           today_revenue AS today_revenue_paise,
           today_profit AS today_profit_paise,
+          today_net_sales AS today_net_sales_paise,
           today_count,
           today_credit_note_count,
           range_revenue AS range_revenue_paise,
@@ -436,6 +442,7 @@ export async function GET(req: NextRequest) {
     const kpi = kpiRows[0]
     const todayRevenue = fromPaise(Number(kpi.today_revenue_paise))
     const todayProfit = fromPaise(Number(kpi.today_profit_paise))
+    const todayNetSales = fromPaise(Number(kpi.today_net_sales_paise))
     const todayTxnCount = Number(kpi.today_count)
     const todayCreditNoteCount = Number(kpi.today_credit_note_count)
     const rangeRevenue = fromPaise(Number(kpi.range_revenue_paise))
@@ -651,6 +658,7 @@ export async function GET(req: NextRequest) {
       kpis: {
         todayRevenue,
         todayProfit,
+        todayNetSales,  // #134: before GST, net of returns — the margin % base
         todayTxnCount,
         todayCreditNoteCount,  // 🔒 V17 Audit Phase 1 P0.3: for "net of returns" UI
         rangeRevenue,
