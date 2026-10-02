@@ -73,3 +73,26 @@ export function stockPotentialProfit(p: PricedProduct & { currentStock?: number 
   const qty = Math.max(0, Number(p.currentStock) || 0)
   return roundMoney(roundMoney(qty * saleValueBeforeGst(p, opts)) - roundMoney(qty * (Number(p.purchasePrice) || 0)))
 }
+
+/**
+ * What one unit of a PURCHASE line cost the shop — the figure written back as
+ * the product's cost. (#175, Phase 1c, 2 Oct 2026)
+ *
+ * A shop that claims input credit gets the GST back, so its cost is the price
+ * before GST (`unitPrice`). A shop that cannot — not registered, composition
+ * (Section 10(4)), or a purchase whose credit is blocked (Section 17(5)) —
+ * paid that GST for good, so it is part of the cost: ₹230 + 5% is a ₹241.50
+ * cost, not ₹230. Otherwise stock value and every later profit leave out
+ * money the shop actually spent.
+ *
+ * Per the product's unit, before any bill discount — the same basis the
+ * before-GST cost has always used.
+ */
+export function purchaseCostPerUnit(
+  line: { unitPrice: number; gstRate?: number | null },
+  opts: { claimsItc: boolean },
+): number {
+  const price = Number(line.unitPrice) || 0
+  if (opts.claimsItc) return roundMoney(price)
+  return roundMoney((price * (100 + (Number(line.gstRate) || 0))) / 100)
+}

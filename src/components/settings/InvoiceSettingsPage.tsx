@@ -158,10 +158,12 @@ export const INVOICE_SECTIONS = [
      * composition dealer scrolls straight past — the setting would be present
      * and still effectively unreachable, which is the defect #42 spent three
      * commits removing rather than one worth reintroducing in a label.
+     * GST registration (#165) is named first: it decides whether any bill
+     * carries GST at all.
      */
-    summary: 'Round off, e-invoicing, composition scheme',
+    summary: 'GST registration & composition, round off, e-invoicing',
     // The one that is genuinely not guessable from its name.
-    hint: 'Round off drops the paise so the total is a whole rupee. e-Invoicing is a legal requirement once your turnover has crossed ₹5 crore in any year since 2017-18 — most shops do not need it. The composition scheme is for shops that pay a small percentage of sales instead of GST and file CMP-08 and GSTR-4.',
+    hint: 'GST registration decides whether your bills carry GST at all — a shop that is not registered may not charge it. Round off drops the paise so the total is a whole rupee. e-Invoicing is a legal requirement once your turnover has crossed ₹5 crore in any year since 2017-18 — most shops do not need it. The composition scheme is for shops that pay a small percentage of sales instead of GST and file CMP-08 and GSTR-4.',
     icon: Coins,
     tint: 'text-amber-600 dark:text-amber-400',
     tintBg: 'bg-amber-100 dark:bg-amber-950',

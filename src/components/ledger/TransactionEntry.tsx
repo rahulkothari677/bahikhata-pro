@@ -61,6 +61,8 @@ import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice, resolveLineIncludesGst } from '@/lib/refill-line'
 import { lineTaxable } from '@/lib/line-taxable'
+import { gstStatus, chargesGstOnSales, claimsInputCredit } from '@/lib/shop-tax'
+import { purchaseCostPerUnit } from '@/lib/unit-profit'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -395,6 +397,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     staleTime: 5 * 60 * 1000, // 5 minutes — matches useSetting hook
   })
   const stockPolicy: 'block' | 'allow' = settingData?.setting?.stockPolicy || 'block'
+  // #165: the shop's GST status (lib/shop-tax.ts) — not registered or
+  // composition shops put no GST on the bills they issue.
+  const shopGstStatus = gstStatus(settingData?.setting)
+  const shopChargesGst = chargesGstOnSales(shopGstStatus)
 
   // Fetch parties
   const { data: partiesData, refetch: refetchParties } = useQuery({
@@ -814,6 +820,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     // which is profit being REVERSED, not earned. Now passes `actualType` so
     // the preview matches the server's stored sign.
     type: actualType,
+    // #165: same rule as the server — a shop that may not collect tax puts no
+    // GST on its own bills. Without it the preview showed GST the server then
+    // removed, so the total on screen was not the total saved.
+    chargesGst: shopChargesGst,
   })
   const subtotal = preview.subtotal
   const totalGst = roundMoney(preview.cgst + preview.sgst + preview.igst)
@@ -831,19 +841,22 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
    */
   const costChanges = useMemo(() => {
     if (isSale || isNote) return []
+    // #175: same rule as the server's cost update (purchaseCostPerUnit) — the
+    // GST is part of the cost when the shop cannot claim it back.
+    const claimsItc = claimsInputCredit(shopGstStatus) && !itcBlockedReason
     const seen = new Map<string, { name: string; unit: string; from: number; to: number }>()
     for (const line of preview.txItems) {
       if (!line.productId || !(line.unitPrice > 0)) continue
       const product = products.find((p: any) => p.id === line.productId)
       if (!product) continue
       const from = roundMoney(product.purchasePrice || 0)
-      const to = roundMoney(line.unitPrice)
+      const to = purchaseCostPerUnit(line, { claimsItc })
       if (Math.abs(to - from) < 0.01) continue
       // Last line wins, matching what the server will store.
       seen.set(line.productId, { name: product.name, unit: line.unit, from, to })
     }
     return [...seen.entries()].map(([productId, v]) => ({ productId, ...v }))
-  }, [preview.txItems, products, isSale, isNote])
+  }, [preview.txItems, products, isSale, isNote, shopGstStatus, itcBlockedReason])
   // 🔒 BUG-11 (Phase 6): Was: computed unconditionally even when hideProfit.
   // For staff with hideProfit, purchasePrice is stripped from /api/products,
   // so cost=0 → whole sale = profit (wrong value in memory). Now: skip the
@@ -1944,7 +1957,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     const unitOptions = subUnitsFor(baseUnitOf(item.unit || 'pcs'))
                     // The line's own GST setting, as the preview used it.
                     const lineInclusive = !!computeInput[i]?.priceIncludesGst
-                    const lineRate = Number(item.gstRate) || 0
+                    // The rate the line was CALCULATED at — 0% for a shop that
+                    // charges no GST (#165), whatever the product says.
+                    const lineRate = Number(line?.gstRate ?? item.gstRate) || 0
                     return (
                       <div key={i} className="rounded-lg bg-muted/20 border border-border/40 p-2 transition hover:bg-muted/30">
                         {/* Row 1: Number + Product name + Total + Delete */}

@@ -19,6 +19,7 @@ import { formatINR } from '@/lib/utils'
 import { readError } from '@/lib/read-error'
 import { useSetting } from '@/hooks/use-setting'
 import { unitProfit } from '@/lib/unit-profit'
+import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { defaultTracksInventory } from '@/lib/inventory-tracking'
 import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 import { lookupExemption, CONDITION_QUESTION } from '@/lib/exempt-goods-lookup'
@@ -285,7 +286,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
   // #134: on the price BEFORE GST — the GST in an MRP price is not profit.
   const { profit, margin } = unitProfit(
     { salePrice, purchasePrice, gstRate: parseFloat(form.gstRate) || 0, priceIncludesGst: form.priceIncludesGst },
-    { chargesGst: !setting?.compositionCategory },
+    { chargesGst: chargesGstOnSales(gstStatus(setting)) },
   )
 
   return (

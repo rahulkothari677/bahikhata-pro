@@ -24,6 +24,7 @@
 
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney, toPaise, fromPaise, multiplyPaise, calculateGstPaise, splitGstPaise, addPaise } from './money'
 import { normalizeUnitName, resolveEnteredQuantity, isSubUnit } from './units'
+import { isOutwardDocument } from './shop-tax'
 
 export interface RawLineItem {
   productId?: string | null
@@ -104,14 +105,24 @@ export function computeLineItems(opts: {
   orderDiscount: number
   type: string
   /*
-   * A composition dealer may NOT collect GST — they pay a flat percentage of
-   * turnover from their own margin. Passing this forces every line to 0%, so
-   * the rule is enforced where the rate is decided rather than trusted to each
-   * screen that could send one.
+   * Does the SHOP put GST on this bill? (#165, Phase 1c — lib/shop-tax.ts.)
+   *
+   * `false` for a shop that may not collect tax: not registered (Section
+   * 32(1) CGST Act) or composition (Section 10(4)). Every line of a sale,
+   * credit note or estimate is then forced to 0%, so the rule is enforced
+   * where the rate is decided rather than trusted to each screen.
+   *
+   * OUTWARD ONLY. A purchase or debit note is the SUPPLIER's bill: a
+   * registered supplier charges GST to any buyer, and that GST was paid. The
+   * old composition switch stripped it from purchases too, so a ₹230 + ₹11.50
+   * purchase was saved as ₹230 and the supplier's khata came out short.
    */
+  chargesGst?: boolean
+  /** @deprecated Same as `chargesGst: false`; kept for older callers. */
   isComposition?: boolean
 }): LineItemResult {
-  const { items, productMap, isInterState, orderDiscount, type, isComposition } = opts
+  const { items, productMap, isInterState, orderDiscount, type } = opts
+  const noOutputTax = (opts.chargesGst === false || !!opts.isComposition) && isOutwardDocument(type)
 
   // 🔒 V17 Phase 3: Convert order discount to paise once (integer for all math)
   const orderDiscountPaise = toPaise(toMoney(orderDiscount))
@@ -133,14 +144,15 @@ export function computeLineItems(opts: {
     const quantity = norm.quantity
     const unit = norm.unit
     /*
-     * A composition dealer charges nothing, whatever arrived in the request.
+     * A shop that may not collect tax charges nothing on its own bills,
+     * whatever arrived in the request.
      *
      * Enforced here rather than merely hidden in the UI: a cached screen, a
-     * sale queued offline before the shop switched schemes, or a direct API
-     * call would otherwise put tax on a Bill of Supply — which is illegal and
-     * overcharges the customer at the same time.
+     * sale queued offline before the shop's status changed, or a direct API
+     * call would otherwise put tax on a bill that may not carry it — which is
+     * illegal and overcharges the customer at the same time.
      */
-    const gstRate = isComposition ? 0 : (toMoney(item.gstRate) || 0)
+    const gstRate = noOutputTax ? 0 : (toMoney(item.gstRate) || 0)
     const enteredPriceRupees = toMoney(item.unitPrice)
     // GST-inclusive: back-calculate the taxable (ex-GST) unit price so the
     // stored line and all reports stay GST-correct. Falls back to product flag.

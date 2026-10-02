@@ -17,6 +17,7 @@ import {
   type TypeAggregates,
 } from '@/lib/net-sales'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
+import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 
 // ⏱️ Vercel serverless timeout — reports can aggregate thousands of
 // transactions and generate large responses. Set explicit maxDuration.
@@ -456,9 +457,10 @@ export async function GET(req: NextRequest) {
       // GST — the same rule as lib/unit-profit.ts and the bill screen. It was
       // (stock × price incl. GST) − (stock × cost before GST), so the GST inside
       // every MRP price was reported as profit. A shop that charges no GST
-      // (composition) keeps the whole price, as line-items.ts charges it 0%.
-      const stockSetting = await db.setting.findUnique({ where: { userId }, select: { compositionCategory: true } })
-      const chargesGst = !stockSetting?.compositionCategory
+      // (not registered, or composition) keeps the whole price, as
+      // line-items.ts charges it 0% — lib/shop-tax.ts.
+      const stockSetting = await db.setting.findUnique({ where: { userId }, select: { compositionCategory: true, gstRegistered: true } })
+      const chargesGst = chargesGstOnSales(gstStatus(stockSetting))
 
       const [stockTotalsRows, productRows] = await Promise.all([
         db.$queryRaw<Array<{

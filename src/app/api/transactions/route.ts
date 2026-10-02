@@ -15,6 +15,8 @@ import { apiError } from '@/lib/api-error'
 import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
 import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
+import { gstStatus, chargesGstOnSales, claimsInputCredit } from '@/lib/shop-tax'
+import { purchaseCostPerUnit } from '@/lib/unit-profit'
 import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
 import { tracksStock, stockAffectingLines } from '@/lib/inventory-tracking'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
@@ -463,7 +465,7 @@ export async function POST(req: NextRequest) {
       db.setting.findUnique({
         where: { userId },
         // invoicePrefix: the shop's own bill numbering. See lib/invoice-number.
-        select: { roundOffEnabled: true, stockPolicy: true, compositionCategory: true, invoicePrefix: true },
+        select: { roundOffEnabled: true, stockPolicy: true, compositionCategory: true, gstRegistered: true, invoicePrefix: true },
       }),
     ])
     const productMap = new Map(products.map(p => [p.id, p]))
@@ -652,7 +654,8 @@ export async function POST(req: NextRequest) {
     // bad state from being stored).
     // A composition dealer collects no GST — forced at the rate, not left to
     // the screen that sent it. See line-items.ts.
-    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, isComposition: !!setting?.compositionCategory })
+    // #165: a shop that may not collect tax puts no GST on its own bills (lib/shop-tax.ts).
+    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, chargesGst: chargesGstOnSales(gstStatus(setting)) })
     /*
      * 📄 Phase 5 — the shop's own fields, validated and snapshotted.
      *
@@ -1075,11 +1078,15 @@ export async function POST(req: NextRequest) {
        * cannot check by looking.
        */
       if (type === 'purchase' && updateProductCosts) {
+        // #175: a shop that cannot claim the GST back (not registered,
+        // composition, or credit blocked on this bill) paid it for good, so it
+        // is part of the cost — lib/unit-profit.ts purchaseCostPerUnit().
+        const claimsItc = claimsInputCredit(gstStatus(setting)) && !itcBlockedReason
         const costByProduct = new Map<string, number>()
         for (const item of txItems) {
           if (!item.productId) continue
           if (!(item.unitPrice > 0)) continue
-          costByProduct.set(item.productId, item.unitPrice)
+          costByProduct.set(item.productId, purchaseCostPerUnit(item, { claimsItc }))
         }
         await Promise.all(
           [...costByProduct.entries()].map(([productId, cost]) =>

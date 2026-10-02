@@ -570,6 +570,21 @@ model PaymentAllocation {
 // ==================== APP SETTINGS (per user) ====================
 model Setting {
   /**
+   * Is the shop registered under GST at all? (#165, Phase 1c, 2 Oct 2026)
+   *
+   * FALSE = not registered — the default, and ~90% of the shops EkBook serves.
+   * Section 32(1) CGST Act: a person who is not a registered person shall not
+   * collect any amount by way of tax. Such a shop's bills carry no GST, and
+   * the GST it pays suppliers is part of its cost (no input credit).
+   *
+   * TRUE + compositionCategory NULL = regular GST. TRUE + a category =
+   * composition (registered, but may not collect tax either). A category with
+   * FALSE is never stored — the settings route keeps the two consistent — and
+   * lib/shop-tax.ts reads a category as registered whatever this says.
+   * Migration 20261002000002 set TRUE for shops that had a GSTIN or a category.
+   */
+  gstRegistered Boolean @default(false)
+  /**
    * Composition scheme registration. NULL = the regular scheme.
    * A CATEGORY rather than a boolean: the rate follows from it (1% trader or
    * manufacturer, 5% restaurant, 6% services), and a boolean plus a separate

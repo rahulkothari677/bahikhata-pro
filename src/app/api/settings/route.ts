@@ -5,6 +5,7 @@ import { withCache, noStore } from '@/lib/cache'
 import { apiError } from '@/lib/api-error'
 import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
 import { canEnterCompositionFrom, financialYearStart } from '@/lib/composition-window'
+import { resolveGstRegistration } from '@/lib/shop-tax'
 
 // GET /api/settings
 export async function GET() {
@@ -227,6 +228,28 @@ export async function PUT(req: NextRequest) {
           }, { status: 400 })
         }
         sanitized.compositionTo = exit
+      }
+    }
+
+    /*
+     * #165 (Phase 1c): is the shop registered under GST? See lib/shop-tax.ts.
+     *
+     * Not registered means it may not collect tax (Section 32(1) CGST Act),
+     * so it cannot be on composition either: turning registration off clears
+     * the scheme. A composition category IS a registration, so setting one
+     * turns registration on. A request asking for both "not registered" and a
+     * category is refused rather than guessed at.
+     */
+    {
+      const reg = resolveGstRegistration(body.gstRegistered, sanitized.compositionCategory)
+      if ('error' in reg) {
+        return NextResponse.json({ error: 'Invalid GST registration', message: reg.error }, { status: 400 })
+      }
+      if (reg.gstRegistered !== undefined) sanitized.gstRegistered = reg.gstRegistered
+      if (reg.clearComposition) {
+        sanitized.compositionCategory = null
+        sanitized.compositionFrom = null
+        sanitized.compositionTo = null
       }
     }
 
@@ -587,6 +610,11 @@ export async function PUT(req: NextRequest) {
       voiceLang: body.voiceLang || 'original',
       stockPolicy: body.stockPolicy || 'block',  // 🔒 V11: default block
       upiId: body.upiId,  // V17-Ext 5.4: UPI VPA for collection links
+      // #165: a first save must keep the GST status it was sent, not drop it.
+      gstRegistered: sanitized.gstRegistered ?? false,
+      compositionCategory: sanitized.compositionCategory ?? null,
+      compositionFrom: sanitized.compositionFrom ?? null,
+      compositionTo: sanitized.compositionTo ?? null,
     }
     if (body.lockedUntil !== undefined) {
       createData.lockedUntil = body.lockedUntil === null ? null : new Date(body.lockedUntil)

@@ -4,6 +4,7 @@ import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibility'
 import { computeLineItems } from '@/lib/line-items'
+import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { refillPrice } from '@/lib/refill-line'
 import { normalizeToUnit } from '@/lib/units'
 import { stockAffectingLines } from '@/lib/inventory-tracking'
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // 5. Fetch settings for stock policy + round-off
     const setting = await db.setting.findUnique({
       where: { userId },
-      select: { stockPolicy: true, roundOffEnabled: true, state: true, gstin: true },
+      select: { stockPolicy: true, roundOffEnabled: true, state: true, gstin: true, gstRegistered: true, compositionCategory: true },
     })
 
     // 6. Compute line items (same as POST /api/transactions)
@@ -135,6 +136,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       isInterState,
       orderDiscount,
       type: 'sale',
+      // #165: this route never asked — a not-registered or composition shop's
+      // converted estimate charged GST. Same rule as every other bill.
+      chargesGst: chargesGstOnSales(gstStatus(setting)),
     })
 
     let totalAmount = computed.totalBeforeRoundOff

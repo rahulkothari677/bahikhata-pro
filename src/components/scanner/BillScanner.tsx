@@ -23,6 +23,7 @@ import { Capacitor } from '@capacitor/core'
 import { resolveEnteredQuantity, convertQuantity, UNIT_OPTIONS } from '@/lib/units'
 import { roundMoney } from '@/lib/money'
 import { computeLineItems } from '@/lib/line-items'
+import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { GST_RATES } from '@/lib/gst-rates'
 
 /**
@@ -626,6 +627,9 @@ export function BillScanner() {
         isInterState: false,
         orderDiscount: Number(scanned.discountAmount) || 0,
         type: billType,
+        // #165: same rule as the server — no GST on a not-registered or
+        // composition shop's own bills (purchases keep the supplier's GST).
+        chargesGst: chargesGstOnSales(gstStatus(settingsData?.setting)),
       })
     : null
   const grandTotal = scannerPreview?.totalBeforeRoundOff ?? 0

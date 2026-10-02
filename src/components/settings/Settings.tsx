@@ -220,6 +220,8 @@ export function Settings({
    * regular GST the shop had already paid after crossing.
    */
   const [compositionCategory, setCompositionCategory] = useState<string | null>(null)
+  // #165: is the shop GST-registered at all? (lib/shop-tax.ts)
+  const [gstRegistered, setGstRegistered] = useState(false)
   const [compositionTo, setCompositionTo] = useState<string>('')
   /*
    * What the SERVER currently holds for the exit date.
@@ -304,6 +306,7 @@ export function Settings({
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
       setEInvoiceApplicable(data.setting.eInvoiceApplicable ?? null)
       setCompositionCategory(data.setting.compositionCategory ?? null)
+      setGstRegistered(!!data.setting.gstRegistered || !!data.setting.compositionCategory)
       /* <input type="date"> speaks YYYY-MM-DD only; anything else renders blank
          and silently looks like "no exit date set". */
       const loadedTo = data.setting.compositionTo ? String(data.setting.compositionTo).slice(0, 10) : ''
@@ -480,10 +483,11 @@ export function Settings({
    * screen — a refusal that does not say why gets read as a limitation.
    */
   const persistComposition = async (
-    patch: { compositionCategory?: string | null; compositionTo?: string | null },
+    patch: { compositionCategory?: string | null; compositionTo?: string | null; gstRegistered?: boolean },
     successMessage: string,
   ) => {
     const prevCategory = compositionCategory
+    const prevRegistered = gstRegistered
     /*
      * Roll back to what the SERVER holds, not to `compositionTo`.
      *
@@ -500,6 +504,7 @@ export function Settings({
     const prevTo = savedCompositionTo.current
     if (patch.compositionCategory !== undefined) setCompositionCategory(patch.compositionCategory)
     if (patch.compositionTo !== undefined) setCompositionTo(patch.compositionTo ?? '')
+    if (patch.gstRegistered !== undefined) setGstRegistered(patch.gstRegistered)
     try {
       const r = await offlineFetch('/api/settings', {
         method: 'PUT',
@@ -525,7 +530,8 @@ export function Settings({
     } catch (e: any) {
       setCompositionCategory(prevCategory)
       setCompositionTo(prevTo)
-      sonnerToast.error(e?.message || 'Could not save the composition setting')
+      setGstRegistered(prevRegistered)
+      sonnerToast.error(e?.message || 'Could not save the GST setting')
     }
   }
 
@@ -2228,40 +2234,56 @@ export function Settings({
             * A single "composition: on" would have to guess one of them, and a
             * guessed rate is a wrong return that looks filed.
             */}
+          {/*
+            * GST REGISTRATION (#165, Phase 1c) — one choice for the shop's
+            * whole tax status: not registered, regular, or composition with
+            * its category. One control rather than a registration switch plus
+            * a composition dropdown, because two controls for one fact can be
+            * set to contradict each other (lib/shop-tax.ts reads them).
+            */}
           <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Composition scheme</p>
-                <p className="text-2xs text-muted-foreground">
-                  Turn this on only if you have opted in with form CMP-02. You then pay a small
-                  percentage of your sales instead of GST, your bills carry no tax, and you file
-                  CMP-08 and GSTR-4 instead of GSTR-1 and GSTR-3B.
-                </p>
-              </div>
+              <span className="text-sm font-medium">GST registration</span>
+              <InfoHint
+                label="GST registration"
+                text="Not registered: your bills carry no GST (the law does not allow it) and the GST you pay suppliers is part of your cost. Regular: GST on your bills, and you claim back the GST you pay. Composition: only if you opted in with form CMP-02 — no GST on your bills, a small % of sales instead, and CMP-08 / GSTR-4 in place of GSTR-1 / GSTR-3B."
+              />
             </div>
 
             <select
-              aria-label="Composition scheme category"
+              aria-label="GST registration"
               className="mt-3 w-full h-11 rounded-lg border border-border/60 bg-background px-3 text-sm"
-              value={compositionCategory ?? ''}
+              value={!gstRegistered ? 'none' : (compositionCategory ?? 'regular')}
               onChange={(e) => {
-                const v = e.target.value || null
+                const v = e.target.value
                 persistComposition(
-                  /* Turning it off clears the exit date too — the server does
-                     the same. A leftover exit date on a regular-scheme shop is
-                     a trap waiting for the next time it opts in. */
-                  v ? { compositionCategory: v } : { compositionCategory: null, compositionTo: null },
-                  v ? 'Composition scheme turned on' : 'Back on the regular scheme',
+                  /* Leaving composition clears the exit date too — the server
+                     does the same. A leftover exit date is a trap waiting for
+                     the next time the shop opts in. */
+                  v === 'none'
+                    ? { gstRegistered: false, compositionCategory: null, compositionTo: null }
+                    : v === 'regular'
+                      ? { gstRegistered: true, compositionCategory: null, compositionTo: null }
+                      : { gstRegistered: true, compositionCategory: v },
+                  v === 'none' ? 'Saved — no GST on your bills'
+                    : v === 'regular' ? 'Saved — regular GST'
+                      : 'Saved — composition scheme',
                 )
               }}
             >
-              <option value="">Regular scheme (I charge GST on my bills)</option>
-              <option value="trader">Trader — 1% of turnover</option>
-              <option value="manufacturer">Manufacturer — 1% of turnover</option>
-              <option value="restaurant">Restaurant, no alcohol — 5% of turnover</option>
-              <option value="service">Service provider — 6% of turnover</option>
+              <option value="none">Not registered — no GST on my bills</option>
+              <option value="regular">Registered — regular GST</option>
+              <option value="trader">Composition — trader, 1% of turnover</option>
+              <option value="manufacturer">Composition — manufacturer, 1% of turnover</option>
+              <option value="restaurant">Composition — restaurant, no alcohol, 5%</option>
+              <option value="service">Composition — service provider, 6%</option>
             </select>
+            {gstRegistered && !form.gstin && (
+              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                Add your GSTIN in Shop profile — it must be printed on every bill.
+              </p>
+            )}
 
             {/*
               * THE FIELD THAT STOPS DOUBLE TAXATION.

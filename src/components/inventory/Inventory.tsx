@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSetting } from '@/hooks/use-setting'
 import { unitProfit, stockPotentialProfit } from '@/lib/unit-profit'
+import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,8 +45,9 @@ export function Inventory() {
   // displayed unconditionally → staff-with-hideProfit saw every product's
   // margin + the shop's total potential profit.
   const { hideProfit, setting } = useSetting()
-  // #134: a shop that charges no GST keeps the whole price (same as line-items).
-  const profitOpts = { chargesGst: !setting?.compositionCategory }
+  // #134/#165: a shop that charges no GST (not registered or composition)
+  // keeps the whole price — same rule as line-items (lib/shop-tax.ts).
+  const profitOpts = { chargesGst: chargesGstOnSales(gstStatus(setting)) }
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -473,7 +475,7 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
   // unconditionally on every product card → staff-with-hideProfit saw margins.
   const { hideProfit, setting } = useSetting()
   // #134: on the price BEFORE GST, same rule as the table and the bill screen.
-  const { profit, margin } = unitProfit(p, { chargesGst: !setting?.compositionCategory })
+  const { profit, margin } = unitProfit(p, { chargesGst: chargesGstOnSales(gstStatus(setting)) })
   const stockPct = p.lowStockThreshold > 0
     ? Math.min(100, Math.max(0, (p.currentStock / (p.lowStockThreshold * 2)) * 100))
     : p.currentStock > 0 ? 100 : 0

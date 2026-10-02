@@ -9,6 +9,7 @@ import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { getOrCreateWalkInParty } from '@/lib/walk-in-party'
 import { computeLineItems } from '@/lib/line-items'
+import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
 import { UnitMismatchError } from '@/lib/unit-mismatch-error'
 import { tracksStock, stockAffectingLines, tracksStockForReversal } from '@/lib/inventory-tracking'
@@ -371,7 +372,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const [setting, oldItems] = await Promise.all([
       db.setting.findUnique({
         where: { userId },
-        select: { roundOffEnabled: true, stockPolicy: true, compositionCategory: true },
+        select: { roundOffEnabled: true, stockPolicy: true, compositionCategory: true, gstRegistered: true },
       }),
       db.transactionItem.findMany({ where: { transactionId: id } }),
     ])
@@ -554,7 +555,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // over-discount check. Same pattern, same guarantee — no drift possible.
     // A composition dealer collects no GST — forced at the rate, not left to
     // the screen that sent it. See line-items.ts.
-    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, isComposition: !!setting?.compositionCategory })
+    // #165: a shop that may not collect tax puts no GST on its own bills (lib/shop-tax.ts).
+    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, chargesGst: chargesGstOnSales(gstStatus(setting)) })
     /*
      * 📄 Phase 5 — the shop's own fields, on EDIT as well as create.
      *
