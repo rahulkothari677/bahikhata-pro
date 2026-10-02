@@ -53,6 +53,7 @@ const DayEndSummary = dynamic(() => import('@/components/dashboard/DayEndSummary
 const AnalyticsInsights = dynamic(() => import('@/components/dashboard/AnalyticsInsights').then(m => ({ default: m.AnalyticsInsights })), { ssr: false, loading: () => null })
 import { useRecurringEntries } from '@/hooks/use-recurring-entries'
 import { toast as sonnerToast } from 'sonner'
+import { refillPrice } from '@/lib/refill-line'
 import { useCountUp } from '@/hooks/use-count-up'
 import { EmptyState } from '@/components/common/EmptyState'
 
@@ -350,7 +351,20 @@ export function Dashboard() {
         cache: 'no-store',
       })
       const data = await r.json()
-      const latestSale = data?.transactions?.[0]
+      const latestId = data?.transactions?.[0]?.id
+      /*
+       * #173 (2 Oct 2026): the list endpoint returns only productName and
+       * quantity per line (FIX M5 keeps the list light), so every repeated
+       * line came back as "× ₹0", 0% GST and not linked to its product —
+       * saving it recorded a ₹0 sale and moved no stock. The lines are read
+       * from the bill itself, and refilled with the price as typed and its
+       * own GST setting (refillPrice), so the repeat charges what the
+       * original charged.
+       */
+      const full = latestId
+        ? await offlineFetch(`/api/transactions/${latestId}`, { cache: 'no-store' })
+        : null
+      const latestSale = full && full.ok ? (await full.json())?.transaction : null
 
       if (!latestSale || !latestSale.items || latestSale.items.length === 0) {
         sonnerToast.error('No sale found to repeat')
@@ -367,10 +381,10 @@ export function Dashboard() {
           items: latestSale.items.map((item: any) => ({
             productId: item.productId || '',
             name: item.productName,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
+            quantity: item.enteredQuantity ?? item.quantity,
+            ...refillPrice(item),
             gstRate: item.gstRate,
-            unit: item.unit || 'pcs',
+            unit: item.enteredUnit ?? item.unit ?? 'pcs',
           })),
         },
       }

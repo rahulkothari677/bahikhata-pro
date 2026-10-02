@@ -60,6 +60,13 @@ export interface StoredLineItem {
   // 🔒 V17 Audit Phase 10: Original entered values (before normalization)
   enteredQuantity: number  // what the user typed (e.g., 500 for 500ml)
   enteredUnit: string      // the unit the user selected (e.g., 'ml')
+  /**
+   * The price as typed and whether it included GST (#130). A screen that
+   * refills this line later (return, repeat, edit, estimate → sale) sends these
+   * back instead of the ex-GST `unitPrice`, so GST is never taken out twice.
+   */
+  enteredPrice: number
+  priceIncludesGst: boolean
 }
 
 export interface LineItemResult {
@@ -172,7 +179,7 @@ export function computeLineItems(opts: {
       : multiplyPaise(quantity, unitPricePaise)
     return {
       item, product, quantity, unit, gstRate, unitPriceRupees, unitPricePaise, rawQuantity, rawUnit,
-      inclusive, inclusiveGrossPaise, grossTaxablePaise,
+      inclusive, inclusiveGrossPaise, grossTaxablePaise, enteredPriceRupees, includesGst: !!includesGst,
     }
   })
 
@@ -339,6 +346,8 @@ export function computeLineItems(opts: {
       // 🔒 V17 Audit Phase 10: preserve the user's original input
       enteredQuantity: p.rawQuantity,
       enteredUnit: p.rawUnit,
+      enteredPrice: p.enteredPriceRupees,
+      priceIncludesGst: p.includesGst,
     }
   })
 

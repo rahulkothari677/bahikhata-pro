@@ -46,6 +46,7 @@ import { NumberField } from '@/components/ui/number-field'
 import { deriveInterStateFromStates } from '@/lib/gst-states'
 import { GST_RATES } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
+import { refillPrice } from '@/lib/refill-line'
 
 /**
  * Sentinel values for the party <Select> in the edit dialog.
@@ -1265,11 +1266,20 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
           Object.fromEntries((it.customCols ?? []).map((c: any) => [c.key, String(c.value ?? '')])),
         ]),
       ))
+      /*
+       * 2 Oct 2026 (Phase 1b-2): the rate shown is the rate as TYPED, with the
+       * line's own "includes GST" setting (refillPrice) — the same rule as
+       * returns, repeat sale and estimate convert. The save sends both, plus
+       * the stored unit: without a unit the validator filled in "pcs", so a
+       * 0.5 kg line was refused as "decimal pieces" and an unlinked kg line
+       * would have been re-saved in pieces.
+       */
       setItems(transaction.items?.map((i: any) => ({
         productId: i.productId || '',
         productName: i.productName,
         quantity: i.quantity,
-        unitPrice: i.unitPrice,
+        ...refillPrice(i),
+        unit: i.unit || undefined,
         gstRate: i.gstRate,
         discountAmount: i.discountAmount || 0,
       })) || [])
@@ -1289,6 +1299,10 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
         newItems[index].productName = p.name
         newItems[index].unitPrice = isSale ? p.salePrice : p.purchasePrice
         newItems[index].gstRate = p.gstRate
+        newItems[index].unit = p.unit || undefined
+        // A sale price follows the product's MRP flag; a supplier's cost
+        // never borrows it (#135).
+        newItems[index].priceIncludesGst = isSale ? !!p.priceIncludesGst : false
       }
     }
     setItems(newItems)
@@ -1360,6 +1374,8 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
           unitPrice: Number(i.unitPrice),
           gstRate: Number(i.gstRate) || 0,
           discountAmount: Number(i.discountAmount) || 0,
+          unit: i.unit || undefined,
+          priceIncludesGst: !!i.priceIncludesGst,
           customCols: editItemFields[idx] || undefined,
         })),
         customFields: editBillDefs.length ? editBillFields : undefined,
@@ -1580,7 +1596,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                         />
                       </div>
                       <div className="col-span-6 sm:col-span-2">
-                        <Label className="text-3xs text-muted-foreground">Rate</Label>
+                        <Label className="text-3xs text-muted-foreground">{item.priceIncludesGst && Number(item.gstRate) > 0 ? 'Rate incl. GST' : 'Rate'}</Label>
                         <NumberField
                           aria-label="Rate"
                           value={item.unitPrice}

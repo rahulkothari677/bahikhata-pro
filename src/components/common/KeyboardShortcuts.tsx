@@ -4,6 +4,18 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { ShortcutsHelp } from '@/components/common/ShortcutsHelp'
 
+/**
+ * Is this Escape press ours to act on (close search / leave the screen)?
+ *
+ * 2 Oct 2026: not when it already closed something. Radix popovers, selects
+ * and dialogs dismiss on a capture listener and call preventDefault(); without
+ * this check the same key press ALSO left the bill screen — closing an ⓘ on a
+ * half-filled purchase threw the purchase away.
+ */
+export function escapeIsOurs(e: { key: string; defaultPrevented: boolean }): boolean {
+  return e.key === 'Escape' && !e.defaultPrevented
+}
+
 export function KeyboardShortcuts() {
   const { features, setView, setPreviousView, setSearchOpen, currentView, fireTriggerNewEntry } = useAppStore()
   const [showHelp, setShowHelp] = useState(false)
@@ -35,7 +47,8 @@ export function KeyboardShortcuts() {
         return
       }
 
-      // Escape → close search or go back
+      // Escape → close search or go back (see escapeIsOurs)
+      if (e.key === 'Escape' && !escapeIsOurs(e)) return
       if (e.key === 'Escape') {
         const { searchOpen, setSelectedTransactionId, setSelectedPartyId } = useAppStore.getState()
         if (searchOpen) {

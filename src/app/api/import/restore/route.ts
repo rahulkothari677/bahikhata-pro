@@ -416,6 +416,18 @@ export async function POST(req: NextRequest) {
                       csamt: item.csamt || 0,
                       hsn: item.hsn || null,
                       total: item.total || 0,
+                      /*
+                       * The line's snapshots survive a restore (#172, 1 Oct 2026). gstTreatment
+                       * decides which GSTR-1 box an exempt / nil / non-GST sale goes in; it was
+                       * dropped here, so a restored shop filed those sales in the wrong box.
+                       * enteredPrice / priceIncludesGst let a return refund exactly what was
+                       * billed (#130). Older backups simply lack them and stay null.
+                       */
+                      gstTreatment: item.gstTreatment ?? null,
+                      enteredQuantity: item.enteredQuantity ?? null,
+                      enteredUnit: item.enteredUnit ?? null,
+                      enteredPrice: item.enteredPrice ?? null,
+                      priceIncludesGst: item.priceIncludesGst ?? null,
                     })),
                   },
                 },

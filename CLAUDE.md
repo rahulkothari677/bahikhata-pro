@@ -269,8 +269,10 @@ sweep on 1 Oct counted ~17,000 words of prose inside screen components.
 - **Never on screen:** why the app was built this way, what the law says in
   general, what an earlier version did wrong. That belongs in code comments,
   the tasklog, or a report.
-- **Every phase that touches a screen removes that screen's prose**, and the
-  prose-budget guard keeps it out.
+- **Every phase that touches a screen removes that screen's prose** — at least
+  in the parts it touched. A prose-budget guard is meant to keep it out, but
+  **it does not exist yet** (#177, found 2 Oct: this line claimed it did). It is
+  built in Phase 3; until then, the screen you touched is checked by eye.
 
 ## VERIFY THE LAW — AND VERIFY THE CA
 
@@ -358,6 +360,10 @@ cause**, never as a new line at the bottom.
 · Claimed keywords fixed search without checking; they didn't
 · **12 Aug: "verified" offline by flipping `navigator.onLine`** — the very flag
   that lies. A simulated failure tests my assumption, not the failure.
+· **2 Oct: the new "Rates include GST" switch passed 18 tests and verify, and
+  was invisible on a new purchase** — its condition needed at least one line,
+  and a new bill starts with none. Only opening the screen showed it. **Open
+  every new control in the screen's EMPTY starting state first**, then filled.
 
 **Cause 5 — Saying a thing instead of logging it**
 · Reported the period flash in chat and never logged it — twice in one day

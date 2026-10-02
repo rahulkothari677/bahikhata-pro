@@ -450,6 +450,16 @@ model TransactionItem {
 
   enteredQuantity Float? // original quantity as entered by the user
   enteredUnit     String? // original unit as entered by the user (ml, gm, etc.)
+  /**
+   * The price as the user typed it, and whether it included GST (#130, 1 Oct 2026).
+   * Every screen that refills a line from a saved bill (return, repeat last sale,
+   * edit, estimate -> sale) used to pass the stored EX-GST unitPrice back in while
+   * the line borrowed the product's "price includes GST" flag - so GST came out
+   * twice: a full return of a Rs 765.01 MRP sale refunded Rs 728.60. With these, a
+   * refilled line is exactly what was billed. Null on rows written before them.
+   */
+  enteredPrice     Int? // paise, as typed (MRP for an inclusive line)
+  priceIncludesGst Boolean?
 
   createdAt DateTime @default(now())
 

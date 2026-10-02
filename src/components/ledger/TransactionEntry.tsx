@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { InfoHint, SettingLabel } from '@/components/common/InfoHint'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { toast as sonnerToast } from 'sonner'
 import { resolveName } from '@/lib/resolve-name'
@@ -58,6 +59,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
+import { refillPrice, resolveLineIncludesGst } from '@/lib/refill-line'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -87,6 +89,21 @@ type ItemRow = {
    * until the shopkeeper answers the packaging question.
    */
   gstTreatment?: string | null
+  /*
+   * Whether THIS line's price includes GST (#130, #135).
+   *
+   * Lines used to borrow the product's flag, which is about its SALE price.
+   * Two things went wrong: a line refilled from a saved bill carries the
+   * stored ex-GST price, so the product's "inclusive" flag took GST out a
+   * second time (a full return of a ₹765.01 sale refunded ₹728.60); and a
+   * supplier's ex-GST purchase rate was treated as GST-inclusive.
+   *
+   * Set when the line comes from a saved bill (its own recorded value);
+   * left undefined for a freshly picked product, which then follows
+   * lineIncludesGst(): the product's flag on a sale, the bill's
+   * "rates include GST" switch on a purchase.
+   */
+  priceIncludesGst?: boolean
 }
 
 export function TransactionEntry({ type, estimateMode = false }: { type: LedgerType; estimateMode?: boolean }) {
@@ -103,6 +120,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [noteReason, setNoteReason] = useState<string>('')
   const [affectsStock, setAffectsStock] = useState(false)
   const [originalTransactionId, setOriginalTransactionId] = useState<string | null>(null)
+  /*
+   * Purchases: do the supplier's rates on this bill include GST? (#135)
+   * A GST tax invoice shows rates before tax, so the default is NO. A kachcha
+   * bill or a retail purchase can be switched to YES for the whole bill.
+   */
+  const [purchaseRatesIncludeGst, setPurchaseRatesIncludeGst] = useState(false)
+  const isPurchaseSide = actualType === 'purchase' || actualType === 'debit-note'
   const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features, triggerVoiceOpen, triggerBarcodeOpen } = useAppStore()
 
   const queryClient = useQueryClient()
@@ -233,6 +257,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     originalTransactionId?: string | null
     // 🔒 R10b-4 (Phase 3): cashRefund toggle must persist in drafts.
     cashRefund?: boolean
+    // #135: the purchase bill's "rates include GST" switch.
+    purchaseRatesIncludeGst?: boolean
   }>(draftFormType)
 
   // Rate prompt — increments counter after each successful transaction
@@ -273,6 +299,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         unitPrice: Number(item.unitPrice) || 0,
         gstRate: Number(item.gstRate) || 0,
         unit: item.unit || 'pcs',
+        // #130: a line refilled from a saved bill keeps its own GST setting
+        // through a draft — dropping it hands the line back to the product's
+        // flag, which takes GST out of an ex-GST price a second time.
+        priceIncludesGst: typeof item.priceIncludesGst === 'boolean' ? item.priceIncludesGst : undefined,
       })))
     }
     // 🔒 ROUND 10b: restore WHAT the form is, not just what is on it.
@@ -285,6 +315,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     // 🔒 R10b-4 (Phase 3): Restore cashRefund toggle. Was: not restored →
     // a credit note that had cash refund ON came back with it OFF.
     if (typeof draft.cashRefund === 'boolean') setCashRefund(draft.cashRefund)
+    if (typeof draft.purchaseRatesIncludeGst === 'boolean') setPurchaseRatesIncludeGst(draft.purchaseRatesIncludeGst)
 
     try { haptic.success() } catch {}
     const restoredAs = draft.actualType && draft.actualType !== type
@@ -330,9 +361,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       // 🔒 R10b-4 (Phase 3): Persist cashRefund in autosave. Was: not saved →
       // restoring a draft silently flipped a cash refund to a khata adjustment.
       cashRefund,
+      purchaseRatesIncludeGst,
     })
 
-  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded, actualType, noteReason, affectsStock, originalTransactionId, cashRefund])
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded, actualType, noteReason, affectsStock, originalTransactionId, cashRefund, purchaseRatesIncludeGst])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -479,6 +511,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           unitPrice: Number(item.unitPrice) || 0,
           gstRate: Number(item.gstRate) || 0,
           unit: item.unit || 'pcs',
+          // A preset built from a saved bill states its own GST setting (#130);
+          // scanner / inventory presets leave it to lineIncludesGst().
+          priceIncludesGst: typeof item.priceIncludesGst === 'boolean' ? item.priceIncludesGst : undefined,
         }))
         setItems(newItems)
         // Mark that form was filled by a preset — suppresses autosave
@@ -724,7 +759,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         // 🔒 V17 Audit Phase 10: Use enteredQuantity/enteredUnit if available
         // (preserves the user's original input like "500ml" instead of "0.5ltr")
         quantity: item.enteredQuantity ?? item.quantity ?? 1,
-        unitPrice: item.unitPrice || 0,
+        ...refillPrice(item),
         gstRate: item.gstRate || 0,
         unit: item.enteredUnit ?? item.unit ?? 'pcs',
         discountAmount: 0,
@@ -743,6 +778,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // normalization (500 gm on a ₹20/kg product → 0.5 kg × ₹20 = ₹10) and
   // GST-inclusive (MRP) back-calculation. Single source of truth, no drift.
   const totalDiscount = parseFloat(discountAmount) || 0
+  // One rule for a line's "price includes GST", used by the preview AND the
+  // save (#130, #135) — see resolveLineIncludesGst().
+  const lineIncludesGst = (item: ItemRow, p: any): boolean =>
+    resolveLineIncludesGst({
+      lineFlag: item.priceIncludesGst,
+      isPurchaseSide,
+      purchaseRatesIncludeGst,
+      productFlag: p?.priceIncludesGst,
+    })
   const computeInput = items.map(item => {
     const p = item.productId ? productMap.get(item.productId) : null
     return {
@@ -752,7 +796,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       unitPrice: Number(item.unitPrice) || 0,
       gstRate: Number(item.gstRate) || 0,
       unit: item.unit || p?.unit || 'pcs',
-      priceIncludesGst: p?.priceIncludesGst ?? false,
+      priceIncludesGst: lineIncludesGst(item, p),
     }
   })
   const preview = computeLineItems({
@@ -1003,7 +1047,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               // normalize the quantity into the product's unit and back-
               // calculate the taxable price for MRP-priced goods.
               unit: i.unit || p?.unit || 'pcs',
-              priceIncludesGst: p?.priceIncludesGst ?? false,
+              priceIncludesGst: lineIncludesGst(i, p),
               // 📄 Phase 5 — typed and validated on the server against the
               // shop's own definitions; this only carries what was typed.
               customCols: itemFields[idx] || undefined,
@@ -1893,6 +1937,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     const normQty = line?.quantity ?? item.quantity
                     const converted = normalizeUnitName(item.unit) !== normUnit
                     const unitOptions = subUnitsFor(baseUnitOf(item.unit || 'pcs'))
+                    // The line's own GST setting, as the preview used it.
+                    const lineInclusive = !!computeInput[i]?.priceIncludesGst
+                    const lineRate = Number(item.gstRate) || 0
                     return (
                       <div key={i} className="rounded-lg bg-muted/20 border border-border/40 p-2 transition hover:bg-muted/30">
                         {/* Row 1: Number + Product name + Total + Delete */}
@@ -1994,7 +2041,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         <div className="pl-5 mt-1 text-3xs text-muted-foreground tabular-nums">
                           {item.quantity} {normalizeUnitName(item.unit)}
                           {converted && <span className="text-primary"> = {roundMoney(normQty)} {normUnit}</span>}
-                          {' '}× ₹{item.unitPrice}/{normUnit} = <span className="font-semibold text-foreground">{formatINR(itemTotal)}</span>
+                          {' '}× ₹{item.unitPrice}/{normUnit}
+                          {/* "1 × ₹230 = ₹241.50" read as bad maths: say where the GST went. */}
+                          {lineRate > 0 && (lineInclusive ? ' (incl. GST)' : ` + ${lineRate}% GST`)}
+                          {' '}= <span className="font-semibold text-foreground">{formatINR(itemTotal)}</span>
                         </div>
                         {/* 🔒 V11 STOCK POLICY: Live stock warning per item.
                             Shows immediately when the user enters a quantity
@@ -2336,12 +2386,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                */}
               {!isSale && (
                 <div className="mt-3 pt-3 border-t border-border">
-                  <Label htmlFor="field-supplier-bill-no" className="flex items-center gap-1.5">
-                    Supplier&apos;s bill no.
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="field-supplier-bill-no">Supplier&apos;s bill no.</Label>
+                    <InfoHint
+                      label="Supplier's bill no."
+                      text="Copy it exactly as printed. GST matches your purchase to the supplier's filing by this number, so a different number will not match."
+                    />
                     {!invoiceNo.trim() && (
                       <span className="text-2xs font-normal text-amber-600">needed to claim GST</span>
                     )}
-                  </Label>
+                  </div>
                   <Input
                     id="field-supplier-bill-no"
                     value={invoiceNo}
@@ -2349,10 +2403,35 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     placeholder="As printed on their bill"
                     className="mt-1"
                   />
-                  <p className="text-2xs text-muted-foreground mt-1">
-                    Copy it exactly. GST matches your purchase to the supplier&apos;s filing
-                    using their bill number — a different number will not match.
-                  </p>
+                </div>
+              )}
+
+              {/*
+               * #135 — do the supplier's rates include GST? Asked once per
+               * bill, on the purchase side only. The product's own "price
+               * includes GST" flag describes what the SHOP charges (its MRP),
+               * so borrowing it for a supplier's rate turned a ₹230 cost into
+               * ₹219.05 + GST and re-costed the product without asking.
+               * Default off: a GST tax invoice prints rates before tax.
+               * Shown on an empty bill; hidden once every line came from a
+               * saved bill (a debit note loaded from the purchase) — those
+               * lines carry their own setting.
+               */}
+              {isPurchaseSide && (items.length === 0 || items.some(i => typeof i.priceIncludesGst !== 'boolean')) && (
+                <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-3">
+                  {/* Not a <label>: the ⓘ inside must not also flip the switch. */}
+                  <span className="text-sm font-medium min-w-0">
+                    <SettingLabel
+                      title="Rates include GST"
+                      hint="Turn on when the supplier's rates already have GST in them, like an MRP or a kachcha bill. Leave off for a GST tax invoice, which shows rates before GST and adds it at the bottom."
+                    />
+                  </span>
+                  <Switch
+                    id="field-rates-include-gst"
+                    aria-label="Rates include GST"
+                    checked={purchaseRatesIncludeGst}
+                    onCheckedChange={(v) => { markDirty(); setPurchaseRatesIncludeGst(v) }}
+                  />
                 </div>
               )}
             </div>
@@ -2660,22 +2739,20 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           {costChanges.length > 0 && (
             <Card className="shadow-card border-border/60 border-primary/30 order-3 lg:order-none">
               <div className="p-3 sm:p-4">
-                <label className="flex items-start justify-between gap-3 cursor-pointer">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">
-                      Update cost {costChanges.length === 1 ? 'price' : 'prices'}?
-                    </p>
-                    <p className="text-2xs text-muted-foreground mt-0.5">
-                      This bill has {costChanges.length === 1 ? 'a different price' : 'different prices'} from
-                      what {costChanges.length === 1 ? 'this product is' : 'these products are'} costed at.
-                      Stock value and future profit use this number.
-                    </p>
-                  </div>
+                {/* Not a <label>: the ⓘ inside must not also flip the switch. */}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold min-w-0">
+                    <SettingLabel
+                      title={`Update cost ${costChanges.length === 1 ? 'price' : 'prices'}?`}
+                      hint="This bill's before-GST price differs from the cost saved on the product. Stock value and future profit use the saved cost."
+                    />
+                  </span>
                   <Switch
+                    aria-label="Update cost price"
                     checked={updateProductCosts}
                     onCheckedChange={(v) => { markDirty(); setUpdateProductCosts(v) }}
                   />
-                </label>
+                </div>
                 <div className="mt-3 space-y-1.5">
                   {costChanges.map((c) => (
                     <div key={c.productId} className="flex items-center justify-between gap-2 text-xs">

@@ -54,7 +54,7 @@ const MONEY_COLUMNS: Record<string, string[]> = {
   // rule in this file's docblock — unregistered money reads back as raw paise.
   Setting: ['priorFyTurnover'],
   Transaction: ['subtotal', 'discountAmount', 'cgst', 'sgst', 'igst', 'totalAmount', 'roundOff', 'paidAmount', 'grossProfit'],
-  TransactionItem: ['unitPrice', 'purchasePriceAtSale', 'discountAmount', 'cgst', 'sgst', 'igst', 'csamt', 'total'],
+  TransactionItem: ['unitPrice', 'purchasePriceAtSale', 'discountAmount', 'cgst', 'sgst', 'igst', 'csamt', 'total', 'enteredPrice'],
   Payment: ['amount'],
   // 🔒 AUDIT C5: PaymentAllocation.amount is Int PAISE like every other money
   // column. Registering it here is NOT optional — an unregistered money column

@@ -4,6 +4,7 @@ import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibility'
 import { computeLineItems } from '@/lib/line-items'
+import { refillPrice } from '@/lib/refill-line'
 import { normalizeToUnit } from '@/lib/units'
 import { stockAffectingLines } from '@/lib/inventory-tracking'
 import { roundMoney, toMoney } from '@/lib/money'
@@ -111,15 +112,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ? !!estimate.isInterState
       : derivedIsInterState
 
+    // #130 class (2 Oct 2026): the stored unitPrice is EX-GST. Passing it with
+    // no flag let computeLineItems fall back to the product's MRP flag and take
+    // GST out a second time, so the sale came out cheaper than the estimate.
+    // refillPrice() returns the price as typed and the line's own setting.
     const items = estimate.items.map(item => {
       const product = item.productId ? productMap.get(item.productId) : undefined
       return {
         productId: item.productId || '',
         productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
+        quantity: item.enteredQuantity ?? item.quantity,
+        ...refillPrice(item),
         gstRate: item.gstRate,
-        unit: product?.unit || item.unit || 'pcs',
+        unit: item.enteredUnit ?? (product?.unit || item.unit || 'pcs'),
       }
     })
 

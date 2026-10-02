@@ -490,6 +490,10 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           unitPrice: p.purchasePrice || 0,
           gstRate: p.gstRate || 0,
           unit: p.unit || 'pcs',
+          // The stored cost is the before-GST figure (what profit and stock
+          // value use), so this line states it rather than following the
+          // bill's "rates include GST" switch (#135).
+          priceIncludesGst: false,
         }],
       },
     }
