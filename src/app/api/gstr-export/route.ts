@@ -6,7 +6,7 @@ import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart, getISTDateParts, isSameISTMonth, istDateString, istYearMonth, IST_OFFSET_MS } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
-import { placeOfSupplyCode } from '@/lib/gst'
+import { billPlaceOfSupply } from '@/lib/gst'
 // 🔒 AUDIT G4: the B2CL threshold must come from the SAME constant
 // gstr1-builder uses, not a literal repeated here. See the note at its use.
 import { B2CL_INVOICE_VALUE_THRESHOLD } from '@/lib/gstr1-builder'
@@ -238,6 +238,8 @@ export async function GET(req: NextRequest) {
           idt: istDateString(t.date),  // 🔒 FIX C2: was toISOString (UTC)
           taxablevalue: taxableTotal,
           isInterState: t.isInterState,  // 🔒 V7 M2: needed for B2CL classification
+          // Phase 2c (#114): place of supply as saved on the bill (courier: the delivery state).
+          pos: billPlaceOfSupply(t, setting) || '',
           ...Object.fromEntries(
             Object.entries(itemsByRate).map(([rate, v]: [string, any]) => [
               `rate_${rate}`,
@@ -255,6 +257,7 @@ export async function GET(req: NextRequest) {
           in_date: istDateString(t.date),  // 🔒 FIX C2: was toISOString (UTC)
           taxablevalue: taxableTotal,
           isInterState: t.isInterState,  // 🔒 V7 M2: include for consistency
+          pos: billPlaceOfSupply(t, setting) || '',
           items: Object.entries(itemsByRate).map(([rate, v]: [string, any]) => ({
             rate: parseFloat(rate),
             txval: v.taxableValue,
@@ -343,7 +346,8 @@ export async function GET(req: NextRequest) {
         iamt: r.igst,
         qty: r.quantity,
       }))
-      const posCode = placeOfSupplyCode({ shop: setting, party: t.party }) || '99'
+      // Phase 2c (#114): the note's SAVED place of supply (it inherits its bill's).
+      const posCode = billPlaceOfSupply(t, setting) || '99'
       const noteEntry = {
         nt_num: t.invoiceNo || t.id.slice(-8),
         nt_dt: istDateString(t.date),

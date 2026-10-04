@@ -442,6 +442,10 @@ export function InvoicePreview({
                 {doc.shop.thankYou}
               </p>
             )}
+            {/* Rule 46(o): where the goods went (#114) — same line the PDF prints. */}
+            {doc.shipTo && (
+              <p className="text-sm" style={{ marginTop: 12, color: theme.text }}>Ship to: {doc.shipTo}</p>
+            )}
             <div
               className="flex justify-between text-sm"
               style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${theme.line}`, color: theme.muted }}

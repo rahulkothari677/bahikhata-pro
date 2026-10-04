@@ -27,7 +27,7 @@
  */
 
 import type { InvoiceDocument } from './invoice-document'
-import { measureHeight, IMAGE_WIDTH } from './invoice-share-image'
+import { measureHeight, partyBlockLines, IMAGE_WIDTH } from './invoice-share-image'
 
 export type SendFormat = 'image' | 'pdf'
 /** What the shop has chosen. 'smart' lets the bill decide. */
@@ -89,7 +89,7 @@ export function deliveredWidthPx(contentHeightPx: number, width = IMAGE_WIDTH): 
  * on what it actually is.
  */
 export function billSurvivesAsImage(doc: InvoiceDocument): boolean {
-  const addressLines = doc.party?.address ? 2 : 0
+  const addressLines = partyBlockLines(doc)
   const hasQr = doc.due > 0 && !!(doc.shop.upiId || doc.shop.paymentQrUrl)
   const height = measureHeight(doc.items.length, hasQr, addressLines)
   return deliveredWidthPx(height) >= MIN_DELIVERED_WIDTH

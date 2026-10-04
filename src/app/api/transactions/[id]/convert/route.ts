@@ -9,7 +9,8 @@ import { refillPrice } from '@/lib/refill-line'
 import { normalizeToUnit } from '@/lib/units'
 import { stockAffectingLines } from '@/lib/inventory-tracking'
 import { roundMoney, toMoney } from '@/lib/money'
-import { deriveInterStateStatus } from '@/lib/gst'
+import { deriveInterStateStatus, savedBillToShipTo } from '@/lib/gst'
+import { shipToChoiceRefusal } from '@/lib/bill-delivery'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { apiError } from '@/lib/api-error'
 
@@ -105,10 +106,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // intra-state supply — the wrong tax head on a filed return. The estimate
     // already carries the user's answer, so it is the best evidence available
     // when the server cannot derive one.
+    //
+    // Phase 2c (#114): the sale keeps the estimate's delivery — and, for a
+    // registered buyer, its bill-to-ship-to answer, read back from what the
+    // estimate saved. If the party has changed since and the question is now
+    // open, the estimate must be edited first: the answer changes the tax head.
+    const billToShipTo = savedBillToShipTo(estimate)
     const {
       isInterState: derivedIsInterState,
       indeterminate,
-    } = await deriveInterStateStatus(userId, estimate.partyId)
+      posCode,
+      needsShipToChoice,
+      party,
+    } = await deriveInterStateStatus(userId, estimate.partyId, { state: estimate.deliveryState, billToShipTo })
+    if (needsShipToChoice) return NextResponse.json(shipToChoiceRefusal(party, estimate.deliveryState), { status: 400 })
     const isInterState = indeterminate
       ? !!estimate.isInterState
       : derivedIsInterState
@@ -199,6 +210,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           paidAmount: 0,  // new sale starts unpaid
           paymentMode: 'cash',
           isInterState,
+          placeOfSupply: posCode,
+          deliveryState: estimate.deliveryState,
+          deliveryAddress: estimate.deliveryAddress,
           invoiceNo,
           invoiceSequence: counter.seq,
           grossProfit: roundMoney(computed.grossProfit),

@@ -26,6 +26,7 @@ import { amountToWords } from './amount-to-words'
 import { isVisible, VISIBILITY_TOGGLES, type InvoiceVisibility } from './invoice-visibility'
 import { readCustomValues, type CustomFieldValue } from './custom-fields'
 import { gstStatus, documentTitle, type GstStatus } from './shop-tax'
+import { billPlaceOfSupply, resolveStateCode, stateNameForCode } from './gst-states'
 
 export interface InvoiceDocumentItem {
   name: string
@@ -197,8 +198,15 @@ export interface InvoiceDocument {
   totalInWords: string
 
   isInterState: boolean
-  /** Rule 46: the place of supply, shown when the buyer is registered. */
+  /**
+   * Rule 46(n): the place of supply with the State name — "Uttar Pradesh (09)".
+   * From the code SAVED on the bill (Phase 2c, #114), never the party's typed
+   * state. Shown when the buyer is registered, the sale is inter-state, or the
+   * goods were sent elsewhere.
+   */
   placeOfSupply: string | null
+  /** Rule 46(o): where the goods were sent, when not the buyer's address. */
+  shipTo: string | null
   /** True when GST applies at all — a composition dealer shows no tax breakup. */
   hasTax: boolean
 
@@ -298,6 +306,10 @@ export interface InvoiceSource {
   paidAmount: number
   paymentMode?: string | null
   isInterState?: boolean
+  /** Phase 2c (#114): as saved on the bill. */
+  placeOfSupply?: string | null
+  deliveryState?: string | null
+  deliveryAddress?: string | null
   /**
    * Payments settled against this bill AFTER it was raised.
    *
@@ -537,9 +549,7 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
     totalInWords: amountToWords(total),
 
     isInterState: Boolean(src.isInterState),
-    // Rule 46 requires place of supply on an inter-state supply and whenever
-    // the recipient is registered; the party's state is what it is.
-    placeOfSupply: src.party?.gstin || src.isInterState ? src.party?.state ?? null : null,
+    ...placeOfSupplyLines(src, shop),
     hasTax: taxTotal > 0,
 
     upiLink: buildUpiLink(shop, due),
@@ -558,6 +568,28 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
  * than only exercised by building a whole document — the guard rule earned on
  * 15 Aug.
  */
+/**
+ * The bill's place-of-supply and ship-to lines. (Phase 2c, #114)
+ *
+ * Was: the party's state exactly as typed ("RJ"), even on a courier sale to
+ * another state. Now: the code saved on the bill, printed with its official
+ * name and code, plus the delivery address when the goods went elsewhere.
+ */
+export function placeOfSupplyLines(
+  src: Pick<InvoiceSource, 'party' | 'isInterState' | 'placeOfSupply' | 'deliveryState' | 'deliveryAddress'>,
+  shop: Pick<InvoiceShop, 'gstin' | 'state'>,
+): { placeOfSupply: string | null; shipTo: string | null } {
+  const deliveryCode = resolveStateCode(src.deliveryState)
+  const show = !!(src.party?.gstin || src.isInterState || deliveryCode)
+  const pos = show ? billPlaceOfSupply({ ...src, party: src.party ?? null }, shop) : null
+  const named = (code: string | null) => (code ? `${stateNameForCode(code)} (${code})` : null)
+  const address = (src.deliveryAddress || '').trim()
+  return {
+    placeOfSupply: named(pos),
+    shipTo: deliveryCode ? [address, named(deliveryCode)].filter(Boolean).join(' — ') : null,
+  }
+}
+
 export function dueDateFor(
   issued: Date,
   dueDays: number | null,

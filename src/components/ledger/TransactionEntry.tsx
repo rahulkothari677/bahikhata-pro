@@ -29,7 +29,7 @@ import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { checkMixedSupply } from '@/lib/mixed-supply-invoice'
-import { supplyKind, stateCodeOf, stateNameForCode } from '@/lib/gst-states'
+import { supplyKind, stateCodeOf, stateNameForCode, deliveryCheck, billPlaceOfSupply, compositionInterStateBlocked, rule46eMissing, resolveStateCode, gstinStateCode, type StatePlace } from '@/lib/gst-states'
 import { useSetting } from '@/hooks/use-setting'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { track, EVENTS } from '@/lib/analytics'
@@ -163,6 +163,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [date, setDate] = useState(istDateString(new Date()))
   const [invoiceNo, setInvoiceNo] = useState('')
   const [isInterState, setIsInterState] = useState(false)
+  // Phase 2c (#114): goods sent to another address. The state decides the
+  // place of supply; for a registered buyer whose goods go to another state,
+  // bill-to-ship-to is ASKED (null = not answered) because it changes the tax.
+  const [shipElsewhere, setShipElsewhere] = useState(false)
+  const [deliveryState, setDeliveryState] = useState('')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [billToShipTo, setBillToShipTo] = useState<boolean | null>(null)
+  // A credit note against a saved bill keeps that bill's tax head (the server
+  // does the same, lib/bill-delivery.ts) — loaded so the screen agrees.
+  const [originalSupply, setOriginalSupply] = useState<{ isInterState: boolean; placeOfSupply: string | null; deliveryState: string | null; party: StatePlace | null } | null>(null)
   /* Purchases only — see the toggle in the details section. */
   const [isReverseCharge, setIsReverseCharge] = useState(false)
   // Section 17(5) — '' means credit is claimable, which is the normal case.
@@ -263,6 +273,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     cashRefund?: boolean
     // #135: the purchase bill's "rates include GST" switch.
     purchaseRatesIncludeGst?: boolean
+    // Phase 2c (#114): where the goods go — it decides the tax head.
+    shipElsewhere?: boolean
+    deliveryState?: string
+    deliveryAddress?: string
+    billToShipTo?: boolean | null
   }>(draftFormType)
 
   // Rate prompt — increments counter after each successful transaction
@@ -320,6 +335,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     // a credit note that had cash refund ON came back with it OFF.
     if (typeof draft.cashRefund === 'boolean') setCashRefund(draft.cashRefund)
     if (typeof draft.purchaseRatesIncludeGst === 'boolean') setPurchaseRatesIncludeGst(draft.purchaseRatesIncludeGst)
+    if (typeof draft.shipElsewhere === 'boolean') setShipElsewhere(draft.shipElsewhere)
+    if (draft.deliveryState !== undefined) setDeliveryState(draft.deliveryState)
+    if (draft.deliveryAddress !== undefined) setDeliveryAddress(draft.deliveryAddress)
 
     try { haptic.success() } catch {}
     const restoredAs = draft.actualType && draft.actualType !== type
@@ -366,9 +384,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       // restoring a draft silently flipped a cash refund to a khata adjustment.
       cashRefund,
       purchaseRatesIncludeGst,
+      shipElsewhere,
+      deliveryState,
+      deliveryAddress,
     })
 
-  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded, actualType, noteReason, affectsStock, originalTransactionId, cashRefund, purchaseRatesIncludeGst])
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded, actualType, noteReason, affectsStock, originalTransactionId, cashRefund, purchaseRatesIncludeGst, shipElsewhere, deliveryState, deliveryAddress])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -581,11 +602,47 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // Phase 2 (#118): state CODES, GSTIN first — "UP" and "Uttar Pradesh" are
   // one state, and a buyer with no state recorded is at the shop's own state
   // (IGST Act s.10(1)(ca)). Same supplyKind() the server and GSTR-1 use.
-  const derivedInterState = supplyKind({
+  //
+  // Phase 2c (#114): a regular shop's sale or estimate can send the goods
+  // elsewhere; the delivery state then decides the place of supply.
+  const offersShipTo = showsGst && (actualType === 'sale' || actualType === 'estimate' || (actualType === 'credit-note' && !originalTransactionId))
+  const deliveryInUse = offersShipTo && shipElsewhere
+  const supplyPlaces = {
     shop: { gstin: settingData?.setting?.gstin, state: shopState },
     party: selectedParty ? { gstin: selectedParty.gstin, state: selectedParty.state } : null,
-  })
+    delivery: deliveryInUse ? deliveryState : null,
+    billToShipTo,
+  }
+  const derivedInterState = originalSupply
+    ? { isInterState: originalSupply.isInterState, indeterminate: false, shopCode: stateCodeOf(supplyPlaces.shop), posCode: billPlaceOfSupply(originalSupply, supplyPlaces.shop) }
+    : supplyKind(supplyPlaces)
+  const shipCheck = deliveryCheck(supplyPlaces)
+  const deliveryCode = deliveryInUse ? resolveStateCode(deliveryState) : null
+  const buyerGstinCode = gstinStateCode(selectedParty?.gstin)
+  // Ask only when it matters: a registered buyer, goods to another state than their GSTIN's.
+  const asksShipTo = !!deliveryCode && !!buyerGstinCode && deliveryCode !== buyerGstinCode
+  const compositionElsewhere = isOutwardDocument(actualType) && compositionInterStateBlocked(shopGstStatus, supplyPlaces)
   const partyHasNoState = !!selectedParty && !stateCodeOf({ gstin: selectedParty.gstin, state: selectedParty.state })
+  // A changed customer is a new question — never carry the last answer over.
+  useEffect(() => { setBillToShipTo(null) }, [partyId])
+  useEffect(() => {
+    if (actualType !== 'credit-note' || !originalTransactionId) { setOriginalSupply(null); return }
+    let alive = true
+    offlineFetch(`/api/transactions/${originalTransactionId}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        const t = data?.transaction
+        if (!alive || !t) return
+        setOriginalSupply({
+          isInterState: !!t.isInterState,
+          placeOfSupply: t.placeOfSupply ?? null,
+          deliveryState: t.deliveryState ?? null,
+          party: t.party ? { gstin: t.party.gstin, state: t.party.state } : null,
+        })
+      })
+      .catch(() => { /* offline: the server still keeps the bill's tax head */ })
+    return () => { alive = false }
+  }, [actualType, originalTransactionId])
 
   /*
    * #91 — a registered buyer cannot take taxable and exempt items on ONE bill.
@@ -882,6 +939,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // #134: margin on the value BEFORE GST (the GST is not the shop's), the
   // same basis as the product form and inventory (lib/unit-profit.ts).
   const taxableTotal = preview.txItems.reduce((s, l) => s + lineTaxable(l), 0)
+  // Rule 46(e): what a ₹50,000+ bill to a buyer with no GST number still lacks.
+  const rule46e = rule46eMissing({ taxableValue: taxableTotal, party: selectedParty ?? null, deliveryState: deliveryCode ? deliveryState : null })
+  // On a phone Details is folded; a legal warning must not hide behind it.
+  const detailsWarn = compositionElsewhere || (showsGst && actualType === 'sale' && rule46e.length > 0)
+  useEffect(() => { if (detailsWarn) setDetailsOpen(true) }, [detailsWarn])
   const marginPct = (amount: number) => taxableTotal > 0 ? ((amount / taxableTotal) * 100).toFixed(1) : 0
   // 🔒 FIX C5: Apply round-off on the client too, so the preview matches the
   // server exactly. Was: `totalAmount = preview.totalBeforeRoundOff` — the
@@ -999,6 +1061,17 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
      * point is that they find out now, while the bill is still in their hand,
      * rather than at filing time.
      */
+    // Phase 2c (#114): the place of supply is decided, never assumed.
+    if (deliveryInUse && !deliveryCode) {
+      sonnerToast.error('Choose the state the goods are going to.')
+      document.getElementById('field-delivery-state')?.focus()
+      return
+    }
+    if (shipCheck.needsShipToChoice) {
+      sonnerToast.error('Choose who gets the goods — the buyer or the buyer’s customer.')
+      document.getElementById('field-ship-to-choice')?.scrollIntoView({ block: 'center' })
+      return
+    }
     if (!isSale && !isNote && canClaimGst && !invoiceNo.trim()) {
       const proceed = await confirmSave(
         'Without it, this purchase cannot be matched to your GSTR-2B, so you may not be able to claim the GST back on it.',
@@ -1047,6 +1120,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             : date,
           invoiceNo: invoiceNo || null,
           isInterState,
+          // Phase 2c (#114): only when the shop said the goods go elsewhere.
+          deliveryState: deliveryCode ? deliveryState : null,
+          deliveryAddress: deliveryCode ? (deliveryAddress.trim() || null) : null,
+          billToShipTo: deliveryCode ? billToShipTo : null,
           // Purchases only; the server also enforces that (see the route).
           isReverseCharge: !isSale && !isNote ? isReverseCharge : false,
           itcBlockedReason: !isSale && !isNote ? (itcBlockedReason || null) : null,
@@ -2508,10 +2585,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <Calendar className="w-4 h-4" /> Details
                 </h3>
                 <span className="flex items-center gap-2 lg:hidden">
-                  <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">
                     {new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     {' · '}
                     {paymentMode.charAt(0).toUpperCase() + paymentMode.slice(1)}
+                    {/* Phase 2c: a delivery elsewhere changes the tax — visible while folded. */}
+                    {deliveryCode && ` · to ${stateNameForCode(deliveryCode)}`}
                   </span>
                   <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', detailsOpen && 'rotate-180')} />
                 </span>
@@ -2549,7 +2628,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     <p className="text-2xs text-muted-foreground mt-0.5">
                       {derivedInterState.indeterminate
                         ? 'Set your shop\u2019s state to decide this automatically'
-                        : derivedInterState.isInterState
+                        : asksShipTo && shipCheck.needsShipToChoice
+                          ? 'Answer \u201cWho gets the goods\u201d below'
+                          : derivedInterState.isInterState
                           ? `${stateNameForCode(derivedInterState.shopCode)} \u2192 ${stateNameForCode(derivedInterState.posCode)} \u2014 different states`
                           : `Both in ${stateNameForCode(derivedInterState.shopCode)}`}
                     </p>
@@ -2558,7 +2639,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     <Switch checked={isInterState} onCheckedChange={setIsInterState} />
                   ) : (
                     <Badge variant="outline" className="text-xs font-semibold">
-                      {derivedInterState.isInterState ? 'IGST' : 'CGST + SGST'}
+                      {/* Not answered yet: no tax head is shown as if decided. */}
+                      {asksShipTo && shipCheck.needsShipToChoice ? '—' : derivedInterState.isInterState ? 'IGST' : 'CGST + SGST'}
                     </Badge>
                   )}
                 </div>
@@ -2566,12 +2648,82 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
                     Your shop&apos;s state is not set &mdash; add it in Shop profile so GST is worked out for you.
                   </p>
-                ) : partyHasNoState && (
+                ) : partyHasNoState && !deliveryCode && (
                   <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
                     {`${selectedParty?.name} has no state saved \u2014 counted as a local sale. Add it on their profile if they are in another state.`}
                   </p>
                 )}
+                {offersShipTo && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Label htmlFor="field-ship-elsewhere" className="text-sm">Ship to another address</Label>
+                        <InfoHint
+                          label="Ship to another address"
+                          text="For goods sent by courier or transport. GST follows the state the goods are delivered to, and the bill prints the delivery address."
+                        />
+                      </div>
+                      <Switch id="field-ship-elsewhere" checked={shipElsewhere} onCheckedChange={(v) => { markDirty(); setShipElsewhere(v); setBillToShipTo(null) }} />
+                    </div>
+                    {shipElsewhere && (
+                      <div className="mt-2 space-y-2">
+                        <div>
+                          <Label htmlFor="field-delivery-state" className="text-xs">Delivery state</Label>
+                          <StateField id="field-delivery-state" value={deliveryState} onChange={(v) => { markDirty(); setDeliveryState(v); setBillToShipTo(null) }} />
+                        </div>
+                        <div>
+                          <Label htmlFor="field-delivery-address" className="text-xs">Delivery address</Label>
+                          <Input id="field-delivery-address" value={deliveryAddress} onChange={(e) => { markDirty(); setDeliveryAddress(e.target.value) }} placeholder="Street, city, PIN" maxLength={300} className="mt-1 h-11" />
+                        </div>
+                        {asksShipTo && (
+                          <div id="field-ship-to-choice" role="radiogroup" aria-label="Who gets the goods">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-medium">{`Who gets the goods in ${stateNameForCode(deliveryCode)}?`}</p>
+                              <InfoHint
+                                label="Who gets the goods"
+                                text={`If ${selectedParty?.name} asked you to send the goods to their own customer, GST follows ${selectedParty?.name}\u2019s GST state, ${stateNameForCode(buyerGstinCode)} (bill-to-ship-to). If the goods are for ${selectedParty?.name}, GST follows the delivery state.`}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mt-1">
+                              <Button type="button" role="radio" aria-checked={billToShipTo === true} variant={billToShipTo === true ? 'default' : 'outline'} className="h-auto min-h-11 py-2 px-2 whitespace-normal leading-tight" onClick={() => { markDirty(); setBillToShipTo(true) }}>Buyer&apos;s customer</Button>
+                              <Button type="button" role="radio" aria-checked={billToShipTo === false} variant={billToShipTo === false ? 'default' : 'outline'} className="h-auto min-h-11 py-2 px-2 whitespace-normal leading-tight" onClick={() => { markDirty(); setBillToShipTo(false) }}>The buyer</Button>
+                            </div>
+                            {shipCheck.buyerLosesCredit && (
+                              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-1">
+                                {`${selectedParty?.name} can\u2019t claim this GST \u2014 their GSTIN is from ${stateNameForCode(buyerGstinCode)}.`}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+              )}
+
+              {/* Rule 46(e): a buyer with no GST number, ₹50,000+ before GST. */}
+              {showsGst && actualType === 'sale' && rule46e.length > 0 && (
+                <div className="flex items-start gap-1.5">
+                  <p className="text-2xs text-amber-700 dark:text-amber-400">
+                    {`Bills of \u20b950,000 or more need the buyer\u2019s ${rule46e.join(', ').replace(/, ([^,]*)$/, ' and $1')}.`}
+                  </p>
+                  <InfoHint
+                    label="Bills of \u20b950,000 or more"
+                    text="Rule 46(e) of the CGST Rules: when the buyer has no GST number and the bill is \u20b950,000 or more before GST, it must show their name, address and state."
+                  />
+                </div>
+              )}
+
+              {/* CGST Act s.10(2)(c): a composition shop may not sell to another state. */}
+              {compositionElsewhere && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 flex items-start gap-1.5">
+                  <p className="text-sm text-amber-800 dark:text-amber-300">A composition shop can&apos;t sell to another state.</p>
+                  <InfoHint
+                    label="Composition and other states"
+                    text="Section 10(2)(c) of the CGST Act: a shop in the composition scheme may not sell to a buyer in another state. Speak to your CA before billing this."
+                  />
+                </div>
               )}
 
               {/*

@@ -395,6 +395,10 @@ export async function POST(req: NextRequest) {
                   paidAmount: txn.paidAmount || 0,
                   paymentMode: txn.paymentMode || 'cash',
                   isInterState: txn.isInterState || false,
+                  // Phase 2c (#114): a restored bill keeps its saved place of supply.
+                  placeOfSupply: txn.placeOfSupply ?? null,
+                  deliveryState: txn.deliveryState ?? null,
+                  deliveryAddress: txn.deliveryAddress ?? null,
                   isReverseCharge: txn.isReverseCharge || false,
                   notes: txn.notes || null,
                   category: txn.category || null,

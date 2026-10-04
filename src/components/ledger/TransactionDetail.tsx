@@ -35,7 +35,7 @@ import { amountToWords } from '@/lib/amount-to-words'
 import { resolveInvoiceDesign } from '@/lib/invoice-presets'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
 import { stateCodeOf } from '@/lib/gst-states'
-import { buildInvoiceDocument, invoiceShopFromSetting } from '@/lib/invoice-document'
+import { buildInvoiceDocument, invoiceShopFromSetting, placeOfSupplyLines } from '@/lib/invoice-document'
 import { CustomFieldInputs } from '@/components/common/CustomFieldInputs'
 import type { CustomFieldDef } from '@/lib/custom-fields'
 import { haptic } from '@/lib/haptic'
@@ -43,7 +43,7 @@ import { useSetting } from '@/hooks/use-setting'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { NumberField } from '@/components/ui/number-field'
-import { supplyKind } from '@/lib/gst-states'
+import { supplyKind, savedBillToShipTo } from '@/lib/gst-states'
 import { GST_RATES } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice } from '@/lib/refill-line'
@@ -137,6 +137,8 @@ export function TransactionDetail() {
   const txn = data?.transaction
   // Phase 1c-2: GST columns only on a bill that carries GST or a shop that charges it.
   const billShowsGst = txn ? billCarriesGstColumns(txn, gstStatus(setting)) : true
+  // Phase 2c (#114): where the goods went, as the printed bill says it.
+  const screenSupply = txn ? placeOfSupplyLines(txn, { gstin: setting?.gstin, state: setting?.state }) : { placeOfSupply: null, shipTo: null }
 
   /**
    * Settlements recorded against THIS bill, oldest first — the API already
@@ -799,6 +801,12 @@ export function TransactionDetail() {
                     <span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST+SGST'}</span>
                   </div>
                 )}
+                {screenSupply.shipTo && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-muted-foreground flex-shrink-0">Ship to</span>
+                    <span className="font-medium text-right">{screenSupply.shipTo}</span>
+                  </div>
+                )}
                 {txn.roundOff !== 0 && (
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Round Off</span>
@@ -1237,10 +1245,18 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   // GST type shown here cannot disagree with what gets stored.
   const editSelectedParty = parties.find((p: any) => p.id === form.partyId)
   // Phase 2: the same code-based rule as the bill screen and the server.
-  const editInterState = supplyKind({
+  // Phase 2c (#114): the edit keeps the bill's saved delivery, as the server
+  // does; a credit note against a bill keeps that bill's tax head.
+  const editKeepsOriginal = transaction?.type === 'credit-note' && !!transaction?.originalTransactionId
+  const editSupply = supplyKind({
     shop: { gstin: editSettingData?.setting?.gstin, state: editSettingData?.setting?.state },
     party: editSelectedParty ? { gstin: editSelectedParty.gstin, state: editSelectedParty.state } : null,
+    delivery: transaction?.deliveryState ?? null,
+    billToShipTo: savedBillToShipTo(transaction ?? {}),
   })
+  const editInterState = editKeepsOriginal
+    ? { ...editSupply, isInterState: !!transaction?.isInterState, indeterminate: false }
+    : editSupply
 
   useEffect(() => {
     if (open && transaction) {
@@ -1712,6 +1728,8 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
   // follows the shop's GST status (lib/shop-tax.ts) — this said "Tax Invoice"
   // on every sale, a composition shop's and a not-registered shop's included.
   const shopStatus = gstStatus(setting)
+  // Phase 2c (#114): the same place-of-supply and ship-to lines as the PDF.
+  const supplyLines = placeOfSupplyLines(txn, { gstin: setting?.gstin, state: setting?.state })
   const shopGstin = shopStatus === 'unregistered' ? null : setting?.gstin
   const heading = documentTitle(txn.type, shopStatus)
   const billShowsGst = billCarriesGstColumns(txn, shopStatus)
@@ -1755,11 +1773,13 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
           {txn.party?.gstin && <p className="text-xs text-gray-700 font-mono mt-0.5">GSTIN: {txn.party.gstin}</p>}
           {txn.party?.address && <p className="text-xs text-gray-700 mt-0.5">{txn.party.address}</p>}
           {txn.party?.state && <p className="text-xs text-gray-700 mt-0.5">State: {txn.party.state}</p>}
+          {supplyLines.shipTo && <p className="text-xs text-gray-700 mt-1"><span className="font-semibold">Ship to:</span> {supplyLines.shipTo}</p>}
         </div>
         <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
           <p className="text-3xs text-gray-500 uppercase tracking-wider mb-1.5 font-semibold">Supply Details</p>
           <div className="text-xs space-y-1">
             {billShowsGst && <div className="flex justify-between"><span className="text-gray-500">GST Type:</span><span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</span></div>}
+            {billShowsGst && supplyLines.placeOfSupply && <div className="flex justify-between gap-2"><span className="text-gray-500">Place of supply:</span><span className="font-medium text-right">{supplyLines.placeOfSupply}</span></div>}
             <div className="flex justify-between"><span className="text-gray-500">Items:</span><span className="font-medium">{txn.items.length}</span></div>
             {isSale && !hideProfit && txn.grossProfit !== undefined && (
               <div className="flex justify-between"><span className="text-gray-500">Profit:</span><span className="font-medium text-emerald-700 dark:text-emerald-300">₹{txn.grossProfit.toFixed(2)}</span></div>

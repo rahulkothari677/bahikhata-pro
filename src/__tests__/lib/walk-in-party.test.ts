@@ -118,8 +118,11 @@ describe('the routes no longer refuse a party-less return', () => {
      */
     for (const file of ['src/app/api/transactions/route.ts', 'src/app/api/transactions/[id]/route.ts']) {
       const src = read(file)
-      expect(src.indexOf('getOrCreateWalkInParty(db, userId)'))
-        .toBeLessThan(src.indexOf('deriveInterStateStatus(userId, partyId)'))
+      // Phase 2c added a third argument (the delivery); match either shape,
+      // and refuse to pass vacuously if the call is not found at all.
+      const derive = src.search(/deriveInterStateStatus\(userId, partyId\b/)
+      expect(derive).toBeGreaterThan(-1)
+      expect(src.indexOf('getOrCreateWalkInParty(db, userId)')).toBeLessThan(derive)
     }
   })
 })

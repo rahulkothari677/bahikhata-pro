@@ -123,6 +123,15 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, max: number, maxLines
  *
  * Now the rule asks this. One formula, one answer. (CLAUDE.md, Cause 2.)
  */
+/**
+ * Lines the party block adds below the name: up to two of address, and up to
+ * two of "Ship to" (Rule 46(o), #114). ONE count for the renderer and the
+ * delivery rule, so a bill with a delivery address is measured as drawn.
+ */
+export function partyBlockLines(doc: Pick<InvoiceDocument, 'party' | 'shipTo'>): number {
+  return (doc.party?.address ? 2 : 0) + (doc.shipTo ? 2 : 0)
+}
+
 export function measureHeight(itemCount: number, hasQr: boolean, addressLines: number): number {
   const header = 210
   const meta = 150
@@ -156,7 +165,7 @@ export interface InvoiceImageOptions {
 export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptions = {}): string {
   const theme = getInvoiceTheme(opts.themeId)
   const INK = inkFor(theme)
-  const addressLines = doc.party?.address ? 2 : 0
+  const addressLines = partyBlockLines(doc)
   const H = measureHeight(doc.items.length, Boolean(opts.qrImage), addressLines)
 
   const canvas = document.createElement('canvas')
@@ -271,6 +280,17 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
       }
     }
     y = py + 46
+  }
+  // Rule 46(o): where the goods went, when not the buyer's address (#114).
+  if (doc.shipTo) {
+    font(ctx, 24, 400)
+    ctx.fillStyle = INK.text
+    let sy = y - 14
+    for (const line of wrap(ctx, `Ship to: ${doc.shipTo}`, W - PAD * 2, 2)) {
+      ctx.fillText(line, PAD, sy)
+      sy += 32
+    }
+    y = sy + 18  // two lines add 68 px — what partyBlockLines() budgets
   }
 
   // ── items ────────────────────────────────────────────────────────────

@@ -6,7 +6,8 @@ import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionsProfit } from '@/lib/profit-visibility'
 import { withCache, noStore } from '@/lib/cache'
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
-import { deriveInterStateStatus } from '@/lib/gst'
+import { deriveInterStateStatus, billPlaceOfSupply } from '@/lib/gst'
+import { resolveBillDelivery, shipToChoiceRefusal } from '@/lib/bill-delivery'
 import { validateBody, createTransactionSchema } from '@/lib/validation'
 import { deriveItcCategory } from '@/lib/itc-category'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
@@ -387,12 +388,24 @@ export async function POST(req: NextRequest) {
     // (shop or party state is missing), honor the client's isInterState
     // value — it's the only information available. When both states are
     // known, the server's derivation is authoritative (prevents tampering).
-    const { isInterState: derivedIsInterState, party, indeterminate } = await deriveInterStateStatus(userId, partyId)
+    const delivery = await resolveBillDelivery(db, userId, {
+      type, originalTransactionId,
+      deliveryState: validation.data.deliveryState,
+      deliveryAddress: validation.data.deliveryAddress,
+      billToShipTo: validation.data.billToShipTo,
+    })
+    if (!delivery.ok) return NextResponse.json({ error: delivery.error, message: delivery.message }, { status: 400 })
+    const { isInterState: derivedIsInterState, party, indeterminate, posCode, needsShipToChoice, shop } = await deriveInterStateStatus(userId, partyId, { state: delivery.deliveryState, billToShipTo: delivery.billToShipTo })
     const clientIsInterState = typeof body.isInterState === 'boolean' ? body.isInterState : undefined
-    const isInterState = indeterminate && clientIsInterState !== undefined ? clientIsInterState : derivedIsInterState
     if (partyId && !party) {
       return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }
+    if (needsShipToChoice) return NextResponse.json(shipToChoiceRefusal(party, delivery.deliveryState), { status: 400 })
+    // A note against a saved bill keeps that bill's tax head and place of supply.
+    const isInterState = delivery.original
+      ? delivery.original.isInterState
+      : indeterminate && clientIsInterState !== undefined ? clientIsInterState : derivedIsInterState
+    const placeOfSupply = delivery.original ? billPlaceOfSupply(delivery.original, shop) : posCode
 
     // Calculate totals
     let subtotal = 0
@@ -902,6 +915,10 @@ export async function POST(req: NextRequest) {
           paidAmount: roundMoney(finalPaid),
           paymentMode: paymentMode || 'cash',
           isInterState: !!isInterState,
+          // Phase 2c (#114): the stored facts every return and print reads.
+          placeOfSupply,
+          deliveryState: delivery.deliveryState,
+          deliveryAddress: delivery.deliveryAddress,
           /*
            * Reverse charge applies to PURCHASES only, and the server decides
            * that rather than trusting the flag it was handed.

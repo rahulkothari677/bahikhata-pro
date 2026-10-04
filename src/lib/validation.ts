@@ -163,6 +163,15 @@ export const createTransactionSchema = z.object({
    * are built on.
    */
   updateProductCosts: z.coerce.boolean().optional().default(false),
+  /*
+   * Phase 2c (#114): goods sent to another state (courier). The server checks
+   * the state against the official list and decides the place of supply;
+   * billToShipTo is asked only when a registered buyer's goods go elsewhere.
+   * Strict boolean, not coerce: "false" must not become true.
+   */
+  deliveryState: z.string().max(100).nullable().optional(),
+  deliveryAddress: z.string().max(300, 'Delivery address too long').nullable().optional(),
+  billToShipTo: z.boolean().nullable().optional(),
 })
 
 // Transaction update schema (same but all fields optional)
@@ -195,6 +204,15 @@ export const updateTransactionSchema = z.object({
   noteType: z.enum(['C', 'D']).optional(),
   noteReason: z.enum(['post-sale-discount', 'deficiency', 'return', 'price-revision', 'other']).optional(),
   affectsStock: z.coerce.boolean().optional(),
+  /*
+   * Phase 2c (#114): goods sent to another state (courier). The server checks
+   * the state against the official list and decides the place of supply;
+   * billToShipTo is asked only when a registered buyer's goods go elsewhere.
+   * Strict boolean, not coerce: "false" must not become true.
+   */
+  deliveryState: z.string().max(100).nullable().optional(),
+  deliveryAddress: z.string().max(300, 'Delivery address too long').nullable().optional(),
+  billToShipTo: z.boolean().nullable().optional(),
 })
 
 // Product create schema (🔒 V7 M4: enhanced with clearer error messages)

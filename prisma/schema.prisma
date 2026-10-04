@@ -268,6 +268,13 @@ model Transaction {
   paidAmount      Int      @default(0) // amount actually paid
   paymentMode     String   @default("cash") // cash | upi | card | bank | credit
   isInterState    Boolean  @default(false)
+  // Phase 2c (#114): the place of supply as decided when the bill was saved
+  // (2-digit state code), and where the goods were sent when not the buyer's
+  // own state. Returns and the printed bill read these, never the party's
+  // current state. Null on older bills — see billPlaceOfSupply().
+  placeOfSupply   String?
+  deliveryState   String?
+  deliveryAddress String?
   // 📄 Phase 5 — the shop's own fields on this BILL (PO number, vehicle
   // number, transport docket). Values are snapshotted with their labels, so
   // renaming a field cannot rewrite an invoice already issued. Definitions

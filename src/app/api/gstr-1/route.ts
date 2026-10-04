@@ -7,7 +7,7 @@ import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
-import { stateCodeOf } from '@/lib/gst'
+import { stateCodeOf, billPlaceOfSupply } from '@/lib/gst'
 import { getAdvancesForPeriod } from '@/lib/advances-for-period'
 import { buildAmendments, filedInvoicesFrom, type AmendmentTables } from '@/lib/gstr1-amendments'
 import { gstr1aWindow, correctionFitsGstr1a } from '@/lib/gstr1a-window'
@@ -183,6 +183,8 @@ export async function GET(req: NextRequest) {
       partyName: t.party?.name || null,
       partyGstin: t.party?.gstin || null,
       partyState: t.party?.state || null,
+      placeOfSupply: t.placeOfSupply,
+      deliveryState: t.deliveryState,
       // 🔒 V26 BUG-062: pass originalTransactionId so the builder can look up
       // the original invoice's isInterState + totalAmount for B2CS-vs-CDNUR
       // classification (instead of using the note's own potentially-stale values).
@@ -290,6 +292,7 @@ export async function GET(req: NextRequest) {
           where: { userId, invoiceNo: { in: nums }, type: { in: ['sale', 'credit-note', 'debit-note'] }, deletedAt: null },
           select: {
             invoiceNo: true, date: true, totalAmount: true,
+            isInterState: true, placeOfSupply: true, deliveryState: true,
             party: { select: { gstin: true, state: true } },
           },
         }),
@@ -303,13 +306,13 @@ export async function GET(req: NextRequest) {
 
       const current = new Map(
         live.map((t) => {
-          // Phase 2: named fields — this passed the state where the GSTIN goes.
-          const partyState = stateCodeOf(t.party)
+          // Phase 2c (#114): the place of supply SAVED on the bill, so a later party edit cannot move it.
+          const pos = billPlaceOfSupply(t, { gstin: shopGstin, state: shopState })
           return [String(t.invoiceNo), {
             inum: String(t.invoiceNo),
             idt: formatPortalDateForAmendment(t.date),
             val: roundMoney(t.totalAmount),
-            pos: partyState || shopStateCode || '',
+            pos: pos || shopStateCode || '',
             ctin: t.party?.gstin || undefined,
             // These came from the live query, so they exist by construction.
             exists: true,
@@ -419,7 +422,7 @@ export async function GET(req: NextRequest) {
           db.transaction.findMany({
             // Bounded by ownNums — the invoices this period actually filed.
             where: { userId, invoiceNo: { in: ownNums }, type: { in: ['sale', 'credit-note', 'debit-note'] }, deletedAt: null },
-            select: { invoiceNo: true, date: true, totalAmount: true, party: { select: { gstin: true, state: true } } },
+            select: { invoiceNo: true, date: true, totalAmount: true, isInterState: true, placeOfSupply: true, deliveryState: true, party: { select: { gstin: true, state: true } } },
           }),
           db.transaction.findMany({
             where: { userId, invoiceNo: { in: ownNums }, type: { in: ['sale', 'credit-note', 'debit-note'] }, deletedAt: { not: null } },
@@ -428,13 +431,13 @@ export async function GET(req: NextRequest) {
         ])
         const ownCurrent = new Map(
           ownLive.map((t) => {
-            // Phase 2: named fields — this passed the state where the GSTIN goes.
-          const partyState = stateCodeOf(t.party)
+            // Phase 2c (#114): the place of supply SAVED on the bill, so a later party edit cannot move it.
+          const pos = billPlaceOfSupply(t, { gstin: shopGstin, state: shopState })
             return [String(t.invoiceNo), {
               inum: String(t.invoiceNo),
               idt: formatPortalDateForAmendment(t.date),
               val: roundMoney(t.totalAmount),
-              pos: partyState || shopStateCode || '',
+              pos: pos || shopStateCode || '',
               ctin: t.party?.gstin || undefined,
               exists: true,
             }]
@@ -692,6 +695,8 @@ export async function POST(req: NextRequest) {
       partyName: t.party?.name || null,
       partyGstin: t.party?.gstin || null,
       partyState: t.party?.state || null,
+      placeOfSupply: t.placeOfSupply,
+      deliveryState: t.deliveryState,
       items: t.items.map(item => ({
         productId: item.productId,
         productName: item.productName,

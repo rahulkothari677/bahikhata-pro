@@ -4,7 +4,8 @@ import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibility'
 import { roundMoney, toMoney } from '@/lib/money'
-import { deriveInterStateStatus } from '@/lib/gst'
+import { deriveInterStateStatus, billPlaceOfSupply } from '@/lib/gst'
+import { resolveBillDelivery, shipToChoiceRefusal } from '@/lib/bill-delivery'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { getOrCreateWalkInParty } from '@/lib/walk-in-party'
@@ -291,12 +292,28 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // isInterState flag (user could flip CGST/SGST ↔ IGST → wrong GST return).
     // Now: client flag is IGNORED, server derives from shop state vs party state.
     // 🔒 V26 Phase 8 R10-1: When indeterminate (state missing), honor client override.
-    const { isInterState: derivedIsInterState, party, indeterminate } = await deriveInterStateStatus(userId, partyId)
+    // Phase 2c (#114): the same delivery rule as POST; an edit that does not
+    // send a delivery keeps what the bill saved.
+    const delivery = await resolveBillDelivery(db, userId, {
+      type,
+      originalTransactionId: originalTransactionId !== undefined ? originalTransactionId : existing.originalTransactionId,
+      deliveryState: (validation.data as any).deliveryState,
+      deliveryAddress: (validation.data as any).deliveryAddress,
+      billToShipTo: (validation.data as any).billToShipTo,
+      existing,
+    })
+    if (!delivery.ok) return NextResponse.json({ error: delivery.error, message: delivery.message }, { status: 400 })
+    const { isInterState: derivedIsInterState, party, indeterminate, posCode, needsShipToChoice, shop } = await deriveInterStateStatus(userId, partyId, { state: delivery.deliveryState, billToShipTo: delivery.billToShipTo })
     const clientIsInterState = typeof body.isInterState === 'boolean' ? body.isInterState : undefined
-    const isInterState = indeterminate && clientIsInterState !== undefined ? clientIsInterState : derivedIsInterState
     if (partyId && !party) {
       return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }
+    if (needsShipToChoice) return NextResponse.json(shipToChoiceRefusal(party, delivery.deliveryState), { status: 400 })
+    // A note against a saved bill keeps that bill's tax head and place of supply.
+    const isInterState = delivery.original
+      ? delivery.original.isInterState
+      : indeterminate && clientIsInterState !== undefined ? clientIsInterState : derivedIsInterState
+    const placeOfSupply = delivery.original ? billPlaceOfSupply(delivery.original, shop) : posCode
 
     // For income/expense - simple update
     if (type === 'income' || type === 'expense') {
@@ -815,6 +832,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           paidAmount: roundMoney(finalPaid),
           paymentMode: paymentMode || 'cash',
           isInterState: !!isInterState,
+          // Phase 2c (#114): the stored facts every return and print reads.
+          placeOfSupply,
+          deliveryState: delivery.deliveryState,
+          deliveryAddress: delivery.deliveryAddress,
           notes: notes || null,
           // 🔒 An OMITTED field must not erase a stored one. `invoiceNo || null`
           // turned "not sent" into "clear it", so any edit that did not

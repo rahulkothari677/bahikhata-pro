@@ -22,7 +22,7 @@
 
 import { roundMoney } from '@/lib/money'
 import { lineTaxable } from '@/lib/line-taxable'
-import { stateCodeOf, placeOfSupplyCode } from '@/lib/gst'
+import { stateCodeOf, billPlaceOfSupply, resolveStateCode } from '@/lib/gst'
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -61,6 +61,10 @@ export interface EInvoiceTransaction {
   partyAddress: string | null
   partyPhone: string | null
   partyEmail: string | null
+  /** Phase 2c (#114): saved on the bill; absent on older bills. */
+  placeOfSupply?: string | null
+  deliveryState?: string | null
+  deliveryAddress?: string | null
   items: EInvoiceItem[]
 }
 
@@ -125,6 +129,19 @@ export interface IRNRequest {
     Ph: string
     Em: string
     Pos: string  // place of supply
+  }
+  /**
+   * Where the goods went, when not the buyer's address (Phase 2c, #114).
+   * Optional in the NIC schema; sent only when the delivery address carries a
+   * 6-digit PIN, because NIC rejects ShipDtls without one. Ship-to GSTIN is
+   * not sent — that requirement is on hold (GSTN news 668, 29 Jul 2026).
+   */
+  ShipDtls?: {
+    LglNm: string
+    Addr1: string
+    Loc: string
+    Pin: number
+    Stcd: string
   }
   ItemList: Array<{
     SlNo: string
@@ -353,8 +370,15 @@ export function buildIrnRequest(
 
   // Build seller and buyer details
   const shopStateCode = shop.stateCode || stateCodeOf({ gstin: shop.gstin, state: shop.state }) || '00'
-  const buyerStateCode = placeOfSupplyCode({ shop: { gstin: shop.gstin, state: shop.state }, party: { gstin: txn.partyGstin, state: txn.partyState } }) || '00'
-  const pos = txn.isInterState ? buyerStateCode : shopStateCode
+  // The buyer's own state (their GSTIN's) is Stcd; the place of supply is the
+  // one SAVED on the bill — a bill-to-ship-to or courier sale differs (#114).
+  const buyerStateCode = stateCodeOf({ gstin: txn.partyGstin, state: txn.partyState }) || shopStateCode
+  const pos = billPlaceOfSupply(
+    { placeOfSupply: txn.placeOfSupply, isInterState: txn.isInterState, deliveryState: txn.deliveryState, party: { gstin: txn.partyGstin, state: txn.partyState } },
+    { gstin: shop.gstin, state: shop.state },
+  ) || (txn.isInterState ? buyerStateCode : shopStateCode)
+  const shipStateCode = resolveStateCode(txn.deliveryState)
+  const shipPin = extractPincode(txn.deliveryAddress ?? null)
 
   const request: IRNRequest = {
     Version: '1.1',
@@ -421,6 +445,9 @@ export function buildIrnRequest(
       Em: txn.partyEmail || '',
       Pos: pos,
     },
+    ...(shipStateCode && shipPin
+      ? { ShipDtls: { LglNm: txn.partyName || 'Unknown', Addr1: txn.deliveryAddress || '', Loc: extractLocality(txn.deliveryAddress ?? null), Pin: shipPin, Stcd: shipStateCode } }
+      : {}),
     ItemList: itemList,
     ValDtls: {
       AssVal: assVal,

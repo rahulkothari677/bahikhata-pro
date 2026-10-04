@@ -98,7 +98,8 @@ describe('place of supply (Rule 46)', () => {
       { ...BASE, party: { name: 'Gupta', gstin: '23FGHIJ5678K1Z2', state: 'Madhya Pradesh' } },
       SHOP,
     )
-    expect(doc.placeOfSupply).toBe('Madhya Pradesh')
+    // Phase 2c (#114): Rule 46(n) — the State name, from the code (GSTIN 23…).
+    expect(doc.placeOfSupply).toBe('Madhya Pradesh (23)')
   })
 
   it('is shown on an inter-state supply even to an unregistered buyer', () => {
@@ -106,7 +107,7 @@ describe('place of supply (Rule 46)', () => {
       { ...BASE, isInterState: true, party: { name: 'Gupta', state: 'Maharashtra' } },
       SHOP,
     )
-    expect(doc.placeOfSupply).toBe('Maharashtra')
+    expect(doc.placeOfSupply).toBe('Maharashtra (27)')
   })
 
   it('is omitted for a local sale to an unregistered walk-in', () => {

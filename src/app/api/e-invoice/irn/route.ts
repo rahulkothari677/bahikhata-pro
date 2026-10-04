@@ -95,6 +95,9 @@ export async function GET(req: NextRequest) {
       partyAddress: txn.party?.address || null,
       partyPhone: txn.party?.phone || null,
       partyEmail: txn.party?.email || null,
+      placeOfSupply: txn.placeOfSupply,
+      deliveryState: txn.deliveryState,
+      deliveryAddress: txn.deliveryAddress,
       items: txn.items.map(item => ({
         productName: item.productName,
         hsn: item.hsn,

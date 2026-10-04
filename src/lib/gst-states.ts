@@ -115,20 +115,139 @@ export function stateCodeOf(place: StatePlace | null | undefined): string | null
   return gstinStateCode(place.gstin) ?? resolveStateCode(place.state)
 }
 
-/**
- * Where the supply is — the 2-digit place-of-supply code.
- *
- *   1. a delivery state, when the goods go somewhere else (Phase 2c, #114)
- *   2. the buyer's GSTIN state / recorded state
- *   3. otherwise the shop's own state (s.10(1)(ca): no address recorded →
- *      the supplier's location; a counter sale is at the shop)
- */
-export function placeOfSupplyCode(args: {
+/** What decides a bill's place of supply. */
+export interface SupplyPlaces {
   shop: StatePlace | null | undefined
   party?: StatePlace | null
+  /** The state the goods are sent to, when not the buyer's own (courier). */
   delivery?: string | null
-}): string | null {
-  return resolveStateCode(args.delivery) ?? stateCodeOf(args.party) ?? stateCodeOf(args.shop)
+  /**
+   * A REGISTERED buyer asked for the goods to go to someone else — their own
+   * customer (s.10(1)(b)). Read only when the delivery state differs from the
+   * buyer's GSTIN state; an unregistered buyer is always (ca).
+   */
+  billToShipTo?: boolean | null
+}
+
+/**
+ * Where the supply is — the 2-digit place-of-supply code. (Phase 2c, #114)
+ * IGST Act s.10(1), verified in the law report ("Place of supply"):
+ *
+ *   registered buyer, goods sent to another state on their instruction
+ *     (bill-to-ship-to)            → the buyer's GSTIN state       (b)
+ *   goods sent to another state   → where the delivery ends       (a); for an
+ *     unregistered buyer the delivery address governs (ca, Circular 209/3/2024)
+ *   otherwise                     → the buyer's GSTIN / recorded state
+ *   nothing recorded              → the shop's own state (ca: no address →
+ *                                   the supplier's location; a counter sale)
+ */
+export function placeOfSupplyCode(args: SupplyPlaces): string | null {
+  const deliveryCode = resolveStateCode(args.delivery)
+  const buyerGstinCode = gstinStateCode(args.party?.gstin)
+  if (deliveryCode && buyerGstinCode && args.billToShipTo) return buyerGstinCode
+  return deliveryCode ?? stateCodeOf(args.party) ?? stateCodeOf(args.shop)
+}
+
+/**
+ * What the bill screen must ask or warn about a delivery to another state.
+ * Same inputs as supplyKind; the server refuses `needsShipToChoice`.
+ *
+ *  needsShipToChoice — a registered buyer's goods go to a state other than
+ *    their GSTIN's, and the shop has not said whether it is bill-to-ship-to.
+ *    The answer changes the tax head, so it is asked, never assumed.
+ *  buyerLosesCredit — it is NOT bill-to-ship-to: the place of supply is the
+ *    delivery state, which is not the buyer's GSTIN state, so the buyer cannot
+ *    claim this GST (GSTR-2B shows it as not available).
+ */
+export function deliveryCheck(args: SupplyPlaces): { needsShipToChoice: boolean; buyerLosesCredit: boolean } {
+  const deliveryCode = resolveStateCode(args.delivery)
+  const buyerGstinCode = gstinStateCode(args.party?.gstin)
+  const differs = !!deliveryCode && !!buyerGstinCode && deliveryCode !== buyerGstinCode
+  return {
+    needsShipToChoice: differs && typeof args.billToShipTo !== 'boolean',
+    buyerLosesCredit: differs && args.billToShipTo === false,
+  }
+}
+
+/**
+ * The place of supply of a SAVED bill. Every return and every printed bill
+ * reads this — never the party's current state, which can be edited after
+ * the bill was issued (a later party edit used to move a filed bill's
+ * place of supply while its CGST/SGST/IGST stayed put).
+ *
+ *   1. the code saved on the bill (Phase 2c onwards)
+ *   2. an older bill charged as intra-state: the shop's own state — that is
+ *      what CGST + SGST means (IGST Act s.8)
+ *   3. otherwise worked out as at the time, from the party and delivery
+ */
+export function billPlaceOfSupply(
+  bill: { placeOfSupply?: string | null; isInterState?: boolean | null; deliveryState?: string | null; party?: StatePlace | null },
+  shop: StatePlace | null | undefined,
+): string | null {
+  const saved = resolveStateCode(bill.placeOfSupply)
+  if (saved) return saved
+  const shopCode = stateCodeOf(shop)
+  if (bill.isInterState === false && shopCode) return shopCode
+  return placeOfSupplyCode({ shop, party: bill.party, delivery: bill.deliveryState })
+}
+
+/**
+ * A delivery state as the server stores it: the official name, or null when
+ * none was given. Anything typed that is not a state is refused with the
+ * reason — never stored, never guessed.
+ */
+export function normaliseDeliveryState(input: string | null | undefined): { ok: true; state: string | null } | { ok: false; error: string } {
+  const raw = String(input ?? '').trim()
+  if (!raw) return { ok: true, state: null }
+  const code = resolveStateCode(raw)
+  if (!code) return { ok: false, error: `"${raw}" is not a state — choose one from the list.` }
+  return { ok: true, state: stateNameForCode(code) }
+}
+
+/**
+ * Whether a saved bill was bill-to-ship-to, read back from what it stored:
+ * its place of supply differs from where the goods went exactly when it was.
+ * Null when no delivery state was recorded. Used to edit or convert a bill
+ * without asking the question again.
+ */
+export function savedBillToShipTo(bill: { placeOfSupply?: string | null; deliveryState?: string | null }): boolean | null {
+  const deliveryCode = resolveStateCode(bill.deliveryState)
+  const posCode = resolveStateCode(bill.placeOfSupply)
+  if (!deliveryCode || !posCode) return null
+  return posCode !== deliveryCode
+}
+
+/**
+ * Rule 46(e) CGST Rules: a tax invoice to an UNREGISTERED buyer with a
+ * taxable value of ₹50,000 or more must show the buyer's name and address,
+ * the delivery address, and the State name and code (law report,
+ * "Invoices"; no change between Oct 2025 and Sep 2026). The figure is in the
+ * Rule's own text, not a Council threshold. Returns what is missing.
+ */
+export const RULE_46E_MIN_TAXABLE_RUPEES = 50000
+export function rule46eMissing(args: {
+  taxableValue: number
+  party?: { name?: string | null; gstin?: string | null; address?: string | null; state?: string | null } | null
+  deliveryState?: string | null
+}): Array<'name' | 'address' | 'state'> {
+  if (!(args.taxableValue >= RULE_46E_MIN_TAXABLE_RUPEES)) return []
+  if (gstinStateCode(args.party?.gstin)) return []
+  const missing: Array<'name' | 'address' | 'state'> = []
+  if (!args.party?.name?.trim()) missing.push('name')
+  if (!args.party?.address?.trim()) missing.push('address')
+  if (!resolveStateCode(args.deliveryState) && !resolveStateCode(args.party?.state)) missing.push('state')
+  return missing
+}
+
+/**
+ * A composition shop may not make any inter-state sale — CGST Act
+ * s.10(2)(c) ("he is not engaged in making any inter-State outward supplies
+ * of goods or services"; "or services" from 1 Jan 2021, Notification
+ * 92/2020-CT). Verified on CBIC's text, 4 Oct 2026. The bill screen warns;
+ * the sale is still recorded — the ledger keeps what happened.
+ */
+export function compositionInterStateBlocked(status: string, args: SupplyPlaces): boolean {
+  return status === 'composition' && supplyKind(args).isInterState
 }
 
 /**
@@ -136,11 +255,7 @@ export function placeOfSupplyCode(args: {
  * every return use. `indeterminate` only when the shop's own state is not
  * known — then the app cannot tell and asks.
  */
-export function supplyKind(args: {
-  shop: StatePlace | null | undefined
-  party?: StatePlace | null
-  delivery?: string | null
-}): { isInterState: boolean; indeterminate: boolean; shopCode: string | null; posCode: string | null } {
+export function supplyKind(args: SupplyPlaces): { isInterState: boolean; indeterminate: boolean; shopCode: string | null; posCode: string | null } {
   const shopCode = stateCodeOf(args.shop)
   const posCode = placeOfSupplyCode(args)
   return {

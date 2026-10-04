@@ -535,8 +535,10 @@ export async function generateInvoicePDF(
     doc.setFont(THEME.font, 'normal')
     doc.setFontSize(8)
     doc.setTextColor(text.r, text.g, text.b)
-    const placeOfSupply = invoice.party?.state
-      ? `${invoice.party.state}${invoice.isInterState ? ' (Inter-state)' : ' (Intra-state)'}`
+    // Phase 2c (#114): the place of supply saved on the bill, with its
+    // official name and code — was the party's state as typed ("RJ").
+    const placeOfSupply = invoice.placeOfSupply
+      ? `${invoice.placeOfSupply}${invoice.isInterState ? ' (Inter-state)' : ' (Intra-state)'}`
       : '—'
     doc.text('Place of Supply: ' + placeOfSupply, rightCardX + 3, y + 11)
     doc.text('Payment Mode: ' + invoice.paymentMode.toUpperCase(), rightCardX + 3, y + 16)
@@ -546,6 +548,17 @@ export async function generateInvoicePDF(
 
   y += Math.max(leftCardH, rightCardH) + 6
 
+  }
+
+  // Rule 46(o): where the goods went, when not the buyer's address (#114).
+  // Below the party block in every layout, so no template can drop it.
+  if (invoice.shipTo) {
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(text.r, text.g, text.b)
+    const shipLines = (doc.splitTextToSize(`Ship to: ${invoice.shipTo}`, pageWidth - 2 * margin) as string[]).slice(0, 2)
+    doc.text(shipLines, margin, y)
+    y += shipLines.length * 4 + 3
   }
 
   // ═══════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { supplyKind } from './gst-states'
+import { supplyKind, deliveryCheck } from './gst-states'
 
 /**
  * 🔒 AUDIT FIX H3 (v2 audit): Shared GST inter-state derivation helper.
@@ -44,7 +44,18 @@ export function invalidateShopStateCache(_userId: string): void {
 export async function deriveInterStateStatus(
   userId: string,
   partyId?: string | null,
-): Promise<{ isInterState: boolean; party: any | null; indeterminate: boolean }> {
+  // Phase 2c (#114): goods sent to another state, and — for a registered
+  // buyer — whether that is bill-to-ship-to. See placeOfSupplyCode().
+  delivery?: { state?: string | null; billToShipTo?: boolean | null },
+): Promise<{
+  isInterState: boolean; party: any | null; indeterminate: boolean
+  /** The place of supply to SAVE on the bill; null when the shop's state is unknown. */
+  posCode: string | null
+  /** A registered buyer's goods go to another state and nobody said whether it is bill-to-ship-to. */
+  needsShipToChoice: boolean
+  /** The shop as far as its state is concerned — for billPlaceOfSupply(). */
+  shop: { gstin?: string | null; state?: string | null }
+}> {
   let party: any = null
 
   if (partyId) {
@@ -67,12 +78,16 @@ export async function deriveInterStateStatus(
   // Phase 2 (#118): compares state CODES — GSTIN prefix first, then the
   // recorded state with aliases ("UP" = "Uttar Pradesh") — via supplyKind,
   // the same rule GSTR-1 uses for the place of supply.
-  const { isInterState, indeterminate } = supplyKind({
+  const places = {
     shop: { gstin: shopSetting?.gstin, state: shopSetting?.state },
     party: party ? { gstin: party.gstin, state: party.state } : null,
-  })
+    delivery: delivery?.state ?? null,
+    billToShipTo: delivery?.billToShipTo ?? null,
+  }
+  const { isInterState, indeterminate, posCode } = supplyKind(places)
+  const { needsShipToChoice } = deliveryCheck(places)
 
-  return { isInterState, party, indeterminate }
+  return { isInterState, party, indeterminate, posCode: indeterminate ? null : posCode, needsShipToChoice, shop: places.shop }
 }
 
 // ─── State name ↔ code mapping (for GSTR-1 POS field) ─────────────────────
@@ -90,4 +105,4 @@ export async function deriveInterStateStatus(
 // module gst-states.ts (no db import) so gstr1-builder.ts stays pure and its
 // tests run without DATABASE_URL. Re-exported here so all existing call sites
 // (`import { deriveStateCode } from '@/lib/gst'`) keep working unchanged.
-export { stateNameToCode, deriveStateCode, deriveInterStateFromStates, resolveStateCode, stateCodeOf, placeOfSupplyCode, supplyKind, gstinStateCode, stateNameForCode, INDIAN_STATES } from './gst-states'
+export { stateNameToCode, deriveStateCode, deriveInterStateFromStates, resolveStateCode, stateCodeOf, placeOfSupplyCode, supplyKind, gstinStateCode, stateNameForCode, INDIAN_STATES, billPlaceOfSupply, normaliseDeliveryState, savedBillToShipTo } from './gst-states'

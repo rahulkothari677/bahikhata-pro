@@ -188,6 +188,18 @@ save.
 - Test data is authorised (not launched yet) — but say what was created and
   clean it up.
 - **A stale bundle looks exactly like a bug.** Hard-reload before believing it.
+- **Never pipe a regex or `\n` through a Bash heredoc into Python.** On
+  4 Oct it turned `\b` into a backspace, `\t` into a tab and `'\n'` into a
+  real line break — three times in one phase, each caught only by a failing
+  test. Scripts with backslashes go in a file written by the Write tool
+  (raw strings), or use the Edit tool. `TransactionEntry.tsx` has MIXED line
+  endings, so a script that rebuilds a pattern with one EOL silently misses —
+  the Edit tool matches what is there.
+- **Browser pane under emulation:** ref clicks miss. Take the element's
+  `getBoundingClientRect()` centre × the pane's scale (0.4747 at the 375 px
+  preset, 0.3535 at 1024 × 680 in this pane) and click that point. Sign-in:
+  `form_input` does not reach React state — type into the fields, at desktop
+  size.
 - **Commit messages go through a file** (`git commit -F msg.txt`). On 1 Oct a
   PowerShell here-string containing double quotes was split by Windows
   PowerShell 5.1 into pathspecs; the commit failed, the next command switched to
@@ -355,6 +367,14 @@ cause**, never as a new line at the bottom.
 · `dataLivesAt` doing double duty as ViewType and destination id (#61, #68)
 · **The process docs themselves** — three files stating the same gates, which
   diverged within 24 hours. That is what this consolidation fixes.
+
+· **4 Oct: a shared builder that two renderers bypassed.** `InvoiceDocument`
+  already carried the place of supply, yet one PDF design's "Supply &
+  payment" card read `party.state` itself and the browser print view printed
+  "State: RJ" — a courier sale would have printed the customer's home state.
+  **When a fact gets one builder, grep every renderer for the RAW field it
+  replaces** (`party?.state`, `party.state`), not just the callers of the
+  builder; then test every design (`ship-to-every-template.test.ts`).
 
 · **2 Oct: changed what a stored number MEANS and checked only where it is
   shown.** #175 made a not-registered shop's saved cost include GST; every

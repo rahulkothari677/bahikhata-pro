@@ -30,7 +30,7 @@
 
 import { roundMoney } from '@/lib/money'
 import { lineTaxable } from '@/lib/line-taxable'
-import { placeOfSupplyCode } from '@/lib/gst-states'
+import { billPlaceOfSupply } from '@/lib/gst-states'
 import { classifySupplyLine, isTaxableSupply } from '@/lib/supply-classification'
 import { advanceTax, isTaxableAdvance, type AdvanceReceipt } from '@/lib/advance-tax'
 
@@ -43,9 +43,12 @@ import { advanceTax, isTaxableAdvance, type AdvanceReceipt } from '@/lib/advance
 // CGST/SGST, not IGST). For intra-state and walk-in sales the fallback chain
 // (party GSTIN → party state → shop GSTIN → shop state) lands on the shop's
 // code, so those are unchanged.
+//
+// Phase 2c (#114): reads the place of supply SAVED on the bill (a courier
+// sale's delivery state), falling back for older bills — billPlaceOfSupply.
 function placeOfSupply(txn: Gstr1Transaction, shop: ShopInfo): string {
   return (
-    placeOfSupplyCode({ shop: { gstin: shop.gstin, state: shop.state }, party: { gstin: txn.partyGstin, state: txn.partyState } }) ||
+    billPlaceOfSupply({ ...txn, party: { gstin: txn.partyGstin, state: txn.partyState } }, { gstin: shop.gstin, state: shop.state }) ||
     shop.stateCode ||
     // Never reached from the GSTR-1 route, which refuses to build without the
     // shop's state (Phase 2, #118: "00" was written for B2C sales and the
@@ -72,6 +75,9 @@ export interface Gstr1Transaction {
   partyName: string | null
   partyGstin: string | null
   partyState: string | null
+  /** Phase 2c: saved on the bill; null/absent on older bills. */
+  placeOfSupply?: string | null
+  deliveryState?: string | null
   items: Gstr1Item[]
   // 🔒 V26 BUG-062: originalTransactionId for note-vs-original classification.
   // When a credit/debit note is created against an original sale/purchase,
