@@ -6,7 +6,7 @@
  *    two steps under the floor (text-3xs 10px, text-2xs 11px) used 551 times,
  *    and charts drew axis labels at 10-11px. All moved to 12px.
  *  - Colour means one thing. Screens use the roles good / bad / check / ai.
- *    2,956 raw palette shades remain from before; they leave as
+ *    Raw palette shades remain from before (2,956 at 4a, 2,729 after 4b); they leave as
  *    each screen is rebuilt in Phases 5-12, so the count may only go DOWN.
  *    When it drops, lower RAW_COLOUR_CEILING to the new number in the same
  *    commit, so the room freed cannot be spent on new raw shades.
@@ -40,7 +40,7 @@ const SRC = path.resolve(process.cwd(), 'src')
 const CSS = fs.readFileSync(path.join(SRC, 'app/globals.css'), 'utf8')
 
 /** Ceiling for raw meaning-colour shades in src/. Lower it; never raise it. */
-const RAW_COLOUR_CEILING = 2956
+const RAW_COLOUR_CEILING = 2729
 
 function sourceFiles(): { rel: string; code: string }[] {
   const out: { rel: string; code: string }[] = []

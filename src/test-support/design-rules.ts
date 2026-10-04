@@ -51,6 +51,20 @@ export function rawMeaningColourCount(code: string): number {
   return (code.match(RAW_MEANING_COLOUR) || []).length
 }
 
+/**
+ * Hand-made warning boxes (Phase 4b): one class string with a soft tinted
+ * surface AND a tinted border, e.g. "border-amber-200 bg-amber-50". That is
+ * the shape every screen used to draw its own warning in. New warnings use
+ * <Notice>. Reads one line at a time, so a box whose classes are spread over
+ * several lines escapes; the count is a ceiling to lower, not a census.
+ */
+const AD_HOC_BOX =
+  /\bbg-(?:amber|yellow|orange|red|rose|blue|sky|emerald|green)-(?:50|100)\b[^"'`\n]*\bborder-(?:amber|yellow|orange|red|rose|blue|sky|emerald|green)-(?:100|200|300)\b|\bborder-(?:amber|yellow|orange|red|rose|blue|sky|emerald|green)-(?:100|200|300)\b[^"'`\n]*\bbg-(?:amber|yellow|orange|red|rose|blue|sky|emerald|green)-(?:50|100)\b/g
+
+export function adHocWarningBoxCount(code: string): number {
+  return (code.match(AD_HOC_BOX) || []).length
+}
+
 export const COLOUR_ROLES = ['good', 'bad', 'check', 'ai'] as const
 
 /**

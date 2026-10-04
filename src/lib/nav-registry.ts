@@ -837,7 +837,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     gstNeeds: 'regular',
     label: 'GST Summary',
     keywords: 'gst summary tax summary total gst kitna gst',
-    description: 'Tax liability by slab — 5/12/18/28%',
+    description: 'Tax you owe, split by GST rate',
     icon: Receipt,
     iconColor: BLUE,
     iconBg: BLUE_BG,

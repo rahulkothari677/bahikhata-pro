@@ -42,6 +42,7 @@ import { INVOICE_PRESETS, getInvoicePreset } from '@/lib/invoice-presets'
 import { PAPER_SIZES } from '@/lib/invoice-paper'
 import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
 import { InfoHint } from '@/components/common/InfoHint'
+import { Notice } from '@/components/ui/notice'
 import { SignatureField } from '@/components/settings/SignatureField'
 import { PaymentQrField } from '@/components/settings/PaymentQrField'
 import { CustomFieldsCard } from '@/components/settings/CustomFieldsCard'
@@ -1185,8 +1186,12 @@ export function Settings({
               */}
             {compositionCategory && (
               <div className="mt-3">
-                <Label htmlFor="composition-to" className="text-xs">
-                  Date I left the scheme (leave blank if you are still in it)
+                <Label htmlFor="composition-to" className="text-xs inline-flex items-center gap-1">
+                  Date I left the scheme
+                  <InfoHint
+                    label="leaving the scheme"
+                    text="Leave blank if you are still in it. Set this the day you cross the turnover limit. Your CMP-08 will then charge only up to that date, and everything after it goes into GSTR-1 and GSTR-3B, so you are not taxed twice on the same sales."
+                  />
                 </Label>
                 <Input
                   id="composition-to"
@@ -1205,11 +1210,6 @@ export function Settings({
                     )
                   }}
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Set this the day you cross the turnover limit. Your CMP-08 will then charge only
-                  up to that date, and everything after it goes into GSTR-1 and GSTR-3B — so you
-                  are not taxed twice on the same sales.
-                </p>
               </div>
             )}
           </div>
@@ -1371,13 +1371,13 @@ export function Settings({
                 trap (users could create shops but couldn't switch between them).
                 Now: honest "Coming Soon" message. Switching will be added in a
                 future update. */}
-            <div className="mt-3 p-3 rounded-lg border border-dashed border-border bg-muted/30 text-center">
-              <Store className="w-5 h-5 text-muted-foreground/50 mx-auto mb-1" />
-              <p className="text-xs font-medium text-muted-foreground">Multi-shop switching coming soon</p>
-              <p className="text-xs text-muted-foreground/70 mt-0.5">
-                You&apos;ll be able to add multiple shops and switch between them. For now, all data goes to your default shop.
-              </p>
-            </div>
+            <Notice
+              level="note"
+              icon={Store}
+              className="mt-3"
+              title="Switching between shops is coming soon"
+              info="You will be able to add more shops and switch between them. For now, all data goes to your default shop."
+            />
           </CardContent>
         </Card>
       )}
@@ -1405,41 +1405,41 @@ export function Settings({
         </CardHeader>
         <CardContent className="space-y-3">
           {/* 🔒 V17-Ext §5.1: Period Lock — protect filed GST periods from edits */}
-          <div className="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 p-4">
+          {/* Phase 4b: a plain card. It was tinted amber for decoration, and amber
+              now means "needs a look". The badge carries the state. */}
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-start gap-3">
-              <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
+              <Shield className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-amber-900 dark:text-amber-100 text-sm">Period Lock (Financial-Year lock)</p>
+                  <p className="font-semibold text-sm">Period lock</p>
+                  <InfoHint
+                    label="period lock"
+                    text="Once you file GST for a period, lock it. No one (not even staff) can edit, delete or create transactions dated on or before the lock date. This protects your filed returns from accidental or fraudulent changes."
+                  />
                   {lockedUntil ? (
-                    <Badge className="bg-amber-600 text-white hover:bg-amber-700">Locked</Badge>
+                    <Badge className="bg-good-soft text-good hover:bg-good-soft">Locked</Badge>
                   ) : (
                     <Badge variant="secondary">Unlocked</Badge>
                   )}
                 </div>
-                <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">
-                  Once you file GST for a period, lock it. No one (not even staff) can edit, delete,
-                  or create transactions dated on or before the lock date. This protects your filed
-                  returns from accidental or fraudulent changes.
-                </p>
 
                 {lockedUntil ? (
                   <div className="mt-3 space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-amber-900 dark:text-amber-100">
-                      <Calendar className="w-4 h-4" />
+                    <div className="flex items-center gap-2 text-sm">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
                       <span>
-                        Locked until:{' '}
+                        Locked until{' '}
                         <strong>{new Date(lockedUntil).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
                       </span>
+                      <InfoHint
+                        label="a locked period"
+                        text="Transactions dated on or before this date are read-only. To make changes, unlock the period first (owner only)."
+                      />
                     </div>
-                    <p className="text-xs text-amber-700 dark:text-amber-300">
-                      Transactions dated on or before this date are read-only. To make changes, unlock
-                      the period first (owner only).
-                    </p>
                     <Button
                       variant="outline"
-                      size="sm"
-                      className="gap-2 border-amber-400 dark:border-amber-800 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                      className="gap-2 h-12"
                       onClick={handleUnlock}
                       disabled={savingLock}
                     >
@@ -1451,7 +1451,13 @@ export function Settings({
                   <div className="mt-3 space-y-2">
                     <div className="flex items-end gap-2 flex-wrap">
                       <div className="flex-1 min-w-[160px]">
-                        <Label className="text-xs text-amber-900 dark:text-amber-100" htmlFor="field-lock-until-date-inclusive">Lock until date (inclusive)</Label>
+                        <Label className="text-xs inline-flex items-center gap-1" htmlFor="field-lock-until-date-inclusive">
+                          Lock until (inclusive)
+                          <InfoHint
+                            label="choosing a lock date"
+                            text="Lock until the last day of the month you filed GST for (for example 31 March). You can always unlock later if needed."
+                          />
+                        </Label>
                         <Input id="field-lock-until-date-inclusive"
                           type="date"
                           value={lockDateInput}
@@ -1461,8 +1467,7 @@ export function Settings({
                         />
                       </div>
                       <Button
-                        size="sm"
-                        className="gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+                        className="gap-2 h-12"
                         onClick={() => persistPeriodLock(lockDateInput)}
                         disabled={savingLock || !lockDateInput}
                       >
@@ -1470,10 +1475,6 @@ export function Settings({
                         {savingLock ? 'Locking...' : 'Lock Period'}
                       </Button>
                     </div>
-                    <p className="text-xs text-amber-700 dark:text-amber-300">
-                      Tip: Lock until the last day of the month you filed GST for (e.g. March 31).
-                      You can always unlock later if needed.
-                    </p>
                   </div>
                 )}
               </div>
@@ -1481,20 +1482,22 @@ export function Settings({
           </div>
 
           {/* 🔒 V17-Ext §5.1: Reconciliation Health Check */}
-          <div className="rounded-lg border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 p-4">
+          {/* Phase 4b: a plain card; green now means "checked and fine", so it
+              appears only on a passed result, not on the panel itself. */}
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-start gap-3">
-              <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold text-emerald-900 dark:text-emerald-100 text-sm">Health Check (Reconciliation)</p>
-                <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-1">
-                  Verify your books are balanced. Checks that party balances match dashboard totals,
-                  per-item GST matches invoice headers, and no orphaned data exists. Run this before
-                  filing GST or at month-end to catch any issues.
-                </p>
+              <Check className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <p className="font-semibold text-sm">Health check</p>
+                  <InfoHint
+                    label="the health check"
+                    text="Checks that party balances match dashboard totals, per-item GST matches invoice headers, and no orphaned data exists. Run it before filing GST or at month-end."
+                  />
+                </div>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="mt-3 gap-2 border-emerald-400 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+                  className="mt-3 gap-2 h-12"
                   onClick={handleRunHealthCheck}
                   disabled={runningHealthCheck}
                 >
@@ -1506,22 +1509,16 @@ export function Settings({
                 {healthCheck && (
                   <div className="mt-3 space-y-2">
                     {healthCheck.allPassed ? (
-                      <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300 font-medium">
-                        <Check className="w-4 h-4" />
-                        All checks passed — your books are balanced.
-                      </div>
+                      <Notice level="clear" title="All checks passed. Your books are balanced." />
                     ) : (
-                      <div className="flex items-center gap-2 text-sm text-rose-700 dark:text-rose-300 font-medium">
-                        <AlertTriangle className="w-4 h-4" />
-                        Some checks failed — see details below.
-                      </div>
+                      <Notice level="stop" title="Some checks failed. See the details below." />
                     )}
                     {healthCheck.checks.map((check: any, i: number) => (
                       <div
                         key={i}
                         className={cn(
-                          'flex items-start gap-2 rounded-md p-2 text-xs',
-                          check.passed ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200' : 'bg-rose-100 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200'
+                          'flex items-start gap-2 rounded-lg p-2 text-xs',
+                          check.passed ? 'bg-good-soft text-good' : 'bg-bad-soft text-bad'
                         )}
                       >
                         {check.passed ? (
@@ -1536,7 +1533,7 @@ export function Settings({
                       </div>
                     ))}
                     {healthCheck.runAt && (
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                      <p className="text-xs text-muted-foreground">
                         Last checked: {new Date(healthCheck.runAt).toLocaleString('en-IN')}
                       </p>
                     )}
@@ -1561,19 +1558,24 @@ export function Settings({
         </CardHeader>
         <CardContent className="space-y-3">
           {/* Offline cache management */}
-          <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4">
+          {/* Phase 4b: plain cards for the safe data tools (they were blue and
+              green for decoration); the danger zone keeps the "bad" role. */}
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-start gap-3">
-              <Database className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm">Offline Data</p>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                  Clear locally cached data or stuck pending writes. Your cloud data is never affected.
-                </p>
+              <Database className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <p className="font-semibold text-sm">Offline data</p>
+                  <InfoHint
+                    label="offline data"
+                    text="Clear data saved on this device, or entries stuck waiting to send. Your data in the cloud is never affected."
+                  />
+                </div>
                 <div className="flex gap-2 mt-3 flex-wrap">
-                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={handleClearPendingWrites}>
+                  <Button variant="outline" className="gap-2 h-12" onClick={handleClearPendingWrites}>
                     <Trash2 className="w-4 h-4" /> Clear Pending Writes
                   </Button>
-                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={handleClearOfflineCache}>
+                  <Button variant="outline" className="gap-2 h-12" onClick={handleClearOfflineCache}>
                     <Database className="w-4 h-4" /> Clear Offline Cache
                   </Button>
                 </div>
@@ -1591,25 +1593,26 @@ export function Settings({
               This card now shows last-backup timestamp + uses handleBackupNow
               (which tracks backingUp state). Restore stays as a separate card
               below — it's a different action (upload vs download). */}
-          <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-start gap-3">
-              <Download className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm">Backup Your Data</p>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                  Download all your products, transactions, parties, and settings as a JSON file.
-                  Use this to migrate to a new device or keep a safe copy.
-                </p>
+              <Download className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <p className="font-semibold text-sm">Backup</p>
+                  <InfoHint
+                    label="backup"
+                    text="Download all your products, transactions, parties and settings as a JSON file. Use it to move to a new device or keep a safe copy."
+                  />
+                </div>
                 <div className="flex items-center justify-between gap-2 mt-3 flex-wrap">
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                  <p className="text-xs text-muted-foreground">
                     {lastBackup
                       ? `Last backup: ${new Date(lastBackup).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} at ${new Date(lastBackup).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
-                      : 'No backup yet — tap "Backup Now" to download'}
+                      : 'No backup yet'}
                   </p>
                   <Button
                     variant="outline"
-                    size="sm"
-                    className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                    className="gap-2 h-12"
                     onClick={handleBackupNow}
                     disabled={backingUp}
                   >
@@ -1625,17 +1628,19 @@ export function Settings({
               🔒 V26 N5: Honest copy — restore REPLACES all current data (not merges).
               The backend blocks restore into a non-empty shop; the UI must say so
               up front so the user knows to reset first if needed. */}
-          <div className="rounded-lg border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-start gap-3">
-              <Upload className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold text-emerald-900 dark:text-emerald-100 text-sm">Restore from Backup</p>
-                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
-                  Upload a previously downloaded backup JSON file to restore your data.
-                  This <strong>REPLACES all current data</strong> — restore only works on an empty shop.
-                  If you have existing data, go to Danger Zone below and tap "Reset All Data" first.
-                  After restore, stock is rebuilt from transactions and items are re-linked to your catalog by name.
-                </p>
+              <Upload className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <p className="font-semibold text-sm">Restore from backup</p>
+                  <InfoHint
+                    label="restoring a backup"
+                    text="Upload a backup JSON file you downloaded earlier. If you have existing data, go to the Danger Zone below and tap Reset All Data first. After restore, stock is rebuilt from transactions and items are re-linked to your catalog by name."
+                  />
+                </div>
+                {/* The one fact that must be on screen before anyone taps: it is destructive. */}
+                <p className="text-xs text-bad font-medium mt-1">Replaces all current data. Works only on an empty shop.</p>
                 <input
                   type="file"
                   accept=".json,application/json"
@@ -1709,8 +1714,7 @@ export function Settings({
                 />
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="mt-2 gap-2 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+                  className="mt-2 gap-2 h-12"
                   onClick={() => document.getElementById('restore-backup-upload')?.click()}
                 >
                   <Upload className="w-4 h-4" /> Upload Backup File
@@ -1732,27 +1736,30 @@ export function Settings({
           <SupplierOpeningBalanceReview />
 
           {/* Danger zone — destructive actions only (no safe actions mixed in) */}
-          <div className="rounded-lg border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 p-4">
+          <div className="rounded-xl border border-bad/35 bg-bad-soft p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold text-rose-900 dark:text-rose-100 text-sm">Danger Zone</p>
-                <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
-                  This will permanently delete all products, transactions, parties and settings. Useful if you want to start fresh.
+              <AlertTriangle className="w-5 h-5 text-bad flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-bad text-sm">Danger Zone</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Deletes all products, transactions, parties and settings.
                 </p>
-                <Button variant="destructive" size="sm" className="mt-3 gap-2" onClick={handleResetData}>
+                <Button variant="destructive" className="mt-3 gap-2 h-12" onClick={handleResetData}>
                   <Trash2 className="w-4 h-4" /> Reset All Data
                 </Button>
 
                 {/* 🐛 UI/UX Phase 4 Fix 2: Delete Account — DPDP Act compliance.
                     The API endpoint /api/account/delete existed but was never
                     exposed in the UI. Now: triple-confirmation + signOut. */}
-                <div className="mt-4 pt-4 border-t border-rose-200 dark:border-rose-900/40">
-                  <p className="font-semibold text-rose-900 dark:text-rose-100 text-sm">Delete Account</p>
-                  <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
-                    Permanently delete your account and ALL data. This cannot be undone. Required by DPDP Act.
+                <div className="mt-4 pt-4 border-t border-bad/25">
+                  <div className="flex items-center gap-1">
+                    <p className="font-semibold text-bad text-sm">Delete Account</p>
+                    <InfoHint label="deleting your account" text="Your right to erase your data under the Digital Personal Data Protection Act. You will be asked three times before anything is deleted." />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Deletes your account and all data. Cannot be undone.
                   </p>
-                  <Button variant="destructive" size="sm" className="mt-2 gap-2" onClick={handleDeleteAccount}>
+                  <Button variant="destructive" className="mt-2 gap-2 h-12" onClick={handleDeleteAccount}>
                     <UserX className="w-4 h-4" /> Delete My Account
                   </Button>
                 </div>
@@ -2224,10 +2231,12 @@ export function Settings({
             <div className="flex items-center gap-2 mb-2">
               <MessageCircle className="w-4 h-4 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">How bills are sent</p>
-                <p className="text-xs text-muted-foreground">
-                  A short bill sends as a picture, which opens straight in a WhatsApp chat. A long one
-                  sends as a PDF — WhatsApp shrinks tall images until the text cannot be read.
+                <p className="text-sm font-medium inline-flex items-center gap-1">
+                  How bills are sent
+                  <InfoHint
+                    label="how bills are sent"
+                    text="A short bill sends as a picture, which opens straight in a WhatsApp chat. A long one sends as a PDF, because WhatsApp shrinks tall images until the text cannot be read."
+                  />
                 </p>
               </div>
             </div>
@@ -2277,10 +2286,14 @@ export function Settings({
             <div className="flex items-center gap-2">
               <Coins className="w-4 h-4 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">Round off invoice total</p>
-                <p className="text-xs text-muted-foreground">
-                  Round the grand total of each sale to the nearest rupee and show a &ldquo;Round Off&rdquo; line on the invoice (e.g. ₹1,062.40 → ₹1,062).
+                <p className="text-sm font-medium inline-flex items-center gap-1">
+                  Round off invoice total
+                  <InfoHint
+                    label="round off"
+                    text="Rounds the grand total of each sale to the nearest rupee and shows a Round Off line on the invoice."
+                  />
                 </p>
+                <p className="text-xs text-muted-foreground tabular-nums">₹1,062.40 → ₹1,062</p>
               </div>
             </div>
             <Switch
@@ -2308,12 +2321,16 @@ export function Settings({
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">My shop needs e-Invoicing</p>
+                <p className="text-sm font-medium inline-flex items-center gap-1">
+                  My shop needs e-Invoicing
+                  <InfoHint
+                    label="e-invoicing"
+                    text="Turn this on only if your turnover crossed ₹5 crore in any year since 2017-18, counting every GSTIN on your PAN, and even if it has dropped since. Most small shops do not need it."
+                  />
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  Turn this on only if your turnover crossed ₹5 crore in any year since 2017-18 —
-                  counting every GSTIN on your PAN, and even if it has dropped since. Most small
-                  shops do not need it.
-                  {eInvoiceApplicable === null && ' You haven’t answered this yet.'}
+                  Only if turnover ever crossed ₹5 crore.
+                  {eInvoiceApplicable === null && ' Not answered yet.'}
                 </p>
               </div>
             </div>
@@ -2361,7 +2378,7 @@ export function Settings({
               <p className="text-xs text-muted-foreground mt-1">
                 {/* The bill prints a real date, never "Net 30" — a specific day
                     is understood by everyone and outperforms the jargon. */}
-                The bill will say &ldquo;Please pay by&rdquo; and the date. Leave blank for none.
+                Prints &ldquo;Please pay by&rdquo; and the date. Blank for none.
               </p>
             </div>
 
@@ -2450,16 +2467,16 @@ export function Settings({
       <Card className="shadow-card border-border/60">
         <CardContent className="space-y-4 pt-5">
           <div>
-            <Label htmlFor="pay-upi">UPI ID</Label>
+            <Label htmlFor="pay-upi" className="inline-flex items-center gap-1">
+              UPI ID
+              <InfoHint label="UPI ID"
+                text="The bill prints a QR made from this, and it already carries the amount, so your customer scans and pays without typing anything. Also used by WhatsApp payment reminders." />
+            </Label>
             <Input id="pay-upi" value={form.upiId}
               onChange={(e) => setForm({ ...form, upiId: e.target.value })}
               placeholder="e.g. shop@paytm, 9876543210@ybl"
               className="font-mono lowercase mt-1" />
-            <p className="text-xs text-muted-foreground mt-1">
-              The bill prints a QR made from this, and it already carries the
-              amount — your customer scans and pays without typing anything.
-              Also used by WhatsApp payment reminders.
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">Prints a pay QR with the amount on every bill.</p>
           </div>
 
           <div className="pt-2 border-t border-border/50 space-y-2">
@@ -2608,14 +2625,16 @@ export function Settings({
             </Select>
           </div>
           {/* Hide Profit Toggle */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3">
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="flex items-center gap-2">
-              <EyeOff className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <EyeOff className="w-4 h-4 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">Hide Profit</p>
-                <p className="text-xs text-muted-foreground">
-                  Hide profit figures from dashboard, ledger, and transaction details. Useful when staff or customers are looking at your screen. Profit is still calculated — just hidden from view.
+                <p className="text-sm font-medium inline-flex items-center gap-1">
+                  Hide Profit
+                  <InfoHint label="hiding profit"
+                    text="Hides profit figures on the dashboard, ledger and bill details. Useful when staff or customers can see your screen. Profit is still calculated, just hidden from view." />
                 </p>
+                <p className="text-xs text-muted-foreground">For when others can see your screen.</p>
               </div>
             </div>
             <Switch
@@ -2743,14 +2762,9 @@ export function Settings({
           {/* 🔒 V22-12 (Batch B, Phase 5d): Notification Preferences — granular
               toggles for each notification type. Controls which notifications
               appear in the NotificationCenter bell icon. */}
-          <div className="mt-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3">
-            <div className="flex items-center gap-2 mb-3">
-              <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <div>
-                <p className="text-sm font-medium">Notification Preferences</p>
-                <p className="text-xs text-muted-foreground">Choose which alerts appear in the bell icon</p>
-              </div>
-            </div>
+          {/* Phase 4b: a plain panel (it was amber for decoration). The card
+              header above already says what this is, so the repeat is gone. */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="space-y-2.5">
               {[
                 { key: 'lowStock' as const, label: 'Low stock & out-of-stock alerts', desc: 'Notify when products run low' },
@@ -2793,10 +2807,13 @@ export function Settings({
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                When you scan a bill, the AI extracts item names. Choose which language the item names should be in:
+              <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                Item names from a scanned bill
+                <InfoHint label="scanner language"
+                  text="When you scan a bill, the AI reads the item names. Original keeps them in the bill's own language (Hindi bill, Hindi names; English bill, English names)." />
               </p>
               <select
+                aria-label="Language for scanned item names"
                 value={(form as any).scanLang || 'original'}
                 onChange={(e) => {
                   setForm({ ...form, scanLang: e.target.value } as any)
@@ -2825,9 +2842,6 @@ export function Settings({
                 <option value="ml">മലയാളം (Malayalam)</option>
                 <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
               </select>
-              <p className="text-xs text-muted-foreground">
-                "Original" keeps the item names in whatever language the bill is written in (Hindi bill → Hindi names, English bill → English names).
-              </p>
             </div>
           </CardContent>
         </Card>
@@ -2846,10 +2860,13 @@ export function Settings({
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                When you record a voice entry, the app listens in the selected language and the AI parses item names in that same language. Pick the language you normally speak in:
+              <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                The language you usually speak in
+                <InfoHint label="voice language"
+                  text="The app listens in this language and reads item names in it. Original listens in Hindi and keeps the spoken language, so Marathi stays Marathi. Pick English to have spoken words turned into English item names." />
               </p>
               <select
+                aria-label="Voice entry language"
                 value={(form as any).voiceLang || 'original'}
                 onChange={(e) => {
                   setForm({ ...form, voiceLang: e.target.value } as any)
@@ -2878,9 +2895,6 @@ export function Settings({
                 <option value="ml">മലയാളം (Malayalam)</option>
                 <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
               </select>
-              <p className="text-xs text-muted-foreground">
-                "Original" listens in Hindi (default) and keeps the spoken language in the parsed result — e.g. if you speak Marathi, item names stay in Marathi. Pick "English" if you want the AI to translate spoken words into English item names.
-              </p>
             </div>
           </CardContent>
         </Card>

@@ -15,6 +15,7 @@
 
 import { FileText } from 'lucide-react'
 import { saleDocumentKind } from '@/lib/composition-scheme'
+import { Notice } from '@/components/ui/notice'
 
 export function BillOfSupplyNotice({
   compositionCategory,
@@ -28,21 +29,17 @@ export function BillOfSupplyNotice({
   // A regular shop issues a tax invoice; nothing to say.
   if (doc.showsTax || !doc.declaration) return null
 
+  // Phase 4b: the one warning box. The prescribed wording stays on screen,
+  // verbatim — a friendlier paraphrase would not do its job at an
+  // assessment. The explanation of WHY moves behind ⓘ.
   return (
-    <div className="rounded-2xl border border-border/60 bg-muted/40 px-4 py-3 flex items-start gap-3">
-      <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{doc.title}</p>
-        {/*
-          * The prescribed wording, verbatim. A friendlier paraphrase would not
-          * do the job it exists for at an assessment.
-          */}
-        <p className="text-xs text-muted-foreground mt-0.5">{doc.declaration}</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          You are on the composition scheme, so this bill carries no GST and your customer cannot
-          claim input credit from it. You pay tax on your turnover in CMP-08 each quarter.
-        </p>
-      </div>
-    </div>
+    <Notice
+      level="note"
+      icon={FileText}
+      title={doc.title}
+      info="You are on the composition scheme, so this bill carries no GST and your customer cannot claim input credit from it. You pay tax on your turnover in CMP-08 each quarter."
+    >
+      {doc.declaration}
+    </Notice>
   )
 }

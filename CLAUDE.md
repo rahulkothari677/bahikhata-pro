@@ -308,9 +308,16 @@ sweep on 1 Oct counted ~17,000 words of prose inside screen components.
   general, what an earlier version did wrong. That belongs in code comments,
   the tasklog, or a report.
 - **Every phase that touches a screen removes that screen's prose** — at least
-  in the parts it touched. A prose-budget guard is meant to keep it out, but
-  **it does not exist yet** (#177, found 2 Oct: this line claimed it did). Master
-  plan v3 builds it in Phase 4; until then, the screen you touched is checked by eye.
+  in the parts it touched. **The prose-budget guard exists since Phase 4b**
+  (#177): `notice-and-prose-guard.test.tsx` counts every element whose own text
+  runs past 12 words (TypeScript parser, comments never count) and fails if
+  screen prose grows; lower `PROSE_CEILING` in the same commit when you remove
+  prose. Terms, Privacy and the landing page are not counted.
+- **Every warning is a `<Notice>`** (`components/ui/notice.tsx`, Phase 4b):
+  four levels — `stop` (money or law at stake), `act` (a date or ₹ and a thing
+  to do), `note`, `clear` — a title, at most one line, the explanation in
+  `info` (behind ⓘ), the fix in `action`. Several on one screen go through
+  `<NoticeStack>`. Never hand-draw a tinted box again; the guard caps them.
 
 ## VERIFY THE LAW — AND VERIFY THE CA
 

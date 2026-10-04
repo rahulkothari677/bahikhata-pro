@@ -27,6 +27,7 @@ import { toast as sonnerToast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { formatINR } from '@/lib/utils'
 import { ewayBillNeed, invoiceMovesGoods } from '@/lib/eway-bill'
+import { Notice } from '@/components/ui/notice'
 
 export function EwayBillNotice({
   totalAmount,
@@ -90,12 +91,11 @@ export function EwayBillNotice({
    */
   if (ewayBillNo) {
     return (
-      <div className="rounded-2xl border border-border/60 bg-muted/30 px-4 py-3 flex items-center gap-3">
-        <Truck className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-        <p className="text-xs text-muted-foreground">
-          E-way bill <span className="font-mono font-medium text-foreground">{ewayBillNo}</span>
-        </p>
-      </div>
+      <Notice
+        level="clear"
+        icon={Truck}
+        title={<>E-way bill <span className="font-mono">{ewayBillNo}</span></>}
+      />
     )
   }
 
@@ -107,46 +107,39 @@ export function EwayBillNotice({
   })
   if (need.status !== 'likely-required') return null
 
+  /*
+   * Phase 4b: the one warning box, level Act (it has a ₹ amount and a thing
+   * to do). The amount it judged on stays on screen, so a shopkeeper can tell
+   * at a glance whether it applies; the reason behind it sits behind ⓘ.
+   *
+   * The number goes in on the warning itself. Sending the shopkeeper to an
+   * edit screen would leave the alert up while they hunted for the field,
+   * and a warning that cannot be resolved where it appears is one people
+   * learn to scroll past.
+   */
   return (
-    <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-4 flex items-start gap-3">
-      <Truck className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-      <div className="min-w-0">
-        <p className="font-semibold text-sm text-amber-900 dark:text-amber-200">
-          Check if this needs an e-way bill
-        </p>
-        <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">{need.reason}</p>
-        {/*
-          * The number it judged on, stated plainly. A shopkeeper who can see
-          * WHY it asked can tell in one glance whether it applies to them —
-          * and can dismiss it correctly when their state allows more.
-          */}
-        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1.5">
-          This bill is {formatINR(totalAmount)}. Generate it on the e-way bill portal before the
-          goods leave, then save the number here.
-        </p>
-
-        {/*
-          * The number goes in on the warning itself. Sending the shopkeeper to
-          * an edit screen would leave the alert up while they hunted for the
-          * field — and a warning that cannot be resolved where it appears is
-          * one people learn to scroll past.
-          */}
-        {transactionId && (
-          <div className="mt-3 flex items-center gap-2">
-            <Input
-              value={num}
-              onChange={(e) => setNum(e.target.value)}
-              inputMode="numeric"
-              placeholder="12-digit number"
-              className="h-9 text-sm bg-white dark:bg-background"
-              aria-label="E-way bill number"
-            />
-            <Button size="sm" className="h-9 flex-shrink-0" onClick={save} disabled={saving || num.trim().length === 0}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
+    <Notice
+      level="act"
+      icon={Truck}
+      title="Check if this needs an e-way bill"
+      info={`${need.reason} Generate it on the e-way bill portal before the goods leave, then save the number here.`}
+      action={transactionId ? (
+        <div className="flex items-center gap-2 w-full min-w-0">
+          <Input
+            value={num}
+            onChange={(e) => setNum(e.target.value)}
+            inputMode="numeric"
+            placeholder="12-digit number"
+            className="h-12 text-base bg-card"
+            aria-label="E-way bill number"
+          />
+          <Button className="h-12 min-w-20 flex-shrink-0" onClick={save} disabled={saving || num.trim().length === 0}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+          </Button>
+        </div>
+      ) : undefined}
+    >
+      This bill is {formatINR(totalAmount)}.
+    </Notice>
   )
 }

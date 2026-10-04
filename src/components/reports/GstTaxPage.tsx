@@ -83,7 +83,7 @@ const GST_TOOLS: GstTool[] = [
   {
     icon: FileSpreadsheet,
     label: 'GST Summary Report',
-    description: 'Tax liability breakdown by slab (5/12/18/28%)',
+    description: 'Tax you owe, split by GST rate',
     reportType: 'gst',
     view: 'reports',
     iconColor: 'text-blue-600 dark:text-blue-400',

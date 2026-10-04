@@ -34,9 +34,11 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Clock, Info, Loader2 } from 'lucide-react'
+import { Clock, Loader2 } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { formatINR } from '@/lib/utils'
+import { Notice } from '@/components/ui/notice'
+import { InfoHint } from '@/components/common/InfoHint'
 
 interface Finding {
   id: string
@@ -100,6 +102,12 @@ export function ItcReversalWarning() {
   const overdue: Finding[] = data.overdue || []
   const paidLate: Finding[] = data.paidLate || []
 
+  /*
+   * Phase 4b: the one warning box. Same three groups, same order, now read as
+   * levels: keep-it-by-paying is an Act, already-past-the-limit is a Stop,
+   * paid-late is a Note. Each says what to do in its title; the rule behind
+   * it sits behind ⓘ.
+   */
   return (
     <div className="space-y-3">
       {/*
@@ -111,78 +119,48 @@ export function ItcReversalWarning() {
         * only rows this screen can actually help with.
         */}
       {dueSoon.length > 0 && (
-        <div className="rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 overflow-hidden">
-          <div className="px-4 py-3 border-b border-amber-200 dark:border-amber-900 flex items-start gap-2">
-            <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                Pay {dueSoon.length === 1 ? 'this supplier' : `these ${dueSoon.length} suppliers`} soon
-                to keep {formatINR(data.totals?.dueSoonItc || 0)} of credit
-              </p>
-              <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
-                If a supplier is not paid within {data.rule?.days} days of their bill, you must give
-                back the input credit you claimed on it, with interest. Paying them keeps it.
-              </p>
-            </div>
-          </div>
-          <div className="p-3 space-y-2">
-            {dueSoon.map(f => <Row key={f.id} f={f} />)}
-          </div>
-        </div>
+        <Notice
+          level="act"
+          icon={Clock}
+          title={<>Pay {dueSoon.length === 1 ? 'this supplier' : `these ${dueSoon.length} suppliers`} soon to keep {formatINR(data.totals?.dueSoonItc || 0)} of credit</>}
+          info={`If a supplier is not paid within ${data.rule?.days} days of their bill, you must give back the input credit you claimed on it, with interest. Paying them keeps it.`}
+          content={<div className="space-y-2">{dueSoon.map(f => <Row key={f.id} f={f} />)}</div>}
+        />
       )}
 
       {overdue.length > 0 && (
-        <div className="rounded-2xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/30 overflow-hidden">
-          <div className="px-4 py-3 border-b border-red-200 dark:border-red-900 flex items-start gap-2">
-            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-red-900 dark:text-red-200">
-                {formatINR(data.totals?.overdueItc || 0)} of credit is already past {data.rule?.days} days
-              </p>
-              <p className="text-xs text-red-800 dark:text-red-300 mt-1">
-                {/* Stated as a thing to do, not a verdict. The credit comes back
-                    the moment the supplier is paid, and a warning that reads as
-                    pure loss gives nobody a reason to act. */}
-                This should be reversed in your GSTR-3B, with interest — and you can claim it back
-                as soon as you pay the supplier. Show these to your CA.
-              </p>
-            </div>
-          </div>
-          <div className="p-3 space-y-2">
-            {overdue.map(f => <Row key={f.id} f={f} />)}
-          </div>
-        </div>
+        <Notice
+          level="stop"
+          title={<>{formatINR(data.totals?.overdueItc || 0)} of credit is past {data.rule?.days} days</>}
+          // Stated as a thing to do, not a verdict: the credit comes back the
+          // moment the supplier is paid.
+          info="This should be reversed in your GSTR-3B, with interest, and you can claim it back as soon as you pay the supplier. Show these to your CA."
+          content={<div className="space-y-2">{overdue.map(f => <Row key={f.id} f={f} />)}</div>}
+        >
+          Pay the supplier to claim it back.
+        </Notice>
       )}
 
       {paidLate.length > 0 && (
-        <div className="rounded-2xl border border-border/60 bg-muted/30 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border/60 flex items-start gap-2">
-            <Info className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium">
-                {paidLate.length === 1 ? 'One bill was' : `${paidLate.length} bills were`} paid after the {data.rule?.days}-day limit
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {/* The quiet one, and the easiest to miss: these read as paid on
-                    every other screen, so nothing suggests a problem. */}
-                These are settled now, so nothing is owed to the supplier. But the credit fell due
-                for reversal while they were unpaid, and interest may apply. Worth checking with
-                your CA.
-              </p>
-            </div>
-          </div>
-          <div className="p-3 space-y-2">
-            {paidLate.map(f => <Row key={f.id} f={f} />)}
-          </div>
-        </div>
+        <Notice
+          level="note"
+          // The quiet one, and the easiest to miss: these read as paid on
+          // every other screen, so nothing suggests a problem.
+          title={<>{paidLate.length === 1 ? 'One bill was' : `${paidLate.length} bills were`} paid after the {data.rule?.days}-day limit</>}
+          info="These are settled now, so nothing is owed to the supplier. But the credit fell due for reversal while they were unpaid, and interest may apply. Worth checking with your CA."
+          content={<div className="space-y-2">{paidLate.map(f => <Row key={f.id} f={f} />)}</div>}
+        />
       )}
 
-      <p className="text-xs text-muted-foreground px-1">
-        {data.rule?.citation}. Checked {data.purchasesChecked} purchases from the last{' '}
-        {Math.round((data.lookbackDays || 0) / 365)} years. We do not fill the reversal into your
-        GSTR-3B for you, and we do not calculate the interest.
-        {data.truncated ? ` ${data.truncationNote}` : ''}
-      </p>
+      <div className="flex items-center gap-1 px-1 text-xs text-muted-foreground">
+        <span>{data.rule?.citation} · {data.purchasesChecked} purchases checked</span>
+        <InfoHint
+          label="this check"
+          text={`Purchases from the last ${Math.round((data.lookbackDays || 0) / 365)} years. We do not fill the reversal into your GSTR-3B for you, and we do not calculate the interest.`}
+        />
+      </div>
+      {/* A partial answer says so on screen, never behind ⓘ (a silent cap is a lie). */}
+      {data.truncated && <p className="text-xs text-check px-1">{data.truncationNote}</p>}
     </div>
   )
 }

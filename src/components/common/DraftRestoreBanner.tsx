@@ -9,6 +9,7 @@
 
 import { AlertCircle, RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Notice } from '@/components/ui/notice'
 import { useEffect, useState } from 'react'
 
 export function DraftRestoreBanner({
@@ -38,29 +39,28 @@ export function DraftRestoreBanner({
 
   const ago = savedAt ? formatAgo(savedAt) : 'earlier'
 
+  // Phase 4b: the one warning box, level Act, with both choices on the box.
   return (
-    <div
-      className={`rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 p-3 flex items-start gap-3 transition-all duration-300 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}
-    >
-      <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-          Unsaved draft from {ago}
-        </p>
-        <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-          We saved your work automatically. Restore it or start fresh.
-        </p>
-      </div>
-      <div className="flex gap-2 flex-shrink-0">
-        <Button size="sm" variant="outline" onClick={onDiscard} className="gap-1.5 h-8">
-          <Trash2 className="w-3.5 h-3.5" />
-          Discard
-        </Button>
-        <Button size="sm" onClick={onRestore} className="gap-1.5 h-8 bg-amber-600 hover:bg-amber-700 text-white">
-          <RotateCcw className="w-3.5 h-3.5" />
-          Restore
-        </Button>
-      </div>
+    <div className={`transition-all duration-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
+      <Notice
+        level="act"
+        icon={AlertCircle}
+        title={`Unsaved draft from ${ago}`}
+        action={
+          <>
+            <Button variant="outline" onClick={onDiscard} className="gap-1.5 h-12">
+              <Trash2 className="w-4 h-4" aria-hidden />
+              Discard
+            </Button>
+            <Button onClick={onRestore} className="gap-1.5 h-12">
+              <RotateCcw className="w-4 h-4" aria-hidden />
+              Restore
+            </Button>
+          </>
+        }
+      >
+        Restore it or start fresh.
+      </Notice>
     </div>
   )
 }

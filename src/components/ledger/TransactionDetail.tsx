@@ -10,6 +10,7 @@ import { useSession } from 'next-auth/react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Notice } from '@/components/ui/notice'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -2051,13 +2052,14 @@ function EInvoiceCard({ txn }: { txn: any }) {
           * concludes from the card's presence that it applies to them.
           */}
         {applicability.status === 'unknown' && !hasIrn && (
-          <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 p-3">
-            <p className="text-xs text-amber-900 dark:text-amber-200">
-              <span className="font-semibold">Not sure this applies to you.</span>{' '}
-              {applicability.reason} Set it once in Settings and this card will
-              follow your answer.
-            </p>
-          </div>
+          <Notice
+            level="note"
+            className="mb-3"
+            title="Not sure this applies to you"
+            info={`${applicability.reason} Set it once in Settings and this card will follow your answer.`}
+          >
+            Set it once in Settings.
+          </Notice>
         )}
         {hasIrn ? (
           <div className="space-y-3">
