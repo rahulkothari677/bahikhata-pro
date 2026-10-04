@@ -60,6 +60,8 @@ the person who caught my mistakes. That is the defect this file fixes.
       (Rahul, 2 Oct: "focus on all aspects").
 - [ ] Checked as a NOT-registered shop and as a GST shop when GST is involved
 - [ ] `npm run verify` green · pushed · deployed
+- [ ] **Every GitHub check on the pushed commit read** — quality-check AND
+      e2e-tests, not just Vercel (`api.github.com/.../commits/<sha>/check-runs`)
 - [ ] **Screenshot taken — I have LOOKED at it**
 - [ ] Real UI, not just API calls · both 375px and 1280px
 - [ ] Numbers checked by hand against raw rows
@@ -396,6 +398,12 @@ cause**, never as a new line at the bottom.
 · Claimed keywords fixed search without checking; they didn't
 · **12 Aug: "verified" offline by flipping `navigator.onLine`** — the very flag
   that lies. A simulated failure tests my assumption, not the failure.
+· **4 Oct: e2e-tests had been red on main for two days and I had not looked**
+  (#228). Phase 1c made "not registered" the default; the browser test's shop
+  then correctly charged ₹0 GST where the test expected ₹180. `npm run verify`
+  does not run Playwright, and I read only the Vercel status after each push.
+  **After a push, read every check on the commit; when a default changes,
+  grep the e2e seed and specs for what they assumed.**
 · **2 Oct: the new "Rates include GST" switch passed 18 tests and verify, and
   was invisible on a new purchase** — its condition needed at least one line,
   and a new bill starts with none. Only opening the screen showed it. **Open
