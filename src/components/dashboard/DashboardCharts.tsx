@@ -60,7 +60,7 @@ export function DashboardCharts({
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-2">
               <div>
-                <p className="text-2xs text-muted-foreground font-medium uppercase tracking-wide">Sales Trend</p>
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Sales Trend</p>
                 <p className="text-lg font-bold tabular-nums mt-0.5">{formatINR(kpis.rangeRevenue)}</p>
               </div>
               {kpis.revenueGrowth !== 0 && (
@@ -76,7 +76,7 @@ export function DashboardCharts({
             {/* Sparkline — no axes, just the line with gradient fill */}
             {/* 🐛 UI/UX Phase 3 Fix 3a: Show empty state when no data (was: blank AreaChart) */}
             {salesTrend.length === 0 ? (
-              <div className="h-14 flex items-center justify-center text-2xs text-muted-foreground/60">
+              <div className="h-14 flex items-center justify-center text-xs text-muted-foreground/60">
                 No sales data yet
               </div>
             ) : (
@@ -109,7 +109,7 @@ export function DashboardCharts({
             <div className="flex items-center justify-between gap-3">
               {/* 🐛 UI/UX Phase 3 Fix 3b: Show empty state when no data (was: blank PieChart) */}
               {(kpis.rangeRevenue || 0) === 0 && (kpis.rangePurchases || 0) === 0 ? (
-                <div className="w-20 h-20 flex items-center justify-center text-center text-2xs text-muted-foreground/60 leading-tight">
+                <div className="w-20 h-20 flex items-center justify-center text-center text-xs text-muted-foreground/60 leading-tight">
                   No data<br />for range
                 </div>
               ) : (
@@ -200,8 +200,8 @@ export function DashboardCharts({
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} minTickGap={20} />
-              <YAxis tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} width={45} />
+              <XAxis dataKey="label" tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} minTickGap={20} />
+              <YAxis tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} width={45} />
               <Tooltip
                 cursor={{ stroke: chartColors.grid, strokeWidth: 1, strokeDasharray: '3 3' }}
                 contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
@@ -239,8 +239,8 @@ export function DashboardCharts({
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} width={90}
+                  <XAxis type="number" tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} width={90}
                     tickFormatter={(v) => v.length > 12 ? v.slice(0, 12) + '…' : v}
                   />
                   <Tooltip

@@ -120,7 +120,7 @@ export function EwayBillNotice({
           * WHY it asked can tell in one glance whether it applies to them —
           * and can dismiss it correctly when their state allows more.
           */}
-        <p className="text-2xs text-amber-700 dark:text-amber-400 mt-1.5">
+        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1.5">
           This bill is {formatINR(totalAmount)}. Generate it on the e-way bill portal before the
           goods leave, then save the number here.
         </p>

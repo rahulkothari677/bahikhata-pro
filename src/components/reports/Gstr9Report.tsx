@@ -79,7 +79,7 @@ export function Gstr9Report() {
       </button>
       <div className="text-center">
         <p className="text-sm font-bold">FY {fy}</p>
-        <p className="text-2xs text-muted-foreground">Annual return · GSTR-9</p>
+        <p className="text-xs text-muted-foreground">Annual return · GSTR-9</p>
       </div>
       <button onClick={() => shiftFy(1)} aria-label="Next financial year" className="p-2 rounded-lg hover:bg-muted">
         <ChevronRight className="w-4 h-4" />
@@ -138,7 +138,7 @@ export function Gstr9Report() {
               </p>
               <div className="flex flex-wrap gap-1 mt-2">
                 {cov.missing.map((m: string) => (
-                  <Badge key={m} variant="destructive" className="text-3xs">{monthLabel(m)}</Badge>
+                  <Badge key={m} variant="destructive" className="text-xs">{monthLabel(m)}</Badge>
                 ))}
               </div>
             </div>
@@ -210,7 +210,7 @@ export function Gstr9Report() {
             <div className="flex justify-between font-semibold pt-1.5 border-t border-border">
               <span>N · Total turnover</span><span className="tabular-nums">{formatINR(t5.totalTurnoverN)}</span>
             </div>
-            <p className="text-3xs text-muted-foreground pt-1">
+            <p className="text-xs text-muted-foreground pt-1">
               Total turnover takes reverse-charge purchases back out — you owe tax on them, but
               they are not your sales.
             </p>
@@ -257,7 +257,7 @@ export function Gstr9Report() {
                 : <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />}
               <div>
                 <p className={c.passes ? '' : 'font-semibold text-rose-700 dark:text-rose-300'}>{c.id}</p>
-                {!c.passes && <p className="text-2xs text-muted-foreground">{c.detail}</p>}
+                {!c.passes && <p className="text-xs text-muted-foreground">{c.detail}</p>}
               </div>
             </div>
           ))}

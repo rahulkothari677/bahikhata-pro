@@ -238,7 +238,7 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
       <div className="space-y-2">
         <div className="flex items-end gap-2">
           <label className="flex-1 min-w-0">
-            <span className="block text-3xs uppercase tracking-wider text-muted-foreground mb-1">
+            <span className="block text-xs uppercase tracking-wider text-muted-foreground mb-1">
               Card design
             </span>
             <select
@@ -277,7 +277,7 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
             {showPicker ? 'Hide' : 'Browse'}
           </Button>
         </div>
-        <p className="text-2xs text-muted-foreground">{template.description}</p>
+        <p className="text-xs text-muted-foreground">{template.description}</p>
       </div>
 
       {showPicker && (
@@ -300,7 +300,7 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
               aria-pressed={tpl.id === template.id}
             >
               <TemplateCard template={tpl} data={templateData} />
-              <p className="text-3xs mt-1 text-center truncate text-muted-foreground">{tpl.name}</p>
+              <p className="text-xs mt-1 text-center truncate text-muted-foreground">{tpl.name}</p>
             </button>
           ))}
         </div>

@@ -98,10 +98,10 @@ export function PartySelect({
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{selectedParty.name}</p>
-            <div className="flex items-center gap-2 text-2xs text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {selectedParty.phone && <span>{selectedParty.phone}</span>}
               {selectedParty.balance !== 0 && (
-                <Badge variant="outline" className={cn('text-3xs py-0', selectedParty.balance > 0 ? 'text-emerald-600 dark:text-emerald-400 border-emerald-300' : 'text-rose-600 border-rose-300')}>
+                <Badge variant="outline" className={cn('text-xs py-0', selectedParty.balance > 0 ? 'text-emerald-600 dark:text-emerald-400 border-emerald-300' : 'text-rose-600 border-rose-300')}>
                   {selectedParty.balance > 0 ? `Owes ₹${selectedParty.balance}` : `You owe ₹${Math.abs(selectedParty.balance)}`}
                 </Badge>
               )}
@@ -174,7 +174,7 @@ export function PartySelect({
                 </Button>
               </div>
               {search && (
-                <div className="px-3 py-1.5 text-3xs text-muted-foreground uppercase font-medium border-b border-border">
+                <div className="px-3 py-1.5 text-xs text-muted-foreground uppercase font-medium border-b border-border">
                   {filteredParties.length} match{filteredParties.length !== 1 ? 'es' : ''}
                 </div>
               )}
@@ -196,20 +196,20 @@ export function PartySelect({
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{p.name}</p>
-                    <div className="flex items-center gap-2 text-2xs text-muted-foreground">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {p.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{p.phone}</span>}
                       {p.state && <span>{p.state}</span>}
                     </div>
                   </div>
                   {p.balance !== 0 && (
-                    <Badge variant="outline" className={cn('text-3xs py-0', p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
+                    <Badge variant="outline" className={cn('text-xs py-0', p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
                       {p.balance > 0 ? `+₹${p.balance}` : `-₹${Math.abs(p.balance)}`}
                     </Badge>
                   )}
                 </button>
               ))}
               {filteredParties.length > 20 && (
-                <div className="px-3 py-2 text-2xs text-muted-foreground border-t border-border">
+                <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">
                   Showing 20 of {filteredParties.length} — keep typing to narrow it down.
                 </div>
               )}

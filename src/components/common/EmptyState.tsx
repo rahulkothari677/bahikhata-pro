@@ -111,7 +111,7 @@ export function EmptyState({
       {description && (
         <p className={cn(
           'text-muted-foreground mt-1 max-w-xs',
-          isCompact ? 'text-2xs' : 'text-xs',
+          isCompact ? 'text-xs' : 'text-xs',
         )}>
           {description}
         </p>

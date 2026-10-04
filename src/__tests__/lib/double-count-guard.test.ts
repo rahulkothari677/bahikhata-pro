@@ -71,9 +71,9 @@ describe('Settle screen shows the risk before saving, not after', () => {
   })
 
   test('the warning is legible — no micro-type on a money warning', () => {
-    // globals.css reserves text-2xs (11px) for micro labels and text-3xs (10px)
-    // for badges; body copy is text-xs minimum. A warning about money is not a
-    // micro label.
+    // The 10/11px steps (text-3xs, text-2xs) were removed in Phase 4a; text-xs
+    // (12px) is the floor everywhere. This stays as a second lock on a money
+    // warning.
     const warn = src.slice(src.indexOf('{overpayAmount > 0 && ('))
     expect(warn.slice(0, 200)).not.toMatch(/text-(2xs|3xs)/)
   })

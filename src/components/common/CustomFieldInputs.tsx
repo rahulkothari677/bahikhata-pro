@@ -50,7 +50,7 @@ export function CustomFieldInputs({
         const id = `${idPrefix}-${f.key}`
         return (
           <div key={f.key}>
-            <Label htmlFor={id} className={cn(compact && 'text-2xs')}>
+            <Label htmlFor={id} className={cn(compact && 'text-xs')}>
               {f.label}
               {/*
                 * The asterisk is the only marking a required field gets here.

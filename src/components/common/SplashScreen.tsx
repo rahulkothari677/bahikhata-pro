@@ -292,7 +292,7 @@ export function SplashScreen({
       </p>
 
       {/* ─── Version badge ───────────────────────────────────────────── */}
-      <p className="absolute bottom-6 left-1/2 -translate-x-1/2 text-3xs text-white/30 tracking-wider">
+      <p className="absolute bottom-6 left-1/2 -translate-x-1/2 text-xs text-white/30 tracking-wider">
         v2.0
       </p>
     </div>

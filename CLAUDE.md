@@ -196,7 +196,22 @@ save.
   test. Scripts with backslashes go in a file written by the Write tool
   (raw strings), or use the Edit tool. `TransactionEntry.tsx` has MIXED line
   endings, so a script that rebuilds a pattern with one EOL silently misses —
-  the Edit tool matches what is there.
+  the Edit tool matches what is there. **Broken again in Phase 4a** (a `\n`
+  inside a regex became a real line break in a new guard); caught only
+  because I read the file back. A line holding a backslash goes through the
+  Edit tool, every time, however small the change.
+- **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
+  modified after every checkout (line endings), so `git stash pop` refuses to
+  restore and the whole phase sits in the stash. Phase 4a: 90 files stuck
+  there; recovered with `git diff stash@{0}^1 stash@{0} -- . ':(exclude)src/lib/utils.ts' | git apply`.
+  Compare with `git show main:<path>`, or a second worktree.
+- **The design language lives in `globals.css`** (Phase 4a, final design plan
+  §1): text-xs (12px) is the floor; colour roles `good` (money in, done),
+  `bad` (owed, return, error), `check` (needs a look), `ai` (EkBook did this),
+  each with `-soft`; `scroll-col` on scrolling columns; `min-w-0` on a flex
+  child holding an input. New code uses the roles, never `text-green-600`;
+  `design-language-guard.test.ts` holds the 12px floor and a ceiling on raw
+  shades that may only go down.
 - **Browser pane under emulation:** ref clicks miss. Take the element's
   `getBoundingClientRect()` centre × the pane's scale (0.4747 at the 375 px
   preset, 0.3535 at 1024 × 680 in this pane) and click that point. Sign-in:

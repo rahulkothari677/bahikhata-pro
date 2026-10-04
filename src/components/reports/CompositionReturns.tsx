@@ -128,7 +128,7 @@ export function CompositionReturns() {
       <div className="rounded-2xl border border-border/60 bg-card shadow-card overflow-hidden">
         <div className="px-4 py-3 border-b border-border/60">
           <p className="font-semibold text-sm">CMP-08 · {c?.quarter}</p>
-          <p className="text-2xs text-muted-foreground mt-0.5 flex items-center gap-1">
+          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
             <CalendarDays className="w-3 h-3" />
             Due {c?.dueDate ? new Date(c.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
             {' · '}{c?.categoryLabel} · {c?.rate}% of turnover
@@ -151,7 +151,7 @@ export function CompositionReturns() {
           <div className="pt-2 border-t border-border/60">
             <Row label="Tax to pay" value={formatINR(c?.total || 0)} strong />
           </div>
-          <p className="text-2xs text-muted-foreground pt-1">
+          <p className="text-xs text-muted-foreground pt-1">
             You pay this from your own margin — your bills carry no GST.
           </p>
         </div>
@@ -170,7 +170,7 @@ export function CompositionReturns() {
         {c?.leftMidQuarter && (
           <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/30 border-t border-blue-200 dark:border-blue-900 flex items-start gap-2">
             <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-            <div className="text-2xs text-blue-800 dark:text-blue-300 space-y-1">
+            <div className="text-xs text-blue-800 dark:text-blue-300 space-y-1">
               <p>{c.splitNote}</p>
               {c.regularPeriod && (
                 <p>
@@ -188,7 +188,7 @@ export function CompositionReturns() {
       <div className="rounded-2xl border border-border/60 bg-card shadow-card overflow-hidden">
         <div className="px-4 py-3 border-b border-border/60">
           <p className="font-semibold text-sm">GSTR-4 · {a?.fy}</p>
-          <p className="text-2xs text-muted-foreground mt-0.5 flex items-center gap-1">
+          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
             <CalendarDays className="w-3 h-3" />
             Due {a?.dueDate ? new Date(a.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
           </p>
@@ -219,7 +219,7 @@ export function CompositionReturns() {
         {a?.leftMidYear && (
           <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/30 border-t border-blue-200 dark:border-blue-900 flex items-start gap-2">
             <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-            <p className="text-2xs text-blue-800 dark:text-blue-300">
+            <p className="text-xs text-blue-800 dark:text-blue-300">
               You were on the composition scheme for part of this year only, so Table 6 covers your
               sales up to {fmtDay(a?.period?.to, -1)}. Do not enter the whole year here — the rest
               was on the regular scheme and is already declared in GSTR-1 and GSTR-3B.
@@ -234,7 +234,7 @@ export function CompositionReturns() {
           */}
         <div className="px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border-t border-amber-200 dark:border-amber-900 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-          <p className="text-2xs text-amber-800 dark:text-amber-300">
+          <p className="text-xs text-amber-800 dark:text-amber-300">
             <b>Do not leave the turnover box empty</b> because you have already paid each quarter.
             The portal then treats everything you paid as excess, and months later sends a demand
             for tax you paid on time. Enter {formatINR(a?.table6?.turnover || 0)}.

@@ -218,12 +218,12 @@ export function PinchZoom({
         <button
           type="button"
           onClick={reset}
-          className="absolute top-2 right-2 inline-flex items-center gap-1.5 rounded-full bg-background/90 backdrop-blur border border-border px-3 h-9 text-2xs font-medium shadow-sm"
+          className="absolute top-2 right-2 inline-flex items-center gap-1.5 rounded-full bg-background/90 backdrop-blur border border-border px-3 h-9 text-xs font-medium shadow-sm"
         >
           <RotateCcw className="w-3.5 h-3.5" /> Reset
         </button>
       ) : (
-        <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-background/80 backdrop-blur border border-border/60 px-2 py-1 text-3xs text-muted-foreground">
+        <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-background/80 backdrop-blur border border-border/60 px-2 py-1 text-xs text-muted-foreground">
           <ZoomIn className="w-3 h-3" /> Pinch to zoom
         </span>
       )}

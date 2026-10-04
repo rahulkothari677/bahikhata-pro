@@ -652,7 +652,7 @@ export function TransactionDetail() {
                 <p className="text-2xl font-bold tabular-nums">
                   {isIncome ? '+' : '-'}{formatINR(txn.totalAmount)}
                 </p>
-                <span className="inline-block mt-1 text-3xs font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 uppercase">{txn.paymentMode}</span>
+                <span className="inline-block mt-1 text-xs font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 uppercase">{txn.paymentMode}</span>
               </div>
             </div>
           </div>
@@ -686,7 +686,7 @@ export function TransactionDetail() {
                     <h2 className="text-xl font-bold font-heading tracking-tight">{txn.invoiceNo || `TXN-${txn.id.slice(-6)}`}</h2>
                     {/* V17-Ext Tier 3: Show note reason if present */}
                     {isNote && txn.noteReason && (
-                      <p className="text-white/60 text-3xs mt-0.5 capitalize">{txn.noteReason.replace(/-/g, ' ')}</p>
+                      <p className="text-white/60 text-xs mt-0.5 capitalize">{txn.noteReason.replace(/-/g, ' ')}</p>
                     )}
                   </div>
                 </div>
@@ -793,7 +793,7 @@ export function TransactionDetail() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Payment</span>
-                  <Badge variant="secondary" className="uppercase text-3xs">{txn.paymentMode}</Badge>
+                  <Badge variant="secondary" className="uppercase text-xs">{txn.paymentMode}</Badge>
                 </div>
                 {billShowsGst && (
                   <div className="flex items-center justify-between">
@@ -1024,16 +1024,16 @@ export function TransactionDetail() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm">{rev.invoiceNo || '—'}</span>
-                      <Badge className="text-3xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                      <Badge className="text-xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
                         {rev.type === 'credit-note' ? 'Credit Note' : 'Debit Note'}
                       </Badge>
                       {rev.affectsStock && (
-                        <Badge className="text-3xs py-0 bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                        <Badge className="text-xs py-0 bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
                           Stock Adjusted
                         </Badge>
                       )}
                     </div>
-                    <p className="text-2xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {formatDateMaybeTime(rev.date)}
                       {rev.noteReason && ` • ${rev.noteReason.replace(/-/g, ' ')}`}
                     </p>
@@ -1044,13 +1044,13 @@ export function TransactionDetail() {
                     </p>
                     {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
                     {rev.grossProfit < 0 && (
-                      <p className="text-3xs text-rose-500 tabular-nums">-{formatINR(Math.abs(rev.grossProfit))} profit</p>
+                      <p className="text-xs text-rose-500 tabular-nums">-{formatINR(Math.abs(rev.grossProfit))} profit</p>
                     )}
                   </div>
                 </div>
               ))}
             </div>
-            <p className="text-2xs text-muted-foreground mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               Tap a note to view its details. Total adjusted: <span className="font-semibold text-violet-700 dark:text-violet-300">-{formatINR(txn.reversalTransactions.reduce((s: number, r: any) => s + r.totalAmount, 0))}</span>
             </p>
           </CardContent>
@@ -1075,7 +1075,7 @@ export function TransactionDetail() {
             >
               <div className="flex-1 min-w-0">
                 <span className="font-semibold text-sm">{txn.originalTransaction.invoiceNo || '—'}</span>
-                <p className="text-2xs text-muted-foreground mt-0.5">{formatDateMaybeTime(txn.originalTransaction.date)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{formatDateMaybeTime(txn.originalTransaction.date)}</p>
               </div>
               <div className="text-right flex-shrink-0 ml-2">
                 <p className="font-bold text-sm tabular-nums">{formatINR(txn.originalTransaction.totalAmount)}</p>
@@ -1565,7 +1565,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                 <div className="flex items-center justify-between">
                   <div>
                     <Label htmlFor="field-inter-state-igst">GST type</Label>
-                    <p className="text-3xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {editInterState.indeterminate
                         ? 'Worked out on save from the shop and customer states'
                         : editInterState.isInterState
@@ -1592,7 +1592,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                   {items.map((item, i) => (
                     <div key={i} className="grid grid-cols-12 gap-2 items-end p-2 rounded-lg bg-muted/30">
                       <div className="col-span-12 sm:col-span-4">
-                        <Label className="text-3xs text-muted-foreground">Product</Label>
+                        <Label className="text-xs text-muted-foreground">Product</Label>
                         <Select value={item.productId} onValueChange={(v) => updateItem(i, 'productId', v)}>
                           <SelectTrigger className="h-9"><SelectValue placeholder="Product" /></SelectTrigger>
                           <SelectContent>
@@ -1601,13 +1601,13 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                         </Select>
                       </div>
                       <div className="col-span-6 sm:col-span-2">
-                        <Label className="text-3xs text-muted-foreground">Name</Label>
+                        <Label className="text-xs text-muted-foreground">Name</Label>
                         <Input value={item.productName} onChange={(e) => updateItem(i, 'productName', e.target.value)} className="h-9" placeholder="Name" />
                       </div>
                       {/* Qty was col-span-1 of 12 — a 29px box that clipped any
                           two-digit quantity, so the field read as empty. */}
                       <div className="col-span-6 sm:col-span-2">
-                        <Label className="text-3xs text-muted-foreground">Qty</Label>
+                        <Label className="text-xs text-muted-foreground">Qty</Label>
                         <NumberField
                           aria-label="Quantity"
                           value={item.quantity}
@@ -1619,7 +1619,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                         />
                       </div>
                       <div className="col-span-6 sm:col-span-2">
-                        <Label className="text-3xs text-muted-foreground">{item.priceIncludesGst && Number(item.gstRate) > 0 ? 'Rate incl. GST' : 'Rate'}</Label>
+                        <Label className="text-xs text-muted-foreground">{item.priceIncludesGst && Number(item.gstRate) > 0 ? 'Rate incl. GST' : 'Rate'}</Label>
                         <NumberField
                           aria-label="Rate"
                           value={item.unitPrice}
@@ -1630,7 +1630,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                         />
                       </div>
                       <div className="col-span-5 sm:col-span-1">
-                        <Label className="text-3xs text-muted-foreground">GST</Label>
+                        <Label className="text-xs text-muted-foreground">GST</Label>
                         <Select value={String(item.gstRate)} onValueChange={(v) => updateItem(i, 'gstRate', parseFloat(v))}>
                           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -1746,7 +1746,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
           <div>
             <h1 className="text-2xl font-bold leading-tight">{shopName}</h1>
             {shopAddress && <p className="text-xs text-gray-700 mt-0.5 max-w-xs">{shopAddress}</p>}
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-2xs text-gray-700 mt-1">
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-700 mt-1">
               {shopPhone && <span>Phone: {shopPhone}</span>}
               {shopGstin && <span className="font-mono">GSTIN: {shopGstin}</span>}
               {shopState && <span>State: {shopState}</span>}
@@ -1755,7 +1755,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
         </div>
         <div className="text-right flex-shrink-0">
           <h2 className="text-lg font-bold tracking-wide uppercase">{heading.title}</h2>
-          {heading.declaration && <p className="text-2xs text-gray-600 mt-0.5">{heading.declaration}</p>}
+          {heading.declaration && <p className="text-xs text-gray-600 mt-0.5">{heading.declaration}</p>}
           <div className="text-xs text-gray-700 mt-1 space-y-0.5">
             <p><span className="text-gray-500">Invoice No:</span> <span className="font-mono font-medium">{txn.invoiceNo || txn.id.slice(-8)}</span></p>
             <p><span className="text-gray-500">Date:</span> <span className="font-medium">{formatDateMaybeTime(txn.date)}</span></p>
@@ -1767,7 +1767,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
       {/* Bill To / Supply Details */}
       <div className="grid grid-cols-2 gap-4 mb-5">
         <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-          <p className="text-3xs text-gray-500 uppercase tracking-wider mb-1.5 font-semibold">Bill To</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 font-semibold">Bill To</p>
           <p className="font-bold text-sm">{txn.party?.name || 'Walk-in Customer'}</p>
           {txn.party?.phone && <p className="text-xs text-gray-700 mt-0.5">{txn.party.phone}</p>}
           {txn.party?.gstin && <p className="text-xs text-gray-700 font-mono mt-0.5">GSTIN: {txn.party.gstin}</p>}
@@ -1776,7 +1776,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
           {supplyLines.shipTo && <p className="text-xs text-gray-700 mt-1"><span className="font-semibold">Ship to:</span> {supplyLines.shipTo}</p>}
         </div>
         <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-          <p className="text-3xs text-gray-500 uppercase tracking-wider mb-1.5 font-semibold">Supply Details</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 font-semibold">Supply Details</p>
           <div className="text-xs space-y-1">
             {billShowsGst && <div className="flex justify-between"><span className="text-gray-500">GST Type:</span><span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</span></div>}
             {billShowsGst && supplyLines.placeOfSupply && <div className="flex justify-between gap-2"><span className="text-gray-500">Place of supply:</span><span className="font-medium text-right">{supplyLines.placeOfSupply}</span></div>}
@@ -1819,7 +1819,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
       {/* Amount in words + totals */}
       <div className="flex justify-between items-start gap-6 mb-5">
         <div className="flex-1">
-          <p className="text-3xs text-gray-500 uppercase tracking-wider mb-1 font-semibold">Amount in Words</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1 font-semibold">Amount in Words</p>
           <p className="text-xs italic font-medium text-gray-800 max-w-xs">{amountToWords(txn.totalAmount)}</p>
         </div>
         <div className="w-72 text-xs space-y-1">
@@ -1841,7 +1841,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
 
       {/* Terms + signature + footer */}
       <div className="grid grid-cols-2 gap-6 mt-10 pt-4 border-t border-gray-300">
-        <div className="text-3xs text-gray-600 leading-relaxed">
+        <div className="text-xs text-gray-600 leading-relaxed">
           <p className="font-semibold text-gray-700 mb-1">Terms &amp; Conditions</p>
           <p>&bull; Goods once sold will not be taken back or exchanged.</p>
           <p>&bull; All disputes are subject to local jurisdiction only.</p>
@@ -1850,13 +1850,13 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
         </div>
         <div className="text-right">
           <div className="border-t border-gray-400 mt-8 pt-1 inline-block w-40">
-            <p className="text-3xs text-gray-600 font-medium">Authorised Signatory</p>
+            <p className="text-xs text-gray-600 font-medium">Authorised Signatory</p>
           </div>
           <p className="text-xs font-semibold mt-2">{ownerName}</p>
         </div>
       </div>
 
-      <div className="mt-6 pt-3 border-t border-gray-200 text-center text-3xs text-gray-500">
+      <div className="mt-6 pt-3 border-t border-gray-200 text-center text-xs text-gray-500">
         <p>This is a computer-generated invoice and does not require a physical signature.</p>
         <p>Generated by EkBook on {formatDate(new Date())}</p>
       </div>
@@ -2029,7 +2029,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
           e-Invoice (IRN)
           {hasIrn && (
             <Badge className={cn(
-              'text-3xs',
+              'text-xs',
               irnStatus === 'generated' && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
               irnStatus === 'cancelled' && 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
               irnStatus === 'pending' && 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
@@ -2064,7 +2064,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
             <div className="rounded-lg bg-muted/30 p-3 space-y-1.5">
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">IRN:</span>
-                <span className="font-mono text-3xs break-all text-right max-w-[200px]">{txn.irn}</span>
+                <span className="font-mono text-xs break-all text-right max-w-[200px]">{txn.irn}</span>
               </div>
               {txn.irnGeneratedAt && (
                 <div className="flex justify-between text-xs">
@@ -2093,7 +2093,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
                 )}
               </div>
             )}
-            <p className="text-3xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               This invoice is e-Invoice compliant. The IRN and signed QR are stored permanently for audit.
             </p>
           </div>

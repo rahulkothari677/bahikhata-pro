@@ -76,7 +76,7 @@ const periodLabel = (id: DatePreset | 'all') => (id === 'all' ? 'All time' : get
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2.5">
-      <h3 className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
       {children}
     </section>
   )
@@ -194,7 +194,7 @@ export function LedgerFilterSheet({
             <label className="flex items-center justify-between gap-3 min-h-[44px] px-3 rounded-xl bg-muted/50 cursor-pointer">
               <span className="text-sm">
                 Show voided
-                <span className="block text-2xs text-muted-foreground">
+                <span className="block text-xs text-muted-foreground">
                   Deleted entries, kept for your audit trail
                 </span>
               </span>

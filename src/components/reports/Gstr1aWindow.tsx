@@ -100,19 +100,19 @@ export function Gstr1aWindow({ window, corrections = [], blockedCount = 0 }: Pro
           <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
             You can still fix this month’s GSTR-1
           </p>
-          <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1">{window.message}</p>
+          <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">{window.message}</p>
         </div>
       </div>
 
       <div className="p-4 space-y-3">
         {fixable.length > 0 && (
           <div>
-            <p className="text-2xs font-medium text-amber-900 dark:text-amber-200">
+            <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
               {fixable.length === 1 ? 'This bill has' : `These ${fixable.length} bills have`} changed since you filed:
             </p>
             <ul className="mt-2 space-y-1">
               {fixable.map(c => (
-                <li key={c.inum} className="text-2xs text-amber-800 dark:text-amber-300">
+                <li key={c.inum} className="text-xs text-amber-800 dark:text-amber-300">
                   <span className="font-mono font-medium">{c.inum}</span>
                   {' — '}{c.changes.join(', ')}
                 </li>
@@ -132,12 +132,12 @@ export function Gstr1aWindow({ window, corrections = [], blockedCount = 0 }: Pro
           <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-100/60 dark:bg-amber-900/30 p-3 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-2xs font-medium text-amber-900 dark:text-amber-200">
+              <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
                 {blockedCount === 1 ? 'One correction cannot' : `${blockedCount} corrections cannot`} go in GSTR-1A
               </p>
               <ul className="mt-1 space-y-1">
                 {corrections.filter(c => !c.fitsGstr1a).map(c => (
-                  <li key={c.inum} className="text-2xs text-amber-800 dark:text-amber-300">
+                  <li key={c.inum} className="text-xs text-amber-800 dark:text-amber-300">
                     <span className="font-mono">{c.inum}</span> — {c.reason}
                   </li>
                 ))}
@@ -146,7 +146,7 @@ export function Gstr1aWindow({ window, corrections = [], blockedCount = 0 }: Pro
           </div>
         )}
 
-        <p className="text-2xs text-amber-700 dark:text-amber-400">
+        <p className="text-xs text-amber-700 dark:text-amber-400">
           File GSTR-1A on the portal before you file this month’s GSTR-3B. We do not generate the
           GSTR-1A file yet — this is telling you the window is open and what belongs in it.
         </p>

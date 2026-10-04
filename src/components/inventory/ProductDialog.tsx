@@ -360,7 +360,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                 <span className="hidden sm:inline">Scan</span>
               </Button>
             </div>
-            <p className="text-2xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Scan it once here and this product comes up instantly at billing.
             </p>
           </div>
@@ -453,7 +453,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
               <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
                 This is GST-free only under a condition
               </p>
-              <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1 italic">
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 italic">
                 “{exemption.rules[0].description}”
               </p>
 
@@ -476,7 +476,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                 if (!q) return null
                 return (
                   <div key={code} className="mt-3">
-                    <p className="text-2xs font-medium text-amber-900 dark:text-amber-200">{q.question}</p>
+                    <p className="text-xs font-medium text-amber-900 dark:text-amber-200">{q.question}</p>
                     <div className="flex flex-wrap gap-2 mt-2">
                       <Button
                         type="button" size="sm" variant="outline"
@@ -495,7 +495,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                         {q.taxableLabel}
                       </Button>
                       {conditionAnswers[code] && (
-                        <span className="self-center text-2xs text-amber-900 dark:text-amber-200">
+                        <span className="self-center text-xs text-amber-900 dark:text-amber-200">
                           ✓ {conditionAnswers[code] === 'exempt' ? q.exemptLabel : q.taxableLabel}
                         </span>
                       )}
@@ -504,12 +504,12 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                 )
               })}
 
-              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-3">
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-3">
                 {allConditionsAnswered
                   ? `Answered — this item is set to ${form.gstTreatment === 'exempt' ? 'Exempt' : 'Taxable'}.`
                   : 'Exempt and taxable go in different boxes of your GSTR-1, so this decides whether your return is right.'}
               </p>
-              <p className="text-3xs text-amber-700 dark:text-amber-400 mt-2">
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                 {exemption.source} · entry {exemption.rules[0].serial}
               </p>
             </div>
@@ -527,10 +527,10 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           <>
           {exemption?.outcome === 'exempt' && (
             <div className="sm:col-span-2 rounded-lg border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3">
-              <p className="text-2xs text-emerald-900 dark:text-emerald-200">
+              <p className="text-xs text-emerald-900 dark:text-emerald-200">
                 <b>Exempt from GST.</b> {exemption.rules[0].description}
               </p>
-              <p className="text-3xs text-emerald-700 dark:text-emerald-400 mt-1">
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
                 {exemption.source} · entry {exemption.rules[0].serial}
               </p>
             </div>
@@ -550,7 +550,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                   <SelectItem key={t.value} value={t.value}>
                     <div className="flex flex-col">
                       <span>{t.label}</span>
-                      <span className="text-3xs text-muted-foreground">{t.desc}</span>
+                      <span className="text-xs text-muted-foreground">{t.desc}</span>
                     </div>
                   </SelectItem>
                 ))}

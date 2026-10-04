@@ -114,7 +114,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Users className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_parties')}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_parties')}</p>
             </div>
             <p className="text-xl font-bold">{parties.length}</p>
           </CardContent>
@@ -123,7 +123,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.customers')}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.customers')}</p>
             </div>
             <p className="text-xl font-bold">{customers}</p>
           </CardContent>
@@ -132,7 +132,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowDownRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.receivable')}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.receivable')}</p>
             </div>
             <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatINR(totalReceivable)}</p>
           </CardContent>
@@ -141,7 +141,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowUpRight className="w-4 h-4 text-rose-600" />
-              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.payable')}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.payable')}</p>
             </div>
             <p className="text-xl font-bold text-rose-600">{formatINR(totalPayable)}</p>
           </CardContent>

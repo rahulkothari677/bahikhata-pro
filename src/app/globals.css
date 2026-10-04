@@ -39,15 +39,32 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  /* 🔒 V26 Phase 6 §1.2 — Named micro-typography steps (replaces 404 off-scale
-     text-[9px]/[10px]/[11px] usages). 9px was below any legibility floor on
-     mid-range Android in bright shops; these tokens give a named home to the
-     legitimate micro-type use cases (badges, chart ticks, nav counts) while
-     making body copy bump up to text-xs minimum. */
-  --text-3xs: 0.625rem;      /* 10px — badges, chart ticks, nav counts */
-  --text-3xs--line-height: 1.35;
-  --text-2xs: 0.6875rem;     /* 11px — micro labels, section descriptions */
-  --text-2xs--line-height: 1.35;
+  /* 🔒 Phase 4a (Oct 2026) — the design language in one place
+     (final design plan §1). Nothing a shopkeeper reads is below 12px, so
+     text-xs is the floor. The old 10px/11px steps (text-3xs, text-2xs; V26
+     Phase 6 §1.2) were removed and all 551 uses moved to text-xs.
+
+     Colour roles: each colour means ONE thing, and screens use the role,
+     never a raw palette shade (text-green-600 etc.):
+       good   money in, done, matched
+       bad    money owed, a return, an error
+       check  needs a look: a question, a warning
+       ai     EkBook did this: a draft, a match, a suggestion
+     Each has a -soft surface for chips and banners. Values live in :root
+     and .dark below. Touch targets: min-h-12 (48px). */
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-check: var(--check);
+  --color-check-soft: var(--check-soft);
+  --color-ai: var(--ai);
+  --color-ai-soft: var(--ai-soft);
+  /* Money that matters is the largest thing on the screen. */
+  --text-money: 2rem;            /* 32px — a bill total, a balance */
+  --text-money--line-height: 1.1;
+  --text-money-sm: 1.3125rem;    /* 21px — totals in a row of four */
+  --text-money-sm--line-height: 1.15;
   /* Font families — set by next/font in layout.tsx */
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
                "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -136,6 +153,20 @@
   --sidebar-accent-foreground: oklch(0.96 0 0);
   --sidebar-border: oklch(0.3 0.02 30);
   --sidebar-ring: oklch(0.55 0.19 42);
+  /* Phase 4a colour roles (see @theme above) */
+  --good: oklch(0.5 0.13 150);
+  --good-soft: oklch(0.95 0.04 150);
+  --bad: oklch(0.52 0.18 25);
+  --bad-soft: oklch(0.96 0.03 25);
+  --check: oklch(0.55 0.13 70);
+  --check-soft: oklch(0.96 0.05 85);
+  --ai: oklch(0.5 0.16 285);
+  --ai-soft: oklch(0.955 0.03 285);
+  /* Motion: short and easing out. Nothing animates on a repeated tap. */
+  --motion-fast: 120ms;
+  --motion: 180ms;
+  --motion-slow: 220ms;
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .dark {
@@ -181,6 +212,14 @@
   --sidebar-accent-foreground: oklch(0.96 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.7 0.18 42);
+  --good: oklch(0.75 0.14 150);
+  --good-soft: oklch(0.28 0.05 150);
+  --bad: oklch(0.72 0.16 25);
+  --bad-soft: oklch(0.3 0.06 25);
+  --check: oklch(0.8 0.14 80);
+  --check-soft: oklch(0.32 0.06 80);
+  --ai: oklch(0.76 0.13 285);
+  --ai-soft: oklch(0.3 0.06 285);
 }
 
 /* Safe-area utilities.
@@ -196,6 +235,21 @@
  * than on the content underneath — the way WhatsApp and Instagram do it. */
 @utility pt-safe {
   padding-top: var(--safe-top);
+}
+
+/* 🔒 Phase 4a (#231) — two layout traps found at 375px while building
+ * the design prototype.
+ *  1. A scrolling flex column lets its children shrink (flex-shrink: 1) when
+ *     they overflow, and a child with overflow:hidden then has no minimum
+ *     height, so a card can be squashed to nothing. Put `scroll-col` on the
+ *     scrolling column.
+ *  2. A flex child holding an input will not shrink below the input's own
+ *     width (~170px) and pushes the buttons beside it off a phone screen.
+ *     Give that child `min-w-0` (the shared <Input> already carries it). */
+@layer components {
+  .scroll-col > * {
+    flex-shrink: 0;
+  }
 }
 
 @utility pb-safe {
@@ -239,7 +293,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Inter for body — clean, modern, very readable at small sizes */
+    /* Mukta (Phase 4a): one family for English and Hindi */
     font-family: var(--font-sans);
     font-feature-settings: "rlig" 1, "calt" 1;
     /* Slightly tighter line-height for a more designed feel */
@@ -250,7 +304,7 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
-  /* Headings use Plus Jakarta Sans — geometric, friendly, bold.
+  /* Headings share the body family (Mukta) at heavier weights.
      Apply to h1-h6 and any element with .font-heading class. */
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);

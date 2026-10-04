@@ -149,11 +149,11 @@ export function NoticeRisk({ month }: { month: string }) {
                     unpublished (CA review, 29 Aug 2026). Showing WHICH test it
                     passes is still useful; calling either one a legal trigger
                     is not something we can stand behind. */}
-                <p className={`mt-2 text-3xs ${tone.body} opacity-80`}>
+                <p className={`mt-2 text-xs ${tone.body} opacity-80`}>
                   Against the commonly cited guide figures — GSTN sets the real
                   threshold and does not publish it:
                 </p>
-                <div className={`mt-1 grid grid-cols-2 gap-2 text-3xs ${tone.body}`}>
+                <div className={`mt-1 grid grid-cols-2 gap-2 text-xs ${tone.body}`}>
                   <div className="flex items-center gap-1.5">
                     <span className={r.crossedPercent ? 'font-bold' : 'opacity-70'}>
                       {r.crossedPercent ? 'over' : 'under'} 20%

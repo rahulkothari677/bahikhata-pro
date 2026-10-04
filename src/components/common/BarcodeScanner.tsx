@@ -429,7 +429,7 @@ export function BarcodeScanner({
                     </span>
                     <span className="flex-1 min-w-0">
                       <span className="block font-mono text-sm text-white break-all">{c.value}</span>
-                      <span className="block text-2xs text-white/50 uppercase">{c.format.replace(/_/g, ' ')}</span>
+                      <span className="block text-xs text-white/50 uppercase">{c.format.replace(/_/g, ' ')}</span>
                     </span>
                   </button>
                 ))}

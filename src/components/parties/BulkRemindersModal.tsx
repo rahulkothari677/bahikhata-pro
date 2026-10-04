@@ -193,7 +193,7 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
             </div>
             <div>
               <h3 className="font-bold text-sm">WhatsApp Bulk Reminders</h3>
-              <p className="text-2xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {sending
                   ? `Opening ${currentIndex !== null ? currentIndex + 1 : 0} of ${reminderLinks.length}`
                   : `${partiesWithDues.length} customers with outstanding dues`}
@@ -216,7 +216,7 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
                 <User className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
               </div>
               <p className="font-bold text-sm">{reminderLinks[currentIndex].name}</p>
-              <p className="text-2xs text-muted-foreground mt-3 max-w-xs">
+              <p className="text-xs text-muted-foreground mt-3 max-w-xs">
                 WhatsApp opened with a pre-filled reminder message. After sending, tap "Next" to continue.
               </p>
             </div>
@@ -254,14 +254,14 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
                 <>
                   {/* Select all / none */}
                   <div className="flex items-center justify-between mb-2 px-1">
-                    <span className="text-2xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {selected.size} of {partiesWithDues.length} selected
                     </span>
                     <div className="flex gap-2">
-                      <button onClick={selectAll} className="text-2xs font-medium text-primary hover:underline">
+                      <button onClick={selectAll} className="text-xs font-medium text-primary hover:underline">
                         Select all
                       </button>
-                      <button onClick={selectNone} className="text-2xs font-medium text-muted-foreground hover:underline">
+                      <button onClick={selectNone} className="text-xs font-medium text-muted-foreground hover:underline">
                         Clear
                       </button>
                     </div>
@@ -295,7 +295,7 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{party.name}</p>
-                            <p className="text-2xs text-muted-foreground">{party.phone}</p>
+                            <p className="text-xs text-muted-foreground">{party.phone}</p>
                           </div>
                           <p className="text-sm font-bold text-rose-600 dark:text-rose-400 tabular-nums flex-shrink-0">
                             {formatINR(balance)}

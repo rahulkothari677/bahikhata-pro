@@ -1349,7 +1349,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <p className="text-sm font-medium text-primary">
                 {drafts.length} saved draft{drafts.length === 1 ? '' : 's'}
               </p>
-              <p className="text-2xs text-muted-foreground truncate">
+              <p className="text-xs text-muted-foreground truncate">
                 {activeDraftId ? 'Editing a restored draft' : 'Tap to restore or delete previous drafts'}
               </p>
             </div>
@@ -1667,7 +1667,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Category selector */}
                 <div>
-                  <Label className="text-2xs uppercase text-muted-foreground" htmlFor="field-category">Category</Label>
+                  <Label className="text-xs uppercase text-muted-foreground" htmlFor="field-category">Category</Label>
                   <Select
                     value={selectedCategory || '__all__'}
                     onValueChange={(v) => setSelectedCategory(v === '__all__' ? null : v)}
@@ -1692,7 +1692,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
                 {/* Product search */}
                 <div className="sm:col-span-2">
-                  <Label className="text-2xs uppercase text-muted-foreground" htmlFor="field-search-product">Search Product</Label>
+                  <Label className="text-xs uppercase text-muted-foreground" htmlFor="field-search-product">Search Product</Label>
                   <div className="relative mt-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input id="field-search-product"
@@ -1729,7 +1729,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               {/* Recently used products — quick-pick chips */}
               {!productSearch && !selectedCategory && recentProducts.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-3xs uppercase tracking-wider text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
                     <Clock className="w-3 h-3" /> Recently Used
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -1795,8 +1795,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{p.name}</p>
-                          <div className="flex items-center gap-2 text-2xs text-muted-foreground">
-                            {p.category && <Badge variant="outline" className="text-3xs py-0">{p.category}</Badge>}
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {p.category && <Badge variant="outline" className="text-xs py-0">{p.category}</Badge>}
                             <span>{formatINR(isSale ? p.salePrice : p.purchasePrice)}/{p.unit}</span>
                             {showsGst && (
                               <>
@@ -1813,7 +1813,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             The sale saved regardless; the screen was the lie. */}
                         <div className="text-right flex-shrink-0">
                           <p className={cn(
-                            'text-2xs font-medium',
+                            'text-xs font-medium',
                             isService(p) ? 'text-violet-600 dark:text-violet-400' :
                             p.currentStock <= 0 ? 'text-rose-600' :
                             p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
@@ -1822,10 +1822,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           </p>
                           {/* 🔒 V8 U6: Inline stock badge for quick visibility while billing */}
                           {!isService(p) && p.currentStock <= 0 && (
-                            <span className="text-3xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-full">OUT</span>
+                            <span className="text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-full">OUT</span>
                           )}
                           {!isService(p) && p.currentStock > 0 && p.isLowStock && (
-                            <span className="text-3xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
+                            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
                           )}
                         </div>
                       </button>
@@ -1884,7 +1884,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     )
                   })}
                   {filteredProducts.length > 20 && (
-                    <p className="text-center text-2xs text-muted-foreground py-2">
+                    <p className="text-center text-xs text-muted-foreground py-2">
                       Showing 20 of {filteredProducts.length} — refine search to see more
                     </p>
                   )}
@@ -2039,7 +2039,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 <div className="text-center py-8 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
                   <ShoppingCart className="w-10 h-10 mx-auto mb-2 text-muted-foreground/40" />
                   <p>No items added yet</p>
-                  <p className="text-2xs mt-1">Click products above to add them here</p>
+                  <p className="text-xs mt-1">Click products above to add them here</p>
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -2062,7 +2062,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       <div key={i} className="rounded-lg bg-muted/20 border border-border/40 p-2 transition hover:bg-muted/30">
                         {/* Row 1: Number + Product name + Total + Delete */}
                         <div className="flex items-center gap-1.5">
-                          <span className="text-3xs font-bold text-muted-foreground w-4 text-center flex-shrink-0">{i + 1}</span>
+                          <span className="text-xs font-bold text-muted-foreground w-4 text-center flex-shrink-0">{i + 1}</span>
                           <p className="flex-1 min-w-0 text-sm font-medium truncate">{item.productName}</p>
                           <span className="text-xs font-bold tabular-nums flex-shrink-0">{formatINR(itemTotal)}</span>
                           <button
@@ -2115,15 +2115,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             value={normalizeUnitName(item.unit)}
                             onValueChange={(v) => handleUpdateItem(i, 'unit', v)}
                           >
-                            <SelectTrigger className="w-16 h-8 text-2xs px-1 flex-shrink-0">
+                            <SelectTrigger className="w-16 h-8 text-xs px-1 flex-shrink-0">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               {unitOptions.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                             </SelectContent>
                           </Select>
-                          <span className="text-3xs text-muted-foreground flex-shrink-0">×</span>
-                          <span className="text-3xs text-muted-foreground flex-shrink-0">₹</span>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">×</span>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">₹</span>
                           <NumberField
                             compact
                             aria-label="Price"
@@ -2158,7 +2158,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         </div>
                         {/* 🔒 V12: Inline, self-verifying math so the shopkeeper
                             instantly sees the real per-unit calculation. */}
-                        <div className="pl-5 mt-1 text-3xs text-muted-foreground tabular-nums">
+                        <div className="pl-5 mt-1 text-xs text-muted-foreground tabular-nums">
                           {item.quantity} {normalizeUnitName(item.unit)}
                           {converted && <span className="text-primary"> = {roundMoney(normQty)} {normUnit}</span>}
                           {' '}× ₹{item.unitPrice}/{normUnit}
@@ -2175,7 +2175,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           const isBlock = stockPolicy === 'block'
                           return (
                             <div className={cn(
-                              'pl-5 mt-1 text-2xs font-medium flex items-center gap-1',
+                              'pl-5 mt-1 text-xs font-medium flex items-center gap-1',
                               isBlock ? 'text-rose-600' : 'text-amber-600 dark:text-amber-400'
                             )}>
                               <AlertTriangle className="w-3 h-3 flex-shrink-0" />
@@ -2327,10 +2327,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{selectedParty.name}</p>
-                    <div className="flex items-center gap-2 text-2xs text-muted-foreground flex-wrap">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                       {selectedParty.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{selectedParty.phone}</span>}
                       {selectedParty.balance !== 0 && (
-                        <Badge variant="outline" className={cn('text-3xs py-0', selectedParty.balance > 0 ? 'text-emerald-600 dark:text-emerald-400 border-emerald-300' : 'text-rose-600 border-rose-300')}>
+                        <Badge variant="outline" className={cn('text-xs py-0', selectedParty.balance > 0 ? 'text-emerald-600 dark:text-emerald-400 border-emerald-300' : 'text-rose-600 border-rose-300')}>
                           {selectedParty.balance > 0 ? `Owes ₹${selectedParty.balance}` : `You owe ₹${Math.abs(selectedParty.balance)}`}
                         </Badge>
                       )}
@@ -2347,11 +2347,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                        */}
                       {!isSale && (
                         selectedParty.gstin ? (
-                          <Badge variant="outline" className="text-3xs py-0 font-mono">
+                          <Badge variant="outline" className="text-xs py-0 font-mono">
                             {selectedParty.gstin}
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-3xs py-0 text-amber-600 border-amber-300 gap-0.5">
+                          <Badge variant="outline" className="text-xs py-0 text-amber-600 border-amber-300 gap-0.5">
                             <AlertTriangle className="w-2.5 h-2.5" /> No GSTIN — can&apos;t claim GST
                           </Badge>
                         )
@@ -2437,7 +2437,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                            * it carries the searched name into the new record.
                            */}
                           {partySearch && (
-                            <div className="px-3 py-1.5 text-3xs text-muted-foreground uppercase font-medium border-b border-border">
+                            <div className="px-3 py-1.5 text-xs text-muted-foreground uppercase font-medium border-b border-border">
                               {filteredParties.length} match{filteredParties.length !== 1 ? 'es' : ''}
                             </div>
                           )}
@@ -2459,20 +2459,20 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                               </Avatar>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium truncate">{p.name}</p>
-                                <div className="flex items-center gap-2 text-2xs text-muted-foreground">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                   {p.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{p.phone}</span>}
                                   {p.state && <span>{p.state}</span>}
                                 </div>
                               </div>
                               {p.balance !== 0 && (
-                                <Badge variant="outline" className={cn('text-3xs py-0', p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
+                                <Badge variant="outline" className={cn('text-xs py-0', p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
                                   {p.balance > 0 ? `+₹${p.balance}` : `-₹${Math.abs(p.balance)}`}
                                 </Badge>
                               )}
                             </button>
                           ))}
                           {filteredParties.length > 20 && (
-                            <div className="px-3 py-2 text-2xs text-muted-foreground border-t border-border">
+                            <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">
                               Showing 20 of {filteredParties.length} — keep typing to narrow it down.
                             </div>
                           )}
@@ -2513,7 +2513,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       text="Copy it exactly as printed. GST matches your purchase to the supplier's filing by this number, so a different number will not match."
                     />}
                     {canClaimGst && !invoiceNo.trim() && (
-                      <span className="text-2xs font-normal text-amber-600">needed to claim GST</span>
+                      <span className="text-xs font-normal text-amber-600">needed to claim GST</span>
                     )}
                   </div>
                   <Input
@@ -2625,7 +2625,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="text-sm" htmlFor="field-inter-state-igst">GST type</Label>
-                    <p className="text-2xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {derivedInterState.indeterminate
                         ? 'Set your shop\u2019s state to decide this automatically'
                         : asksShipTo && shipCheck.needsShipToChoice
@@ -2645,11 +2645,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   )}
                 </div>
                 {derivedInterState.indeterminate ? (
-                  <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                     Your shop&apos;s state is not set &mdash; add it in Shop profile so GST is worked out for you.
                   </p>
                 ) : partyHasNoState && !deliveryCode && (
-                  <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                     {`${selectedParty?.name} has no state saved \u2014 counted as a local sale. Add it on their profile if they are in another state.`}
                   </p>
                 )}
@@ -2689,7 +2689,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                               <Button type="button" role="radio" aria-checked={billToShipTo === false} variant={billToShipTo === false ? 'default' : 'outline'} className="h-auto min-h-11 py-2 px-2 whitespace-normal leading-tight" onClick={() => { markDirty(); setBillToShipTo(false) }}>The buyer</Button>
                             </div>
                             {shipCheck.buyerLosesCredit && (
-                              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-1">
+                              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
                                 {`${selectedParty?.name} can\u2019t claim this GST \u2014 their GSTIN is from ${stateNameForCode(buyerGstinCode)}.`}
                               </p>
                             )}
@@ -2705,7 +2705,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               {/* Rule 46(e): a buyer with no GST number, ₹50,000+ before GST. */}
               {showsGst && actualType === 'sale' && rule46e.length > 0 && (
                 <div className="flex items-start gap-1.5">
-                  <p className="text-2xs text-amber-700 dark:text-amber-400">
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
                     {`Bills of \u20b950,000 or more need the buyer\u2019s ${rule46e.join(', ').replace(/, ([^,]*)$/, ' and $1')}.`}
                   </p>
                   <InfoHint
@@ -2751,7 +2751,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <Label className="text-sm" htmlFor="field-reverse-charge">Reverse charge</Label>
-                      <p className="text-2xs text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         The supplier did not charge GST — you pay it directly
                       </p>
                     </div>
@@ -2762,7 +2762,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     />
                   </div>
                   {isReverseCharge && (
-                    <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                       {formatINR(totalGst)} will be added to what you owe in GSTR-3B, and claimed
                       back as credit in the same return. Usual for transport, legal services, and
                       unregistered suppliers.
@@ -2789,7 +2789,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <Label className="text-sm" htmlFor="field-itc-blocked">Can&apos;t claim this GST back</Label>
-                      <p className="text-2xs text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         Some purchases don&apos;t give input credit, whatever they&apos;re for
                       </p>
                     </div>
@@ -2801,7 +2801,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </div>
                   {!!itcBlockedReason && (
                     <div className="mt-3">
-                      <Label className="text-2xs uppercase text-muted-foreground" htmlFor="field-itc-reason">Reason</Label>
+                      <Label className="text-xs uppercase text-muted-foreground" htmlFor="field-itc-reason">Reason</Label>
                       <select
                         id="field-itc-reason"
                         value={itcBlockedReason}
@@ -2816,7 +2816,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         <option value="compositionSupplier">Supplier is under composition scheme</option>
                         <option value="other">Something else</option>
                       </select>
-                      <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                         {formatINR(totalGst)} won&apos;t be claimed as credit in GSTR-3B. Keep this
                         on — claiming it anyway means paying it back later with interest.
                       </p>
@@ -2860,7 +2860,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       <Label className="cursor-pointer text-sm">
                         {isCreditNote ? 'Cash refunded to customer?' : 'Cash refunded by supplier?'}
                       </Label>
-                      <p className="text-2xs text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {cashRefund
                           ? 'Money was returned in cash/UPI — balance stays unchanged'
                           : `OFF: adjusts the party's khata by ${formatINR(totalAmount)}`}
@@ -2881,7 +2881,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         decimals={2}
                         prefix="₹"
                       />
-                      <p className="text-3xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         Leave empty for a full cash refund. Any un-refunded portion adjusts the khata.
                       </p>
                     </div>
@@ -2908,7 +2908,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     decimals={2}
                     prefix="₹"
                   />
-                  <p className="text-3xs text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     {paymentMode === 'credit'
                       ? `Leave empty for full udhaar — ${formatINR(totalAmount)} stays owing. Enter an amount if they paid part of it.`
                       : 'Leave empty for full payment'}
@@ -2998,15 +2998,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 */}
               {mixedSupply.needsSplit && (
                 <div className="mb-3 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-2.5">
-                  <p className="text-2xs font-medium text-amber-900 dark:text-amber-200">
+                  <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
                     This needs two bills, not one
                   </p>
-                  <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1">
+                  <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
                     {mixedSupply.message}
                   </p>
                   <ul className="mt-1.5 space-y-0.5">
                     {mixedSupply.documents.map(d => (
-                      <li key={d} className="text-2xs text-amber-800 dark:text-amber-300 flex gap-1.5">
+                      <li key={d} className="text-xs text-amber-800 dark:text-amber-300 flex gap-1.5">
                         <span>&bull;</span><span>{d}</span>
                       </li>
                     ))}
@@ -3091,7 +3091,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </span>
                     <span className="font-bold text-emerald-700 dark:text-emerald-300">
                       {formatINR(totalProfit)}
-                      <span className="text-3xs ml-1">({marginPct(totalProfit)}%)</span>
+                      <span className="text-xs ml-1">({marginPct(totalProfit)}%)</span>
                     </span>
                   </div>
                 )}
@@ -3107,7 +3107,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </span>
                     <span className="font-bold text-rose-700 dark:text-rose-300">
                       −{formatINR(Math.abs(totalProfit))}
-                      <span className="text-3xs ml-1">({marginPct(Math.abs(totalProfit))}%)</span>
+                      <span className="text-xs ml-1">({marginPct(Math.abs(totalProfit))}%)</span>
                     </span>
                   </div>
                 )}
@@ -3134,14 +3134,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
          * under a second label teaches the eye to stop reading the strip.
          */}
         <div className="flex-1 min-w-0">
-          <p className="text-3xs text-muted-foreground uppercase">
+          <p className="text-xs text-muted-foreground uppercase">
             Total{items.length > 0 && ` · ${items.length} item${items.length === 1 ? '' : 's'}`}
           </p>
           <p className="text-lg font-bold tabular-nums leading-tight">{formatINR(totalAmount)}</p>
           {hasStockBlock ? (
-            <p className="text-3xs text-rose-600 font-medium">Not enough stock</p>
+            <p className="text-xs text-rose-600 font-medium">Not enough stock</p>
           ) : due > 0 && items.length > 0 ? (
-            <p className="text-3xs text-rose-600 font-medium tabular-nums">
+            <p className="text-xs text-rose-600 font-medium tabular-nums">
               {formatINR(due)} due
             </p>
           ) : null}

@@ -211,7 +211,7 @@ export function MoreScreen() {
                   <p className={cn('text-sm font-semibold', accentColor)}>
                     {section.title}
                   </p>
-                  <p className="text-3xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {itemCount} {itemCount === 1 ? 'item' : 'items'}
                   </p>
                 </div>
@@ -246,7 +246,7 @@ export function MoreScreen() {
                             <p className="font-medium text-sm">{item.labelKey ? t(item.labelKey) : item.label}</p>
                             {item.badge && (
                               <span className={cn(
-                                'text-3xs px-1.5 py-0.5 rounded-full font-bold',
+                                'text-xs px-1.5 py-0.5 rounded-full font-bold',
                                 item.badgeColor || 'bg-primary text-primary-foreground'
                               )}>
                                 {item.badge}

@@ -105,7 +105,7 @@ export function ShopLogoUploader({ logoUrl, onLogoChange }: Props) {
     return (
       <div>
         <Label>Shop Logo</Label>
-        <p className="text-2xs text-muted-foreground mb-1.5">
+        <p className="text-xs text-muted-foreground mb-1.5">
           Appears on your invoice PDFs (top-left of the header). Optional.
         </p>
         <button
@@ -126,7 +126,7 @@ export function ShopLogoUploader({ logoUrl, onLogoChange }: Props) {
             <>
               <Upload className="w-5 h-5" />
               <span className="text-xs font-medium">Click to upload logo</span>
-              <span className="text-2xs">PNG, JPEG, or WebP · max 2 MB</span>
+              <span className="text-xs">PNG, JPEG, or WebP · max 2 MB</span>
             </>
           )}
         </button>
@@ -148,7 +148,7 @@ export function ShopLogoUploader({ logoUrl, onLogoChange }: Props) {
   return (
     <div>
       <Label>Shop Logo</Label>
-      <p className="text-2xs text-muted-foreground mb-1.5">
+      <p className="text-xs text-muted-foreground mb-1.5">
         Appears on your invoice PDFs (top-left of the header).
       </p>
       <div className="flex items-center gap-3">
@@ -185,7 +185,7 @@ export function ShopLogoUploader({ logoUrl, onLogoChange }: Props) {
               Remove
             </Button>
           </div>
-          <p className="text-2xs text-muted-foreground mt-1.5 truncate">
+          <p className="text-xs text-muted-foreground mt-1.5 truncate">
             <ImageIcon className="w-3 h-3 inline mr-1" />
             {logoUrl.split('/').pop()}
           </p>

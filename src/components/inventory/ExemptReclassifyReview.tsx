@@ -118,7 +118,7 @@ export function ExemptReclassifyReview() {
           please confirm each one.
         </CardDescription>
         {data.truncated && (
-          <p className="text-2xs text-amber-700 dark:text-amber-400 mt-1">{data.truncationNote}</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">{data.truncationNote}</p>
         )}
       </CardHeader>
 
@@ -135,25 +135,25 @@ export function ExemptReclassifyReview() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{f.name}</p>
-                  <p className="text-2xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {f.hsn ? `HSN ${f.hsn}` : 'no HSN'} · now {TREATMENT_LABEL[f.currentTreatment] || f.currentTreatment}
                   </p>
                 </div>
                 {settled
                   ? <Badge variant="outline" className="gap-1 shrink-0"><CheckCircle2 className="w-3 h-3" /> {TREATMENT_LABEL[settled]}</Badge>
-                  : <Badge variant="outline" className="shrink-0 text-2xs">needs a look</Badge>}
+                  : <Badge variant="outline" className="shrink-0 text-xs">needs a look</Badge>}
               </div>
 
-              <p className="text-2xs text-muted-foreground mt-2">{f.reason}</p>
+              <p className="text-xs text-muted-foreground mt-2">{f.reason}</p>
               {f.description && (
-                <p className="text-2xs italic text-muted-foreground mt-1">“{f.description}”</p>
+                <p className="text-xs italic text-muted-foreground mt-1">“{f.description}”</p>
               )}
 
               {!settled && f.verdict === 'needs-answer' && askable.map(code => {
                 const q = CONDITION_QUESTION[code]
                 return (
                   <div key={code} className="mt-3">
-                    <p className="text-2xs font-medium">{q.question}</p>
+                    <p className="text-xs font-medium">{q.question}</p>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {(['exempt', 'taxable'] as const).map(side => (
                         <Button
@@ -199,14 +199,14 @@ export function ExemptReclassifyReview() {
                 * look; they edit the item themselves.
                 */}
               {!settled && f.verdict === 'no-longer-listed' && (
-                <p className="text-2xs text-muted-foreground mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   Open this item and check its HSN code — we cannot tell whether the code or the
                   treatment is the wrong one, so nothing is offered here.
                 </p>
               )}
 
               {f.source && (
-                <p className="text-3xs text-muted-foreground mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   {f.source}{f.serial ? ` · entry ${f.serial}` : ''}
                 </p>
               )}

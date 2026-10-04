@@ -295,7 +295,7 @@ export function InvoicePreview({
                   */}
                 {(item.description || item.altQty || item.customCols.length > 0
                   || pendingFields.some(f => f.entity === 'item')) && (
-                  <div className="flex text-2xs" style={{ paddingBottom: 5, color: readable(theme.muted) }}>
+                  <div className="flex text-xs" style={{ paddingBottom: 5, color: readable(theme.muted) }}>
                     <span className="flex-1 truncate pr-2">
                       {/* 📄 Phase 5 — same sub-line as the PDF, same order. */}
                       {[item.description,
@@ -385,7 +385,7 @@ export function InvoicePreview({
                 ) : (
                   <div className="w-20 h-20 grid place-items-center rounded"
                     style={{ border: `1px solid ${theme.line}` }}>
-                    <span className="text-2xs text-center px-1" style={{ color: theme.muted }}>QR</span>
+                    <span className="text-xs text-center px-1" style={{ color: theme.muted }}>QR</span>
                   </div>
                 )}
                 <div className="min-w-0">
@@ -468,7 +468,7 @@ export function InvoicePreview({
         * slip — for a moment it says their books are empty. Three states now,
         * and the app only claims the ledger is empty when it actually knows.
         */}
-      <p className="text-2xs text-muted-foreground text-center mt-2 px-4">
+      <p className="text-xs text-muted-foreground text-center mt-2 px-4">
         {loadFailed
           ? "Couldn't load your latest bill, so this is a sample. Check your connection and pull to refresh."
           : isSample
@@ -502,7 +502,7 @@ function HeaderContent({
       </div>
       <div className="text-right flex-shrink-0">
         <p className="text-xl font-bold">{doc.title}</p>
-        {doc.declaration && <p className="text-2xs font-medium" style={{ color: muted }}>{doc.declaration}</p>}
+        {doc.declaration && <p className="text-xs font-medium" style={{ color: muted }}>{doc.declaration}</p>}
         <p className="text-sm font-medium" style={{ color: muted }}>
           {doc.invoiceNo} · {doc.dateLabel}{doc.timeLabel ? `, ${doc.timeLabel}` : ''}
         </p>

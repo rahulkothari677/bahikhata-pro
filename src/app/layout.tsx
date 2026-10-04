@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Mukta } from "next/font/google";
 import "./globals.css";
 /*
  * Business-card monogram typefaces. Imported HERE, not with an `@import` inside
@@ -24,11 +24,15 @@ import dynamic from "next/dynamic";
 const Analytics = dynamic(() => import("@vercel/analytics/react").then(m => ({ default: m.Analytics })))
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })))
 
-// 🔒 V9 1.7a: Reduced to one font (was: Inter + Plus Jakarta Sans).
-// Plus Jakarta Sans was used for headings via --font-heading. Now --font-heading
-// falls back to Inter (set in globals.css). Saves one font request on first load.
-const inter = Inter({
-  subsets: ["latin"],
+// 🔒 Phase 4a (Oct 2026): one family for English AND Hindi — Mukta.
+// The design language (final design plan §1) sets one typeface designed for
+// both scripts, so "Cheeni 1 kg" and "चीनी" sit on one line without jumping.
+// Inter had no Devanagari, so every Hindi word fell back to whatever font the
+// phone happened to carry. Still one font request (was Inter; before that
+// Inter + Plus Jakarta Sans, V9 1.7a).
+const mukta = Mukta({
+  subsets: ["latin", "devanagari"],
+  weight: ["400", "500", "600", "700", "800"],
   variable: "--font-sans",
   display: "swap",
 });
@@ -69,7 +73,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={inter.variable}>
+    <html lang="en" suppressHydrationWarning className={mukta.variable}>
       <body className="antialiased bg-background text-foreground font-sans">
         <ErrorBoundary>
           <OfflineBanner />

@@ -524,7 +524,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                 * spreads to every other number we show, which is expensive for
                 * an app whose whole claim is that you can rely on it.
                 */}
-              <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
                 {isSale ? 'Total Sales' : 'Total Purchases'} <span className="normal-case">({t('dash.incl_gst')})</span>
               </p>
             </div>
@@ -540,7 +540,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               * month or the first page of it — which is the one thing the line
               * exists to tell them.
               */}
-            <p className="text-2xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {hasNextPage
                 ? `First ${filtered.length} · scroll for more`
                 : `${filtered.length} transactions`}
@@ -555,10 +555,10 @@ export function Ledger({ type }: { type: LedgerType }) {
                 <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
               </div>
               <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatINR(totalProfit)}</p>
-              <p className="text-2xs text-muted-foreground">{totalNetSales > 0 ? ((totalProfit / totalNetSales) * 100).toFixed(1) : 0}% margin</p>
+              <p className="text-xs text-muted-foreground">{totalNetSales > 0 ? ((totalProfit / totalNetSales) * 100).toFixed(1) : 0}% margin</p>
             </div>
           </div>
         )}
@@ -569,7 +569,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
                 <IndianRupee className="w-3.5 h-3.5 text-violet-600" />
               </div>
-              <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.paid')}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.paid')}</p>
             </div>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalPaid)}</p>
           </div>
@@ -581,7 +581,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               <div className="w-7 h-7 rounded-lg bg-rose-500/10 flex items-center justify-center">
                 <IndianRupee className="w-3.5 h-3.5 text-rose-600" />
               </div>
-              <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Outstanding' : 'Pending Payment'}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Outstanding' : 'Pending Payment'}</p>
             </div>
             <p className="text-xl font-bold text-rose-600 tabular-nums">{formatINR(totalDue)}</p>
           </div>
@@ -623,7 +623,7 @@ export function Ledger({ type }: { type: LedgerType }) {
             >
               <SlidersHorizontal className="w-4 h-4" />
               {activeFilterCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-3xs font-bold flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
                   {activeFilterCount}
                 </span>
               )}
@@ -783,7 +783,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               period; this says what it resolved to, which matters when someone
               is reconciling against a bank statement. */}
           {dateRange && (
-            <p className="mt-1.5 text-2xs text-muted-foreground">
+            <p className="mt-1.5 text-xs text-muted-foreground">
               {dateRange.from.toLocaleDateString('en-IN')} — {dateRange.to.toLocaleDateString('en-IN')}
             </p>
           )}
@@ -992,7 +992,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                             {txn.party?.name || 'Walk-in Customer'}
                           </p>
                           {/* Secondary info — smaller, muted */}
-                          <div className="flex items-center gap-2 mt-0.5 text-2xs text-muted-foreground flex-wrap">
+                          <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
                             <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateMaybeTime(txn.date)}</span>
                             <span className="flex items-center gap-1"><User className="w-3 h-3" />{txn.items?.length || 0} items</span>
                           </div>
@@ -1001,16 +1001,16 @@ export function Ledger({ type }: { type: LedgerType }) {
                         <div className="text-right flex-shrink-0">
                           <p className={cn('font-bold text-base tabular-nums', accentColor)}>{formatINR(txn.totalAmount)}</p>
                           {due > 0 && txn.type !== 'estimate' && (
-                            <p className="text-2xs text-rose-600 mt-0.5 tabular-nums">Due: {formatINR(due)}</p>
+                            <p className="text-xs text-rose-600 mt-0.5 tabular-nums">Due: {formatINR(due)}</p>
                           )}
                           {/* 🔒 V26 N2 follow-up: profit line only for real sales — an estimate's
                               profit isn't earned yet, and credit notes render their own line below */}
                           {txn.type === 'sale' && !hideProfit && (
-                            <p className="text-2xs text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">+{formatINR(txn.grossProfit)}</p>
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">+{formatINR(txn.grossProfit)}</p>
                           )}
                           {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
                           {txn.type === 'credit-note' && !hideProfit && txn.grossProfit < 0 && (
-                            <p className="text-2xs text-rose-500 mt-0.5 tabular-nums">-{formatINR(Math.abs(txn.grossProfit))}</p>
+                            <p className="text-xs text-rose-500 mt-0.5 tabular-nums">-{formatINR(Math.abs(txn.grossProfit))}</p>
                           )}
                         </div>
                       </div>
@@ -1019,42 +1019,42 @@ export function Ledger({ type }: { type: LedgerType }) {
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
                         {/* 🔒 V8 U1: Voided badge — shows when viewing soft-deleted transactions */}
                         {showVoided && (
-                          <Badge className="text-3xs py-0 bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 gap-1">
+                          <Badge className="text-xs py-0 bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 gap-1">
                             <Trash2 className="w-2.5 h-2.5" /> Voided
                           </Badge>
                         )}
                         {/* V17-Ext Tier 3: Credit/Debit Note badge */}
                         {txn.type === 'credit-note' && (
-                          <Badge className="text-3xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
+                          <Badge className="text-xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
                             Credit Note
                           </Badge>
                         )}
                         {txn.type === 'debit-note' && (
-                          <Badge className="text-3xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
+                          <Badge className="text-xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
                             Debit Note
                           </Badge>
                         )}
                         {/* 🔒 V26 FIX N2: Estimate badge so estimates are visually distinguishable */}
                         {txn.type === 'estimate' && (
-                          <Badge className="text-3xs py-0 bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
+                          <Badge className="text-xs py-0 bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
                             Estimate
                           </Badge>
                         )}
                         {txn.invoiceNo && (
-                          <Badge variant="outline" className="text-3xs py-0">{txn.invoiceNo}</Badge>
+                          <Badge variant="outline" className="text-xs py-0">{txn.invoiceNo}</Badge>
                         )}
                         {/* 🔒 V26 N2 follow-up: estimates have no payment — the mode and
                             Paid/Unpaid badges would mislead (server stores paid=total on quotes) */}
                         {txn.type !== 'estimate' && (
                           <>
-                            <Badge variant="secondary" className="text-3xs py-0 uppercase">{txn.paymentMode}</Badge>
+                            <Badge variant="secondary" className="text-xs py-0 uppercase">{txn.paymentMode}</Badge>
                             {/* Payment status badge */}
                             {due > 0 ? (
-                              <Badge variant="destructive" className="text-3xs py-0">
+                              <Badge variant="destructive" className="text-xs py-0">
                                 {due === txn.totalAmount ? 'Unpaid' : 'Partial'}
                               </Badge>
                             ) : (
-                              <Badge className="text-3xs py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                              <Badge className="text-xs py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
                                 Paid
                               </Badge>
                             )}
@@ -1065,12 +1065,12 @@ export function Ledger({ type }: { type: LedgerType }) {
                       {txn.items?.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {txn.items.slice(0, 4).map((item: any, i: number) => (
-                            <span key={i} className="text-2xs bg-muted px-2 py-0.5 rounded-md">
+                            <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded-md">
                               {item.productName} × {item.quantity}
                             </span>
                           ))}
                           {txn.items.length > 4 && (
-                            <span className="text-2xs text-muted-foreground px-2 py-0.5">+{txn.items.length - 4} more</span>
+                            <span className="text-xs text-muted-foreground px-2 py-0.5">+{txn.items.length - 4} more</span>
                           )}
                         </div>
                       )}
@@ -1158,25 +1158,25 @@ export function Ledger({ type }: { type: LedgerType }) {
                     {!bulkMode && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
                   </div>
                   <p className="font-semibold text-sm truncate">{txn.party?.name || 'Walk-in'}</p>
-                  {txn.invoiceNo && <p className="text-3xs text-muted-foreground truncate">{txn.invoiceNo}</p>}
-                  <p className="text-3xs text-muted-foreground mt-1 truncate">{formatDateMaybeTime(txn.date)}</p>
+                  {txn.invoiceNo && <p className="text-xs text-muted-foreground truncate">{txn.invoiceNo}</p>}
+                  <p className="text-xs text-muted-foreground mt-1 truncate">{formatDateMaybeTime(txn.date)}</p>
                   <div className="mt-2 pt-2 border-t border-border flex items-center justify-between gap-1 flex-wrap">
                     <span className={cn('font-bold', accentColor)}>{formatINRCompact(txn.totalAmount)}</span>
                     {/* 🔒 V26 N2 follow-up: quotes have no payment status */}
                     {txn.type === 'estimate' ? (
-                      <Badge className="text-3xs bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">Estimate</Badge>
+                      <Badge className="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">Estimate</Badge>
                     ) : due > 0 ? (
-                      <Badge variant="destructive" className="text-3xs">Due {formatINRCompact(due)}</Badge>
+                      <Badge variant="destructive" className="text-xs">Due {formatINRCompact(due)}</Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">{t('stat.paid')}</Badge>
+                      <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">{t('stat.paid')}</Badge>
                     )}
                   </div>
                   {txn.type === 'sale' && !hideProfit && (
-                    <p className="text-3xs text-emerald-600 dark:text-emerald-400 mt-1">+{formatINRCompact(txn.grossProfit)} profit</p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">+{formatINRCompact(txn.grossProfit)} profit</p>
                   )}
                   {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
                   {txn.type === 'credit-note' && !hideProfit && txn.grossProfit < 0 && (
-                    <p className="text-3xs text-rose-500 mt-1">-{formatINRCompact(Math.abs(txn.grossProfit))} profit reversed</p>
+                    <p className="text-xs text-rose-500 mt-1">-{formatINRCompact(Math.abs(txn.grossProfit))} profit reversed</p>
                   )}
                 </CardContent>
               </Card>

@@ -43,11 +43,11 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-undef": "off",
     "no-unreachable": "off",
     "no-useless-escape": "off",
-    // 🔒 V26 Phase 6 §1.2: Ban off-scale text-[Npx] arbitrary values.
-    // Use text-2xs (11px) or text-3xs (10px) instead. Body copy: text-xs min.
+    // 🔒 V26 Phase 6 §1.2 + Phase 4a: no off-scale text-[Npx], and nothing
+    // below the 12px floor. text-2xs/text-3xs (11/10px) were removed in 4a.
     "no-restricted-syntax": ["error", {
-      "selector": "Literal[value=/text-\\[\\d+px\\]/]",
-      "message": "Use text-2xs (11px) or text-3xs (10px) instead of text-[Npx]. Body copy minimum: text-xs."
+      "selector": "Literal[value=/text-\\[\\d+px\\]|\\btext-[23]xs\\b/]",
+      "message": "Use the type scale: text-xs (12px) is the floor. Arbitrary pixel sizes and the removed 10/11px steps are not allowed."
     }],
   },
 }, {

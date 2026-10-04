@@ -61,7 +61,7 @@ function Row({ f }: { f: Finding }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{f.supplier}</p>
-          <p className="text-2xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {f.invoiceNo || 'no bill number'} · {fmtDay(f.date)} · bill {formatINR(f.totalAmount)}
           </p>
         </div>
@@ -69,12 +69,12 @@ function Row({ f }: { f: Finding }) {
           {/* The credit at stake is the largest thing in the row — §4: money is
               what the eye should land on, not the label beside it. */}
           <p className="text-base font-bold tabular-nums">{formatINR(f.itcAtRisk)}</p>
-          <p className="text-3xs text-muted-foreground">credit at risk</p>
+          <p className="text-xs text-muted-foreground">credit at risk</p>
         </div>
       </div>
-      <p className="text-2xs text-muted-foreground mt-2">{f.reason}</p>
+      <p className="text-xs text-muted-foreground mt-2">{f.reason}</p>
       {f.unpaidAmount > 0 && (
-        <p className="text-2xs mt-1">
+        <p className="text-xs mt-1">
           <span className="text-muted-foreground">Still owed to this supplier: </span>
           <span className="font-medium tabular-nums">{formatINR(f.unpaidAmount)}</span>
         </p>
@@ -119,7 +119,7 @@ export function ItcReversalWarning() {
                 Pay {dueSoon.length === 1 ? 'this supplier' : `these ${dueSoon.length} suppliers`} soon
                 to keep {formatINR(data.totals?.dueSoonItc || 0)} of credit
               </p>
-              <p className="text-2xs text-amber-800 dark:text-amber-300 mt-1">
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
                 If a supplier is not paid within {data.rule?.days} days of their bill, you must give
                 back the input credit you claimed on it, with interest. Paying them keeps it.
               </p>
@@ -139,7 +139,7 @@ export function ItcReversalWarning() {
               <p className="text-sm font-semibold text-red-900 dark:text-red-200">
                 {formatINR(data.totals?.overdueItc || 0)} of credit is already past {data.rule?.days} days
               </p>
-              <p className="text-2xs text-red-800 dark:text-red-300 mt-1">
+              <p className="text-xs text-red-800 dark:text-red-300 mt-1">
                 {/* Stated as a thing to do, not a verdict. The credit comes back
                     the moment the supplier is paid, and a warning that reads as
                     pure loss gives nobody a reason to act. */}
@@ -162,7 +162,7 @@ export function ItcReversalWarning() {
               <p className="text-sm font-medium">
                 {paidLate.length === 1 ? 'One bill was' : `${paidLate.length} bills were`} paid after the {data.rule?.days}-day limit
               </p>
-              <p className="text-2xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {/* The quiet one, and the easiest to miss: these read as paid on
                     every other screen, so nothing suggests a problem. */}
                 These are settled now, so nothing is owed to the supplier. But the credit fell due
@@ -177,7 +177,7 @@ export function ItcReversalWarning() {
         </div>
       )}
 
-      <p className="text-3xs text-muted-foreground px-1">
+      <p className="text-xs text-muted-foreground px-1">
         {data.rule?.citation}. Checked {data.purchasesChecked} purchases from the last{' '}
         {Math.round((data.lookbackDays || 0) / 365)} years. We do not fill the reversal into your
         GSTR-3B for you, and we do not calculate the interest.

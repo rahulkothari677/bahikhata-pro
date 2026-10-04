@@ -277,7 +277,7 @@ function FeatureBox({ icon: Icon, title, desc, color }: { icon: any; title: stri
         <Icon className="w-4 h-4" />
       </div>
       <p className="text-sm font-semibold">{title}</p>
-      <p className="text-2xs text-muted-foreground mt-0.5">{desc}</p>
+      <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
     </div>
   )
 }

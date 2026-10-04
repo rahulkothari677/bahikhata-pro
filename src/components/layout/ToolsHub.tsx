@@ -154,7 +154,7 @@ export function ToolsHub() {
 
       {/* Footer hint — same style as ReportsHub */}
       <div className="pt-2 pb-1 text-center">
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Tip: use Ctrl+K (Cmd+K on Mac) to quickly search and jump to any tool.
         </p>
       </div>

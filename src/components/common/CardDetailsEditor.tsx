@@ -275,7 +275,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
     <div className="rounded-2xl border border-border/70 bg-card p-4 space-y-4">
       <div>
         <h3 className="text-sm font-semibold">Card details</h3>
-        <p className="text-2xs text-muted-foreground mt-0.5">
+        <p className="text-xs text-muted-foreground mt-0.5">
           What gets printed on your card. Your invoices are not affected.
         </p>
       </div>
@@ -302,7 +302,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
               {mode === value && <Check className="w-3 h-3 text-primary" />}
               {label}
             </span>
-            <span className="block text-3xs text-muted-foreground mt-0.5">{sub}</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">{sub}</span>
           </button>
         ))}
       </div>
@@ -318,7 +318,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
           const fallback = profile[field]
           return (
             <div key={field}>
-              <Label htmlFor={`card-${field}`} className="text-2xs text-muted-foreground">
+              <Label htmlFor={`card-${field}`} className="text-xs text-muted-foreground">
                 {LABELS[field]}
               </Label>
               <Input
@@ -340,7 +340,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
                 className={cn('mt-1 h-9 text-sm', readOnly && 'bg-muted/60 text-muted-foreground')}
               />
               {!readOnly && HINTS[field] && (
-                <p className="text-3xs text-muted-foreground mt-1">{HINTS[field]}</p>
+                <p className="text-xs text-muted-foreground mt-1">{HINTS[field]}</p>
               )}
             </div>
           )
@@ -348,7 +348,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
       </div>
 
       {readOnly && (
-        <p className="text-3xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           These come from Settings → Profile. Switch to <span className="font-medium">Enter manually</span> to
           put something different on the card.
         </p>
@@ -360,9 +360,9 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
       <div className="pt-1">
         <div className="flex items-center gap-1.5 mb-1">
           <ImageIcon className="w-3.5 h-3.5 text-muted-foreground" />
-          <p className="text-2xs font-medium">Your mark</p>
+          <p className="text-xs font-medium">Your mark</p>
         </div>
-        <p className="text-3xs text-muted-foreground mb-2">
+        <p className="text-xs text-muted-foreground mb-2">
           The badge at the top of the card — your logo, or your initials.
         </p>
 
@@ -386,8 +386,8 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
               <ImageIcon className="w-7 h-7 p-1.5 text-muted-foreground flex-none" />
             )}
             <span className="min-w-0">
-              <span className="block text-2xs font-medium">Shop logo</span>
-              <span className="block text-3xs text-muted-foreground truncate">
+              <span className="block text-xs font-medium">Shop logo</span>
+              <span className="block text-xs text-muted-foreground truncate">
                 {logoUrl ? 'Your uploaded logo' : 'Upload one below'}
               </span>
             </span>
@@ -411,8 +411,8 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
               {previewMonogram}
             </span>
             <span className="min-w-0">
-              <span className="block text-2xs font-medium">Letters</span>
-              <span className="block text-3xs text-muted-foreground truncate">From your shop name</span>
+              <span className="block text-xs font-medium">Letters</span>
+              <span className="block text-xs text-muted-foreground truncate">From your shop name</span>
             </span>
           </button>
         </div>
@@ -432,7 +432,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
             if (url && mark === 'monogram') setMark('logo')
           }}
         />
-        <p className="text-3xs text-muted-foreground mt-1.5">
+        <p className="text-xs text-muted-foreground mt-1.5">
           Your logo is also used on your invoice PDFs. Choosing{' '}
           <span className="font-medium">Letters</span> changes only this card — the logo stays on your
           invoices.
@@ -446,9 +446,9 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
       <div className="pt-1">
         <div className="flex items-center gap-1.5 mb-1">
           <Type className="w-3.5 h-3.5 text-muted-foreground" />
-          <p className="text-2xs font-medium">Fonts</p>
+          <p className="text-xs font-medium">Fonts</p>
         </div>
-        <p className="text-3xs text-muted-foreground mb-2">
+        <p className="text-xs text-muted-foreground mb-2">
           Pick the part of the card first, then its font. Each part keeps its own.
         </p>
 
@@ -470,10 +470,10 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
                     : 'border-border/70 hover:border-border',
                 )}
               >
-                <span className="block text-2xs font-medium">{CARD_FONT_TARGET_LABELS[t]}</span>
+                <span className="block text-xs font-medium">{CARD_FONT_TARGET_LABELS[t]}</span>
                 {/* Shows what each part is CURRENTLY set to, so the shopkeeper
                     can see all four choices without clicking through them. */}
-                <span className="block text-3xs text-muted-foreground truncate">
+                <span className="block text-xs text-muted-foreground truncate">
                   {name ?? 'App default'}
                 </span>
               </button>
@@ -501,7 +501,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
               <span className="block leading-none font-semibold" style={{ fontSize: 20 }}>
                 {sampleFor(target, previewMonogram, draftValues, profile)}
               </span>
-              <span className="block text-3xs text-muted-foreground mt-1.5 truncate">App default</span>
+              <span className="block text-xs text-muted-foreground mt-1.5 truncate">App default</span>
             </button>
           )}
           {MONOGRAM_FONTS.map(f => {
@@ -538,7 +538,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }:
                 >
                   {sampleFor(target, previewMonogram, draftValues, profile)}
                 </span>
-                <span className="block text-3xs text-muted-foreground mt-1.5 truncate">{f.name}</span>
+                <span className="block text-xs text-muted-foreground mt-1.5 truncate">{f.name}</span>
               </button>
             )
           })}

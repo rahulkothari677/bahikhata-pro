@@ -123,18 +123,18 @@ export function PartyBills() {
       <div className="grid grid-cols-2 gap-3">
         <Card className="shadow-card border-border/60">
           <CardContent className="p-3">
-            <p className="text-2xs text-muted-foreground uppercase tracking-wide">Open bills</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Open bills</p>
             <p className="text-lg font-bold text-rose-600">{formatINR(totalDue)}</p>
-            <p className="text-2xs text-muted-foreground">{openBills.length} of {bills.length} bills</p>
+            <p className="text-xs text-muted-foreground">{openBills.length} of {bills.length} bills</p>
           </CardContent>
         </Card>
         <Card className="shadow-card border-border/60">
           <CardContent className="p-3">
-            <p className="text-2xs text-muted-foreground uppercase tracking-wide">Party balance</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Party balance</p>
             <p className={cn('text-lg font-bold', balance > 0 ? 'text-emerald-600' : balance < 0 ? 'text-rose-600' : '')}>
               {formatINR(Math.abs(balance))}
             </p>
-            <p className="text-2xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {balance > 0 ? 'They owe you' : balance < 0 ? 'You owe them' : 'Settled'}
             </p>
           </CardContent>
@@ -191,7 +191,7 @@ export function PartyBills() {
                     <Badge
                       variant="outline"
                       className={cn(
-                        'text-3xs px-1.5 py-0',
+                        'text-xs px-1.5 py-0',
                         b.due === 0
                           ? 'text-emerald-600 border-emerald-300'
                           : b.settledSoFar > 0
@@ -202,7 +202,7 @@ export function PartyBills() {
                       {b.due === 0 ? 'Paid' : b.settledSoFar > 0 ? 'Partly paid' : 'Unpaid'}
                     </Badge>
                   </div>
-                  <p className="text-2xs text-muted-foreground mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {formatDate(b.date)} · {formatINR(b.totalAmount)}
                     {b.settledSoFar > 0 && <> · {formatINR(b.settledSoFar)} received</>}
                   </p>
@@ -215,7 +215,7 @@ export function PartyBills() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-6 px-2 text-2xs text-primary gap-1"
+                      className="h-6 px-2 text-xs text-primary gap-1"
                       onClick={() => {
                         // 🔒 AUDIT C5: carry WHICH bill, not just the amount.
                         //

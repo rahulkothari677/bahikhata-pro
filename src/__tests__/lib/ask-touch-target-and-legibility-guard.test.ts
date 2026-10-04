@@ -164,7 +164,7 @@ describe('Ask surface — platform sizing', () => {
     if (violations.length) {
       throw new Error(
         `\n\n🔒 ASK LEGIBILITY GUARD FAILED.\n\n` +
-        `text-2xs (11px) and text-3xs (10px) are badge and chart-tick tokens.\n` +
+        `text-2xs (11px) and text-3xs (10px) were removed in Phase 4a (12px floor).\n` +
         `Ask your books has no badges and no chart ticks — every line is prose\n` +
         `a shopkeeper reads or a figure they act on, often in daylight on a\n` +
         `mid-range phone. Floor is text-xs (12px); body is text-base (16px).\n\n` +

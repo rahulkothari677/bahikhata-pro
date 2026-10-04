@@ -129,7 +129,7 @@ export function SupplierOpeningBalanceReview() {
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-2xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {isLoading
                   ? 'Loading…'
                   : isFetching
@@ -143,7 +143,7 @@ export function SupplierOpeningBalanceReview() {
                 size="sm"
                 onClick={() => refetch()}
                 disabled={isLoading || isFetching}
-                className="h-7 gap-1.5 text-2xs"
+                className="h-7 gap-1.5 text-xs"
               >
                 <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin' : ''}`} />
                 Refresh
@@ -166,7 +166,7 @@ export function SupplierOpeningBalanceReview() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{row.name}</p>
-                        <p className="text-2xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           {row.phone ? row.phone : 'no phone'} · added{' '}
                           {new Date(row.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </p>
@@ -183,7 +183,7 @@ export function SupplierOpeningBalanceReview() {
                       </Badge>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-2xs">
+                    <div className="grid grid-cols-3 gap-2 text-xs">
                       <div>
                         <p className="text-muted-foreground">Opening</p>
                         <p className="font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
@@ -204,14 +204,14 @@ export function SupplierOpeningBalanceReview() {
                       </div>
                     </div>
 
-                    <p className="text-2xs text-muted-foreground italic">{row.reason}</p>
+                    <p className="text-xs text-muted-foreground italic">{row.reason}</p>
 
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleFlip(row)}
                       disabled={flippingId === row.id}
-                      className="w-full gap-2 h-8 text-2xs border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                      className="w-full gap-2 h-8 text-xs border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
                     >
                       {flippingId === row.id ? (
                         <Loader2 className="w-3 h-3 animate-spin" />

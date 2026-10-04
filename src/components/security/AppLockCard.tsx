@@ -83,7 +83,7 @@ export function AppLockCard() {
                 </button>
               ))}
             </div>
-            <p className="text-3xs text-muted-foreground mt-1.5">
+            <p className="text-xs text-muted-foreground mt-1.5">
               Opening the app fresh always asks. This is for coming back after
               switching to another app.
             </p>
@@ -108,7 +108,7 @@ export function AppLockCard() {
       {/* Said plainly, because the previous version of this feature promised
           more than it delivered and had to be torn out. */}
       <div className="px-4 pb-4">
-        <p className="text-3xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           This keeps someone who picks up your phone out of your books. It is not
           a password and it does not encrypt anything — your data is protected on
           the server by your account password. Forgot the PIN? The lock screen
@@ -152,7 +152,7 @@ function SetPinForm({ delayMs, onDone, onCancel }: { delayMs: number; onDone: ()
     <div className="space-y-2.5">
       <PinInput label="New PIN" value={pin} onChange={setPin} autoFocus />
       <PinInput label="Confirm PIN" value={confirm} onChange={setConfirm} />
-      <p className="text-3xs h-3 text-rose-600 dark:text-rose-400">{problem}</p>
+      <p className="text-xs h-3 text-rose-600 dark:text-rose-400">{problem}</p>
       <div className="flex gap-2">
         <button
           onClick={save}
@@ -187,7 +187,7 @@ function RemovePinForm({ onDone, onCancel }: { onDone: () => void; onCancel: () 
     <div className="space-y-2.5">
       <p className="text-xs text-muted-foreground">Enter your current PIN to turn the lock off.</p>
       <PinInput label="Current PIN" value={pin} onChange={v => { setPin(v); setError(null) }} autoFocus />
-      <p className="text-3xs h-3 text-rose-600 dark:text-rose-400">{error}</p>
+      <p className="text-xs h-3 text-rose-600 dark:text-rose-400">{error}</p>
       <div className="flex gap-2">
         <button
           onClick={remove}

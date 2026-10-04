@@ -42,7 +42,7 @@ export function StateField({
         {INDIAN_STATES.map(s => <option key={s.code} value={s.name}>{s.name}</option>)}
       </select>
       {mismatch && (
-        <p className="text-2xs text-amber-700 dark:text-amber-400 mt-1">
+        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
           The GSTIN is from {stateNameForCode(gstinCode)}.
         </p>
       )}
@@ -81,9 +81,9 @@ export function GstinField({
         spellCheck={false}
       />
       {showProblem ? (
-        <p className="text-2xs text-amber-700 dark:text-amber-400 mt-1">{check.reason}</p>
+        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">{check.reason}</p>
       ) : check.ok && check.stateCode ? (
-        <p className="text-2xs text-muted-foreground mt-1">{stateNameForCode(check.stateCode)} — state filled from the GSTIN</p>
+        <p className="text-xs text-muted-foreground mt-1">{stateNameForCode(check.stateCode)} — state filled from the GSTIN</p>
       ) : null}
     </>
   )

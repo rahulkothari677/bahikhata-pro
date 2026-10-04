@@ -530,7 +530,7 @@ export function PartySettle() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Is this an advance for a service?</p>
-                      <p className="text-2xs text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {formatINR(heldOnAccount)} is not against any bill. If it is a booking or
                         part-payment for <span className="font-medium">work you will do</span> —
                         tailoring, repairs, a salon appointment — GST is due now, not when you bill.
@@ -546,7 +546,7 @@ export function PartySettle() {
 
                   {advanceGstRate !== null && (
                     <div className="mt-3">
-                      <p className="text-2xs font-medium text-muted-foreground mb-1.5">GST rate</p>
+                      <p className="text-xs font-medium text-muted-foreground mb-1.5">GST rate</p>
                       <div className="flex gap-2">
                         {[5, 12, 18, 28].map((r) => (
                           <button
@@ -567,7 +567,7 @@ export function PartySettle() {
                       {advancePreview && (
                         /* The tax comes OUT of the money received, it is not added
                            on top. Showing the split stops that being a surprise. */
-                        <p className="text-2xs text-muted-foreground mt-2">
+                        <p className="text-xs text-muted-foreground mt-2">
                           {/* Explicit {' '} after the amount: JSX drops the newline
                               between an expression and the next line, so this rendered
                               as "₹1,000is your earning" on screen. */}
@@ -695,7 +695,7 @@ export function PartySettle() {
                           {v > 0 && v >= b.due && (
                             <Badge
                               variant="outline"
-                              className="text-2xs px-1.5 py-0 text-emerald-600 border-emerald-300"
+                              className="text-xs px-1.5 py-0 text-emerald-600 border-emerald-300"
                             >
                               clears
                             </Badge>

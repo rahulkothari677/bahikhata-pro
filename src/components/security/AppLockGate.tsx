@@ -213,7 +213,7 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
         <LogOut className="w-3.5 h-3.5" />
         Forgot PIN? Sign in with your password
       </button>
-      <p className="text-3xs text-muted-foreground mt-2 text-center max-w-xs">
+      <p className="text-xs text-muted-foreground mt-2 text-center max-w-xs">
         Your data is safe on the server. Signing in again brings everything back.
       </p>
     </div>

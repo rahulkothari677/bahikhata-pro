@@ -110,26 +110,26 @@ export default function CardGalleryPage() {
           </p>
           <div className="flex flex-wrap gap-3 mt-4">
             <label className="text-sm">
-              <span className="block text-2xs text-muted-foreground mb-1">Shop name</span>
+              <span className="block text-xs text-muted-foreground mb-1">Shop name</span>
               <input value={shop} onChange={e => setShop(e.target.value)}
                 className="border rounded px-2 py-1 text-sm bg-background" />
             </label>
             <label className="text-sm">
-              <span className="block text-2xs text-muted-foreground mb-1">Owner</span>
+              <span className="block text-xs text-muted-foreground mb-1">Owner</span>
               <input value={owner} onChange={e => setOwner(e.target.value)}
                 className="border rounded px-2 py-1 text-sm bg-background" />
             </label>
             <div className="text-sm self-end pb-1">
-              <span className="text-2xs text-muted-foreground">Monogram → </span>
+              <span className="text-xs text-muted-foreground">Monogram → </span>
               <span className="font-semibold">{deriveMonogram(shop, owner)}</span>
             </div>
             <label className="text-sm self-end pb-1 flex items-center gap-1.5">
               <input type="checkbox" data-testid="dev-logo" checked={useLogo}
                 onChange={e => setUseLogo(e.target.checked)} />
-              <span className="text-2xs text-muted-foreground">Shop logo</span>
+              <span className="text-xs text-muted-foreground">Shop logo</span>
             </label>
             <label className="text-sm">
-              <span className="block text-2xs text-muted-foreground mb-1">Font applies to</span>
+              <span className="block text-xs text-muted-foreground mb-1">Font applies to</span>
               <select
                 data-testid="dev-target"
                 value={target}
@@ -142,7 +142,7 @@ export default function CardGalleryPage() {
               </select>
             </label>
             <label className="text-sm">
-              <span className="block text-2xs text-muted-foreground mb-1">Font</span>
+              <span className="block text-xs text-muted-foreground mb-1">Font</span>
               <select
                 data-testid="dev-font"
                 value={fonts[target] ?? ''}
@@ -210,8 +210,8 @@ export default function CardGalleryPage() {
                 <div key={t.id}>
                   <TemplateCard template={t} data={data} qrValue={VCARD} onLogoClick={() => {}} />
                   <p className="text-sm font-medium mt-2">{t.name}</p>
-                  <p className="text-2xs text-muted-foreground">{t.description}</p>
-                  <p className="text-3xs text-muted-foreground/70 mt-0.5 font-mono">{t.image}</p>
+                  <p className="text-xs text-muted-foreground">{t.description}</p>
+                  <p className="text-xs text-muted-foreground/70 mt-0.5 font-mono">{t.image}</p>
                 </div>
               ))}
             </div>

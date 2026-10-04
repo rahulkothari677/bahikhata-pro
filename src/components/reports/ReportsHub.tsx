@@ -134,7 +134,7 @@ export function ReportsHub() {
 
       {/* Footer hint */}
       <div className="pt-2 pb-1 text-center">
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Tip: use the date picker at the top of each report to change the period.
         </p>
       </div>

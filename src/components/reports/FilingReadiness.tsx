@@ -125,7 +125,7 @@ export function FilingReadiness({ from, to }: { from: Date; to: Date }) {
               ? `You can file — ${problems.length} thing${problems.length === 1 ? '' : 's'} worth checking`
               : `Fix ${data.blockers} thing${data.blockers === 1 ? '' : 's'} before filing`}
           </p>
-          <p className="text-2xs text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {data.ready
               ? 'Nothing here stops you filing, but each one is a risk you should know about.'
               : 'Your return would be wrong or incomplete as it stands.'}

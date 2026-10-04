@@ -5,7 +5,7 @@
  * Usage in Recharts:
  *   import { chartColors } from '@/lib/chart-theme'
  *   <CartesianGrid stroke={chartColors.grid} />
- *   <XAxis tick={{ fill: chartColors.tick, fontSize: 11 }} />
+ *   <XAxis tick={{ fill: chartColors.tick, fontSize: 12 }} />
  *   <Tooltip contentStyle={chartColors.tooltipStyle} />
  */
 

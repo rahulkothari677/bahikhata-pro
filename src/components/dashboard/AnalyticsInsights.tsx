@@ -74,7 +74,7 @@ export function AnalyticsInsights() {
             </div>
             <div>
               <h3 className="text-sm font-bold font-heading tracking-tight">Business Analytics</h3>
-              <p className="text-3xs text-white/80">
+              <p className="text-xs text-white/80">
                 {criticalCount > 0 && `${criticalCount} action items · `}
                 {activeSections} insights · Updated {relativeTime(new Date(dataUpdatedAt || Date.now()))}
               </p>
@@ -218,9 +218,9 @@ function AnalyticsSection({
         </div>
         <div className="flex-1 min-w-0">
           {/* 🔒 AUDIT V25 BATCH 4c: Larger title (was text-xs, now text-sm) +
-              subtitle (was text-3xs, now text-2xs) for readability. */}
+              subtitle (was text-xs, now text-xs) for readability. */}
           <p className="text-sm font-bold text-foreground">{title}</p>
-          <p className="text-2xs text-muted-foreground">{subtitle}</p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
       </div>
 
@@ -231,11 +231,11 @@ function AnalyticsSection({
         {entries.map((entry, i) => (
           <div key={i} className="flex items-center justify-between gap-2 text-xs py-0.5">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <span className="text-2xs font-bold text-muted-foreground w-4 flex-shrink-0">{entry.rank}</span>
+              <span className="text-xs font-bold text-muted-foreground w-4 flex-shrink-0">{entry.rank}</span>
               <div className="min-w-0">
                 <p className="truncate">{entry.label}</p>
                 {entry.sublabel && (
-                  <p className="text-2xs text-muted-foreground truncate">{entry.sublabel}</p>
+                  <p className="text-xs text-muted-foreground truncate">{entry.sublabel}</p>
                 )}
               </div>
             </div>

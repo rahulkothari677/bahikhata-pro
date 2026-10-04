@@ -98,7 +98,7 @@ export function NeedsAmending({
                 {formatINR(inv.val)}
               </span>
             </div>
-            <p className="text-2xs text-amber-700 dark:text-amber-400 mt-0.5">{who}</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">{who}</p>
             <ul className="mt-1.5 space-y-0.5">
               {inv.changes.map((c) => (
                 <li key={c} className="text-xs text-amber-800 dark:text-amber-300">• {c}</li>
@@ -115,7 +115,7 @@ export function NeedsAmending({
         * correct itself.
         */}
       {(b2ba || []).length > 0 && (
-        <p className="px-4 py-2.5 text-2xs text-amber-800 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-900/20 border-t border-amber-200 dark:border-amber-900">
+        <p className="px-4 py-2.5 text-xs text-amber-800 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-900/20 border-t border-amber-200 dark:border-amber-900">
           Your customer claims input credit from the figures you filed, so until this return is
           filed they are still working from the old ones.
         </p>

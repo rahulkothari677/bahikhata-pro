@@ -724,8 +724,8 @@ function GSTReport({ data }: { data: any }) {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={outputSales.bySlab}>
                   <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
-                  <XAxis dataKey="rate" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatINRCompact(v)} />
+                  <XAxis dataKey="rate" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatINRCompact(v)} />
                   <Tooltip cursor={{ fill: "transparent" }} formatter={(v: number) => formatINR(v)} contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle} />
                   <Bar dataKey="taxable" name="Taxable Value" fill="oklch(0.62 0.18 42)" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="cgst" name="CGST" fill="oklch(0.62 0.15 155)" radius={[6, 6, 0, 0]} />
@@ -750,8 +750,8 @@ function GSTReport({ data }: { data: any }) {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={inputPurchases.bySlab}>
                   <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
-                  <XAxis dataKey="rate" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatINRCompact(v)} />
+                  <XAxis dataKey="rate" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatINRCompact(v)} />
                   <Tooltip cursor={{ fill: "transparent" }} formatter={(v: number) => formatINR(v)} contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle} />
                   <Bar dataKey="taxable" name="Taxable Value" fill="oklch(0.6 0.12 200)" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="cgst" name="CGST" fill="oklch(0.62 0.15 155)" radius={[6, 6, 0, 0]} />
@@ -774,7 +774,7 @@ function GSTReport({ data }: { data: any }) {
               <button
                 onClick={() => setSlabView('table')}
                 className={cn(
-                  'px-2.5 py-1 text-2xs font-medium rounded-md transition',
+                  'px-2.5 py-1 text-xs font-medium rounded-md transition',
                   slabView === 'table' ? 'bg-card text-foreground shadow-card' : 'text-muted-foreground',
                 )}
               >
@@ -783,7 +783,7 @@ function GSTReport({ data }: { data: any }) {
               <button
                 onClick={() => setSlabView('chart')}
                 className={cn(
-                  'px-2.5 py-1 text-2xs font-medium rounded-md transition',
+                  'px-2.5 py-1 text-xs font-medium rounded-md transition',
                   slabView === 'chart' ? 'bg-card text-foreground shadow-card' : 'text-muted-foreground',
                 )}
               >
@@ -853,14 +853,14 @@ function GSTReport({ data }: { data: any }) {
                 margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
-                <XAxis dataKey="rate" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} width={50} />
+                <XAxis dataKey="rate" tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} width={50} />
                 <Tooltip
                   cursor={{ fill: 'oklch(0.55 0.19 42 / 0.05)' }}
                   contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
                   formatter={(v: number) => formatINR(v)}
                 />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="Output Tax" fill="oklch(0.58 0.22 25)" radius={[4, 4, 0, 0]} name="Output Tax (Sales)" />
                 <Bar dataKey="Input Tax" fill="oklch(0.62 0.15 155)" radius={[4, 4, 0, 0]} name="Input Tax (Purchases)" />
               </BarChart>
@@ -931,9 +931,9 @@ function StockReport({ data }: { data: any }) {
                     <td className="py-2 px-2 text-right">{formatINR(p.potentialSaleValue)}</td>
                     <td className="py-2 px-2 text-center">
                       {p.isLowStock ? (
-                        <Badge variant="destructive" className="text-3xs">Low</Badge>
+                        <Badge variant="destructive" className="text-xs">Low</Badge>
                       ) : (
-                        <Badge variant="secondary" className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">OK</Badge>
+                        <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">OK</Badge>
                       )}
                     </td>
                   </tr>
@@ -980,7 +980,7 @@ function PartyReport({ data }: { data: any }) {
                   <tr key={p.party.id} className="border-b border-border/50 hover:bg-muted/30">
                     <td className="py-2 px-2 font-medium">{p.party.name}</td>
                     <td className="py-2 px-2">
-                      <Badge variant="outline" className="text-3xs capitalize">{p.party.type}</Badge>
+                      <Badge variant="outline" className="text-xs capitalize">{p.party.type}</Badge>
                     </td>
                     <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{p.totalSales > 0 ? formatINR(p.totalSales) : '—'}</td>
                     <td className="py-2 px-2 text-right text-amber-600 dark:text-amber-400">{p.totalPurchases > 0 ? formatINR(p.totalPurchases) : '—'}</td>
@@ -1024,7 +1024,7 @@ function ReportStatCard({ label, value, icon: Icon, color, bg, hint }: { label: 
           <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-shrink-0`}>
             <Icon className="w-4 h-4 text-white" />
           </div>
-          <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold leading-tight">{label}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold leading-tight">{label}</p>
           {hint && <InfoHint text={hint} label={label} />}
         </div>
         <p className={cn('text-xl font-bold tracking-tight tabular-nums', textColor)}>{value}</p>

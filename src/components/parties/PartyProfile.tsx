@@ -790,7 +790,7 @@ export function PartyProfile() {
             <div className="flex-1 min-w-0">
               <h2 className="text-2xl font-bold font-heading tracking-tight truncate">{party.name}</h2>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-3xs font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 capitalize">{party.type}</span>
+                <span className="text-xs font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 capitalize">{party.type}</span>
                 {party.phone && (
                   <span className="text-white/80 text-sm flex items-center gap-1">
                     <Phone className="w-3 h-3" /> {party.phone}
@@ -959,7 +959,7 @@ export function PartyProfile() {
               <Receipt className="w-4 h-4" />
               Bills
               {unpaidBillRows.length > 0 && (
-                <Badge variant="secondary" className="text-3xs px-1.5 py-0 ml-0.5">
+                <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-0.5">
                   {unpaidBillRows.length}
                 </Badge>
               )}
@@ -1073,7 +1073,7 @@ export function PartyProfile() {
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-muted-foreground" />
                   <div>
-                    <p className="text-3xs text-muted-foreground uppercase">GSTIN</p>
+                    <p className="text-xs text-muted-foreground uppercase">GSTIN</p>
                     <p className="font-mono text-sm font-medium">{party.gstin}</p>
                   </div>
                 </div>
@@ -1082,7 +1082,7 @@ export function PartyProfile() {
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-muted-foreground" />
                   <div>
-                    <p className="text-3xs text-muted-foreground uppercase">Email</p>
+                    <p className="text-xs text-muted-foreground uppercase">Email</p>
                     <p className="text-sm font-medium">{party.email}</p>
                   </div>
                 </div>
@@ -1091,7 +1091,7 @@ export function PartyProfile() {
                 <div className="flex items-start gap-2 sm:col-span-2">
                   <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-3xs text-muted-foreground uppercase">Address</p>
+                    <p className="text-xs text-muted-foreground uppercase">Address</p>
                     <p className="text-sm">{party.address}</p>
                   </div>
                 </div>
@@ -1112,8 +1112,8 @@ export function PartyProfile() {
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={monthlyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
               <Tooltip formatter={(v: number) => formatINR(v)} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="sales" name="Sales" fill="oklch(0.62 0.15 155)" radius={[6, 6, 0, 0]} barSize={24} />
@@ -1143,7 +1143,7 @@ export function PartyProfile() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold">{formatINR(p.amount)}</p>
-                    <p className="text-2xs text-muted-foreground">{p.quantity} units</p>
+                    <p className="text-xs text-muted-foreground">{p.quantity} units</p>
                   </div>
                 </div>
               ))}
@@ -1198,7 +1198,7 @@ export function PartyProfile() {
                   {' '}· {stats.balance > 0 ? 'They owe you' : stats.balance < 0 ? 'You owe them' : 'Settled'}
                 </span>
                 {statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap) && (
-                  <span className="block text-3xs text-amber-700 dark:text-amber-300 mt-1">
+                  <span className="block text-xs text-amber-700 dark:text-amber-300 mt-1">
                     Per-entry balances below reflect only the latest {statementTotals.cap} entries — use Print Statement for the complete audited history.
                   </span>
                 )}
@@ -1223,7 +1223,7 @@ export function PartyProfile() {
                     {/* Date separator */}
                     {showDateSeparator && (
                       <div className="flex justify-center my-3">
-                        <span className="text-3xs font-medium text-muted-foreground bg-background px-3 py-1 rounded-full border border-border">
+                        <span className="text-xs font-medium text-muted-foreground bg-background px-3 py-1 rounded-full border border-border">
                           {formatDate(entry.date)}
                         </span>
                       </div>
@@ -1243,10 +1243,10 @@ export function PartyProfile() {
                         >
                           <div className="flex items-center gap-1.5 mb-0.5">
                             <HandCoins className="w-3 h-3" />
-                            <span className="text-3xs font-semibold uppercase tracking-wide opacity-90">
+                            <span className="text-xs font-semibold uppercase tracking-wide opacity-90">
                               {isPayReceived ? 'Received' : 'Paid'}
                             </span>
-                            <span className="text-3xs opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
+                            <span className="text-xs opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
                               {entry.paymentMode}
                             </span>
                           </div>
@@ -1254,7 +1254,7 @@ export function PartyProfile() {
                             {isInflow ? '+' : '-'}{formatINR(entry.amount)}
                           </p>
                           {entry.notes && (
-                            <p className="text-3xs opacity-75 mt-0.5">{entry.notes}</p>
+                            <p className="text-xs opacity-75 mt-0.5">{entry.notes}</p>
                           )}
                           {/* 🔒 V15 M-2: Running balance after this entry —
                               the historical balance AT THIS POINT, not the
@@ -1262,10 +1262,10 @@ export function PartyProfile() {
                               statement shows so the reader can follow the
                               money from oldest to newest. */}
                           <div className="flex items-center justify-between gap-2 mt-0.5">
-                            <span className="text-3xs bg-white/20 px-1.5 py-0.5 rounded tabular-nums">
+                            <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded tabular-nums">
                               Bal: {entry.runningBalance >= 0 ? '+' : ''}{formatINR(entry.runningBalance)}
                             </span>
-                            <span className="text-3xs opacity-75">
+                            <span className="text-xs opacity-75">
                               {entryDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
@@ -1289,15 +1289,15 @@ export function PartyProfile() {
                           )}
                         >
                           <div className="flex items-center gap-1.5 mb-0.5">
-                            <span className="text-3xs font-semibold uppercase tracking-wide opacity-90">
+                            <span className="text-xs font-semibold uppercase tracking-wide opacity-90">
                               {entry.type}
                             </span>
                             {entry.invoiceNo && (
-                              <span className="text-3xs opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
+                              <span className="text-xs opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
                                 {entry.invoiceNo}
                               </span>
                             )}
-                            <span className="text-3xs opacity-75">
+                            <span className="text-xs opacity-75">
                               {entry.itemCount} items
                             </span>
                           </div>
@@ -1306,17 +1306,17 @@ export function PartyProfile() {
                           </p>
                           <div className="flex items-center justify-between gap-2 mt-1">
                             {entry.due > 0 ? (
-                              <span className="text-3xs bg-white/20 px-1.5 py-0.5 rounded">
+                              <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded">
                                 Due: {formatINR(entry.due)}
                               </span>
                             ) : (
-                              <span className="text-3xs opacity-75">✓ Paid</span>
+                              <span className="text-xs opacity-75">✓ Paid</span>
                             )}
                             {/* 🔒 V15 M-2: Running balance after this entry. */}
-                            <span className="text-3xs bg-white/20 px-1.5 py-0.5 rounded tabular-nums">
+                            <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded tabular-nums">
                               Bal: {entry.runningBalance >= 0 ? '+' : ''}{formatINR(entry.runningBalance)}
                             </span>
-                            <span className="text-3xs opacity-75">
+                            <span className="text-xs opacity-75">
                               {entryDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
@@ -1364,10 +1364,10 @@ function StatCard({ label, value, icon: Icon, color, bg, sub }: {
           <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center', bg)}>
             <Icon className={cn('w-3.5 h-3.5', color)} />
           </div>
-          <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
         </div>
         <p className="text-lg font-bold tabular-nums">{value}</p>
-        {sub && <p className="text-2xs text-muted-foreground mt-0.5">{sub}</p>}
+        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
       </div>
     </div>
   )

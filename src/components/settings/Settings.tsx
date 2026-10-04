@@ -1168,7 +1168,7 @@ export function Settings({
               <option value="service">Composition — service provider, 6%</option>
             </select>
             {gstRegistered && !form.gstin && (
-              <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                 Add your GSTIN below — it must be printed on every bill.
               </p>
             )}
@@ -1205,7 +1205,7 @@ export function Settings({
                     )
                   }}
                 />
-                <p className="text-2xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Set this the day you cross the turnover limit. Your CMP-08 will then charge only
                   up to that date, and everything after it goes into GSTR-1 and GSTR-3B — so you
                   are not taxed twice on the same sales.
@@ -1310,7 +1310,7 @@ export function Settings({
                     <>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{shop.name}</p>
-                        <p className="text-2xs text-muted-foreground truncate">
+                        <p className="text-xs text-muted-foreground truncate">
                           {shop.gstin ? `GSTIN: ${shop.gstin}` : 'No GSTIN'} {shop.isDefault ? ' · Default' : ''}
                         </p>
                       </div>
@@ -1318,7 +1318,7 @@ export function Settings({
                           data scoping is coming soon. Shops can still be created + their
                           GSTIN used in the Consolidated Report. */}
                       {shop.isDefault && (
-                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-3xs">Default</Badge>
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-xs">Default</Badge>
                       )}
                       <Button
                         type="button"
@@ -1374,7 +1374,7 @@ export function Settings({
             <div className="mt-3 p-3 rounded-lg border border-dashed border-border bg-muted/30 text-center">
               <Store className="w-5 h-5 text-muted-foreground/50 mx-auto mb-1" />
               <p className="text-xs font-medium text-muted-foreground">Multi-shop switching coming soon</p>
-              <p className="text-2xs text-muted-foreground/70 mt-0.5">
+              <p className="text-xs text-muted-foreground/70 mt-0.5">
                 You&apos;ll be able to add multiple shops and switch between them. For now, all data goes to your default shop.
               </p>
             </div>
@@ -1601,7 +1601,7 @@ export function Settings({
                   Use this to migrate to a new device or keep a safe copy.
                 </p>
                 <div className="flex items-center justify-between gap-2 mt-3 flex-wrap">
-                  <p className="text-2xs text-blue-700 dark:text-blue-300">
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
                     {lastBackup
                       ? `Last backup: ${new Date(lastBackup).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} at ${new Date(lastBackup).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
                       : 'No backup yet — tap "Backup Now" to download'}
@@ -1806,7 +1806,7 @@ export function Settings({
                   )}
                 </div>
                 <p className="text-sm font-semibold">{theme.label}</p>
-                <p className="text-2xs text-muted-foreground">{theme.description}</p>
+                <p className="text-xs text-muted-foreground">{theme.description}</p>
               </button>
             ))}
           </div>
@@ -1816,7 +1816,7 @@ export function Settings({
               <Moon className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">Dark Mode</p>
-                <p className="text-2xs text-muted-foreground">Switch between light and dark themes</p>
+                <p className="text-xs text-muted-foreground">Switch between light and dark themes</p>
               </div>
             </div>
             <Switch
@@ -1830,7 +1830,7 @@ export function Settings({
               <Globe className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">Language / ભાષા / भाषा / மொழி / భాష</p>
-                <p className="text-2xs text-muted-foreground">Choose your preferred language</p>
+                <p className="text-xs text-muted-foreground">Choose your preferred language</p>
               </div>
             </div>
             <div className="flex gap-1 bg-background rounded-lg p-0.5 flex-wrap">
@@ -1947,7 +1947,7 @@ export function Settings({
                       />
                       <span className="text-xs font-medium truncate">{p.name}</span>
                     </span>
-                    <span className="block mt-1 text-3xs text-muted-foreground leading-snug line-clamp-2">
+                    <span className="block mt-1 text-xs text-muted-foreground leading-snug line-clamp-2">
                       {p.description}
                     </span>
                   </button>
@@ -1957,7 +1957,7 @@ export function Settings({
             {/* Says what happened when a single control is changed underneath,
                 rather than leaving a name selected that no longer describes
                 the bill. */}
-            <p className="mt-2 text-2xs text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground">
               {invoicePreset
                 ? `You are on ${getInvoicePreset(invoicePreset)?.name}. Change anything below and it becomes your own design.`
                 : 'Your own design. Tap one above to start from a finished one.'}
@@ -2038,7 +2038,7 @@ export function Settings({
                       there too." Right — the wireframe above shows the difference
                       and the live bill shows the result. A button explaining what
                       the picture already says is decoration. */}
-                  <span className="block text-3xs mt-1 font-medium truncate">{t.name}</span>
+                  <span className="block text-xs mt-1 font-medium truncate">{t.name}</span>
                 </button>
               ))}
             </div>
@@ -2093,7 +2093,7 @@ export function Settings({
                     }
                   >
                     <span className="block text-xs font-medium truncate">{st.name}</span>
-                    <span className="block text-3xs text-muted-foreground leading-snug line-clamp-2">
+                    <span className="block text-xs text-muted-foreground leading-snug line-clamp-2">
                       {st.description}
                     </span>
                   </button>
@@ -2139,8 +2139,8 @@ export function Settings({
                       style={{ width: ps.id === 'a4' ? 17 : 12, height: ps.id === 'a4' ? 24 : 17 }}
                     />
                     <span className="min-w-0">
-                      <span className="block text-3xs font-medium">{ps.name}</span>
-                      <span className="block text-3xs text-muted-foreground leading-tight">
+                      <span className="block text-xs font-medium">{ps.name}</span>
+                      <span className="block text-xs text-muted-foreground leading-tight">
                         {ps.widthMm} × {ps.heightMm} mm
                       </span>
                     </span>
@@ -2206,7 +2206,7 @@ export function Settings({
                         letters, which tells nobody anything and is worse than
                         silence. The swatch IS the choice; the name returns when
                         there is room for all of it. */}
-                    <span className="text-3xs truncate hidden sm:inline">{t.name}</span>
+                    <span className="text-xs truncate hidden sm:inline">{t.name}</span>
                   </span>
                 </button>
               ))}
@@ -2225,7 +2225,7 @@ export function Settings({
               <MessageCircle className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">How bills are sent</p>
-                <p className="text-2xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   A short bill sends as a picture, which opens straight in a WhatsApp chat. A long one
                   sends as a PDF — WhatsApp shrinks tall images until the text cannot be read.
                 </p>
@@ -2253,8 +2253,8 @@ export function Settings({
                       : 'border-border/70 hover:border-border')
                   }
                 >
-                  <span className="block text-2xs font-medium">{label}</span>
-                  <span className="block text-3xs text-muted-foreground">{hint}</span>
+                  <span className="block text-xs font-medium">{label}</span>
+                  <span className="block text-xs text-muted-foreground">{hint}</span>
                 </button>
               ))}
             </div>
@@ -2278,7 +2278,7 @@ export function Settings({
               <Coins className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">Round off invoice total</p>
-                <p className="text-2xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Round the grand total of each sale to the nearest rupee and show a &ldquo;Round Off&rdquo; line on the invoice (e.g. ₹1,062.40 → ₹1,062).
                 </p>
               </div>
@@ -2309,7 +2309,7 @@ export function Settings({
               <FileText className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">My shop needs e-Invoicing</p>
-                <p className="text-2xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Turn this on only if your turnover crossed ₹5 crore in any year since 2017-18 —
                   counting every GSTIN on your PAN, and even if it has dropped since. Most small
                   shops do not need it.
@@ -2358,7 +2358,7 @@ export function Settings({
                 value={billContent.invoiceDueDays}
                 onChange={(e) => setBillContent({ ...billContent, invoiceDueDays: e.target.value })}
                 placeholder="e.g. 15" className="mt-1" />
-              <p className="text-2xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {/* The bill prints a real date, never "Net 30" — a specific day
                     is understood by everyone and outperforms the jargon. */}
                 The bill will say &ldquo;Please pay by&rdquo; and the date. Leave blank for none.
@@ -2455,7 +2455,7 @@ export function Settings({
               onChange={(e) => setForm({ ...form, upiId: e.target.value })}
               placeholder="e.g. shop@paytm, 9876543210@ybl"
               className="font-mono lowercase mt-1" />
-            <p className="text-2xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               The bill prints a QR made from this, and it already carries the
               amount — your customer scans and pays without typing anything.
               Also used by WhatsApp payment reminders.
@@ -2498,7 +2498,7 @@ export function Settings({
               <div className="min-w-0">
                 <p className="text-sm font-medium">{t.label}</p>
                 {/* Only where the label genuinely is not enough. */}
-                {t.help && <p className="text-2xs text-muted-foreground mt-0.5">{t.help}</p>}
+                {t.help && <p className="text-xs text-muted-foreground mt-0.5">{t.help}</p>}
               </div>
               <Switch
                 checked={visibility[t.key] ?? t.default}
@@ -2533,7 +2533,7 @@ export function Settings({
                 value={billContent.invoiceNextNumber}
                 onChange={(e) => setBillContent({ ...billContent, invoiceNextNumber: e.target.value })}
                 className="mt-1" />
-              <p className="text-2xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Your next bill will be{' '}
                 <span className="font-mono font-medium text-foreground">
                   {(billContent.invoicePrefix || '') + (billContent.invoiceNextNumber || '1')}
@@ -2571,7 +2571,7 @@ export function Settings({
               <Home className="w-4 h-4 text-violet-600 dark:text-violet-400" />
               <div>
                 <p className="text-sm font-medium">Default Landing Page</p>
-                <p className="text-2xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Choose which screen opens when you launch the app.
                 </p>
               </div>
@@ -2595,7 +2595,7 @@ export function Settings({
               <Clock className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">Day-End Summary Time</p>
-                <p className="text-2xs text-muted-foreground">When to show daily summary card on dashboard</p>
+                <p className="text-xs text-muted-foreground">When to show daily summary card on dashboard</p>
               </div>
             </div>
             <Select value={dayEndTime} onValueChange={(v) => { setDayEndTime(v); if (typeof window !== 'undefined') localStorage.setItem('bahikhata:day-end-time', v); sonnerToast.success(`Summary shows at ${v}:00`) }}>
@@ -2613,7 +2613,7 @@ export function Settings({
               <EyeOff className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <div>
                 <p className="text-sm font-medium">Hide Profit</p>
-                <p className="text-2xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Hide profit figures from dashboard, ledger, and transaction details. Useful when staff or customers are looking at your screen. Profit is still calculated — just hidden from view.
                 </p>
               </div>
@@ -2632,7 +2632,7 @@ export function Settings({
               <PackageX className="w-4 h-4 text-muted-foreground" />
               <div className="flex-1">
                 <p className="text-sm font-medium">Allow overselling (kirana mode)</p>
-                <p className="text-2xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {stockPolicy === 'allow'
                     ? 'ON: You can sell more than you have in stock. A warning shows, but the sale goes through. Useful for shops that sell first and record purchases later.'
                     : 'OFF (default): You cannot sell more than you have in stock. The sale is blocked until you record a purchase. Keeps your stock numbers accurate.'}
@@ -2686,11 +2686,11 @@ export function Settings({
                   </Button>
                 </div>
                 {revenueTarget ? (
-                  <p className="text-2xs text-emerald-600 dark:text-emerald-400 mt-1">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
                     Current target: {formatINR(revenueTarget)} — track progress on dashboard
                   </p>
                 ) : (
-                  <p className="text-2xs text-muted-foreground mt-1">No target set</p>
+                  <p className="text-xs text-muted-foreground mt-1">No target set</p>
                 )}
               </div>
               <div>
@@ -2717,11 +2717,11 @@ export function Settings({
                   </Button>
                 </div>
                 {expenseBudget ? (
-                  <p className="text-2xs text-amber-600 dark:text-amber-400 mt-1">
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                     Current budget: {formatINR(expenseBudget)} — track on Income & Expense page
                   </p>
                 ) : (
-                  <p className="text-2xs text-muted-foreground mt-1">No budget set</p>
+                  <p className="text-xs text-muted-foreground mt-1">No budget set</p>
                 )}
               </div>
             </CardContent>
@@ -2748,7 +2748,7 @@ export function Settings({
               <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <div>
                 <p className="text-sm font-medium">Notification Preferences</p>
-                <p className="text-2xs text-muted-foreground">Choose which alerts appear in the bell icon</p>
+                <p className="text-xs text-muted-foreground">Choose which alerts appear in the bell icon</p>
               </div>
             </div>
             <div className="space-y-2.5">
@@ -2763,7 +2763,7 @@ export function Settings({
                 <div key={item.key} className="flex items-center justify-between">
                   <div className="flex-1 min-w-0 pr-2">
                     <p className="text-xs font-medium">{item.label}</p>
-                    <p className="text-3xs text-muted-foreground">{item.desc}</p>
+                    <p className="text-xs text-muted-foreground">{item.desc}</p>
                   </div>
                   <Switch
                     checked={notifPrefs[item.key]}
@@ -2825,7 +2825,7 @@ export function Settings({
                 <option value="ml">മലയാളം (Malayalam)</option>
                 <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
               </select>
-              <p className="text-2xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 "Original" keeps the item names in whatever language the bill is written in (Hindi bill → Hindi names, English bill → English names).
               </p>
             </div>
@@ -2878,7 +2878,7 @@ export function Settings({
                 <option value="ml">മലയാളം (Malayalam)</option>
                 <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
               </select>
-              <p className="text-2xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 "Original" listens in Hindi (default) and keeps the spoken language in the parsed result — e.g. if you speak Marathi, item names stay in Marathi. Pick "English" if you want the AI to translate spoken words into English item names.
               </p>
             </div>
@@ -2970,9 +2970,9 @@ export function Settings({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{label}</p>
-                        {on && <Badge className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">ON</Badge>}
+                        {on && <Badge className="text-xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">ON</Badge>}
                       </div>
-                      <p className="text-2xs text-muted-foreground mt-0.5">{description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
                     </div>
                     <Switch checked={on} onCheckedChange={setOn} />
                   </div>

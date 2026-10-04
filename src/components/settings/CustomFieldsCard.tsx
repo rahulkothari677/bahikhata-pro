@@ -220,7 +220,7 @@ export function CustomFieldsCard() {
           */}
         <div>
           <p className="text-sm font-medium">What do you sell?</p>
-          <p className="text-2xs text-muted-foreground mb-2">
+          <p className="text-xs text-muted-foreground mb-2">
             Sets up the fields your trade needs. Most shops need none of these.
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -240,7 +240,7 @@ export function CustomFieldsCard() {
 
           {TRADE_PRESETS.filter(t => t.id === openPreset).map(t => (
             <div key={t.id} className="mt-2 rounded-lg border border-border/60 p-3 space-y-2">
-              <p className="text-2xs text-muted-foreground">{t.examples}</p>
+              <p className="text-xs text-muted-foreground">{t.examples}</p>
               {t.fields.map(f => (
                 <div key={f.label} className="flex items-start gap-2">
                   {/*
@@ -261,7 +261,7 @@ export function CustomFieldsCard() {
                         <span className="text-amber-700 dark:text-amber-400 font-normal"> · required by law</span>
                       )}
                     </p>
-                    <p className="text-2xs text-muted-foreground">{f.why}</p>
+                    <p className="text-xs text-muted-foreground">{f.why}</p>
                   </div>
                 </div>
               ))}
@@ -285,7 +285,7 @@ export function CustomFieldsCard() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{g.title}</p>
-                  <p className="text-2xs text-muted-foreground">{g.where} e.g. {g.eg}</p>
+                  <p className="text-xs text-muted-foreground">{g.where} e.g. {g.eg}</p>
                 </div>
               </div>
 
@@ -297,7 +297,7 @@ export function CustomFieldsCard() {
                       <div className="flex items-center gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate">{f.label}</p>
-                          <p className="text-2xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             {TYPES.find(t => t.id === f.type)?.label}
                             {f.required && ' · must be filled'}
                             {!f.showOnInvoice && ' · not printed'}
@@ -326,7 +326,7 @@ export function CustomFieldsCard() {
                             <Label htmlFor={`cf-rename-${f.id}`}>Name</Label>
                             <Input id={`cf-rename-${f.id}`} value={editLabel} autoFocus
                               onChange={e => setEditLabel(e.target.value)} className="mt-1" />
-                            <p className="text-2xs text-muted-foreground mt-1">
+                            <p className="text-xs text-muted-foreground mt-1">
                               {/* The single most important sentence on this screen. */}
                               Bills you have already made keep the old name.
                             </p>

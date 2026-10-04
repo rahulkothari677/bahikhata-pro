@@ -356,7 +356,7 @@ export function AuthScreen() {
           </p>
         </div>
 
-        <p className="text-center text-2xs text-muted-foreground mt-4">
+        <p className="text-center text-xs text-muted-foreground mt-4">
           🔒 {t('auth.data_secure')}
         </p>
       </div>

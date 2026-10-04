@@ -38,7 +38,7 @@ export function BillOfSupplyNotice({
           * do the job it exists for at an assessment.
           */}
         <p className="text-xs text-muted-foreground mt-0.5">{doc.declaration}</p>
-        <p className="text-2xs text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           You are on the composition scheme, so this bill carries no GST and your customer cannot
           claim input credit from it. You pay tax on your turnover in CMP-08 each quarter.
         </p>

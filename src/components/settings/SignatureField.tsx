@@ -177,7 +177,7 @@ export function SignatureField({
           className="w-full h-28 bg-white rounded border-2 border-dashed border-border cursor-crosshair"
           aria-label="Draw your signature"
         />
-        <p className="text-2xs text-muted-foreground mt-1.5 text-center">
+        <p className="text-xs text-muted-foreground mt-1.5 text-center">
           Sign with your finger
         </p>
         <div className="flex gap-2 mt-3">

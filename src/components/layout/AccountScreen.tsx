@@ -485,7 +485,7 @@ export function AccountScreen() {
                 <div className="flex items-center gap-1.5">
                   <p className="font-bold text-base font-heading tracking-tight truncate">{userName}</p>
                   {isCA && (
-                    <span className="text-3xs px-1.5 py-0.5 rounded-full font-bold bg-white/25 whitespace-nowrap flex items-center gap-1 flex-shrink-0">
+                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold bg-white/25 whitespace-nowrap flex items-center gap-1 flex-shrink-0">
                       <Calculator className="w-2.5 h-2.5" /> CA
                     </span>
                   )}
@@ -502,7 +502,7 @@ export function AccountScreen() {
               </div>
 
               <span className={cn(
-                'text-3xs font-bold uppercase tracking-wide px-2 py-1 rounded-full flex items-center gap-1 flex-shrink-0',
+                'text-xs font-bold uppercase tracking-wide px-2 py-1 rounded-full flex items-center gap-1 flex-shrink-0',
                 planBadge.badgeClassName,
               )}>
                 {PlanIcon && <PlanIcon className="w-2.5 h-2.5" />}
@@ -524,7 +524,7 @@ export function AccountScreen() {
               >
                 <StatIcon className={cn('w-3.5 h-3.5 mb-1', stat.color)} />
                 <p className="text-sm font-bold tabular-nums leading-tight">{stat.value}</p>
-                <p className="text-3xs text-muted-foreground leading-tight">{stat.label}</p>
+                <p className="text-xs text-muted-foreground leading-tight">{stat.label}</p>
               </div>
             )
           })}
@@ -567,14 +567,14 @@ export function AccountScreen() {
                   />
                 </div>
               </div>
-              <span className="text-3xs font-medium text-primary flex-shrink-0">{t('account.completion.cta')} →</span>
+              <span className="text-xs font-medium text-primary flex-shrink-0">{t('account.completion.cta')} →</span>
             </div>
             {/* Only the gaps, as chips — a 28px row instead of a 240px list. */}
             <div className="flex flex-wrap gap-1.5 mt-2.5">
               {profileCompletion.fields.filter(f => !f.filled).map(field => (
                 <span
                   key={field.label}
-                  className="text-3xs font-medium px-2 py-1 rounded-full bg-muted text-muted-foreground"
+                  className="text-xs font-medium px-2 py-1 rounded-full bg-muted text-muted-foreground"
                 >
                   + {field.label}
                 </span>
@@ -619,7 +619,7 @@ export function AccountScreen() {
                               Shops needed it: the page has one working control. */}
                           {item.badge && (
                             <span className={cn(
-                              'text-3xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full',
+                              'text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full',
                               item.badgeColor || 'bg-muted text-muted-foreground',
                             )}>
                               {item.badge}
@@ -677,11 +677,11 @@ export function AccountScreen() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm">Upgrade to Pro</p>
-                  <p className="text-2xs text-white/80 mt-0.5">
+                  <p className="text-xs text-white/80 mt-0.5">
                     AI Scanner · GST Export · WhatsApp · Voice Entry
                   </p>
                 </div>
-                <span className="text-3xs font-bold uppercase tracking-wide bg-white/20 px-2 py-1 rounded-full flex-shrink-0">
+                <span className="text-xs font-bold uppercase tracking-wide bg-white/20 px-2 py-1 rounded-full flex-shrink-0">
                   View Plans
                 </span>
               </div>
@@ -792,7 +792,7 @@ function AccountSectionContent({
               <span className="text-lg font-bold">{planLabel} Plan</span>
             </div>
             {plan === 'free' && (
-              <span className="text-2xs bg-white/20 px-2 py-1 rounded-full">Free Forever</span>
+              <span className="text-xs bg-white/20 px-2 py-1 rounded-full">Free Forever</span>
             )}
           </div>
           {plan !== 'free' && (
@@ -831,7 +831,7 @@ function AccountSectionContent({
                     </div>
                   )}
                   {aiScans.remaining === 0 && (
-                    <p className="text-2xs text-rose-500 mt-1">Daily limit reached — resets tomorrow</p>
+                    <p className="text-xs text-rose-500 mt-1">Daily limit reached — resets tomorrow</p>
                   )}
                 </div>
               )}
@@ -1179,7 +1179,7 @@ function AccountSectionContent({
             Your report includes debug info (app version, device, crash count) to help us diagnose faster.
           </p>
           {/* Auto-collected debug info — shown to the user so they know what's included */}
-          <div className="bg-muted/50 rounded-lg p-3 mb-3 text-2xs text-muted-foreground space-y-0.5">
+          <div className="bg-muted/50 rounded-lg p-3 mb-3 text-xs text-muted-foreground space-y-0.5">
             <p><span className="font-medium">App version:</span> {APP_VERSION_LABEL}</p>
             <p><span className="font-medium">Device:</span> {typeof navigator !== 'undefined' ? navigator.userAgent.split(') ')[0].split('(')[1] || 'Unknown' : 'Unknown'}</p>
             <p><span className="font-medium">Screen:</span> {typeof window !== 'undefined' ? `${window.innerWidth}×${window.innerHeight}` : 'Unknown'}</p>
@@ -1223,7 +1223,7 @@ function AccountSectionContent({
           {/* 🔒 AUDIT V23 FIX §10: App version with build info for beta readiness */}
           <p className="text-xs text-muted-foreground mt-2">{APP_VERSION_LABEL}</p>
           {/* 🔒 Feature Phase 2: Crash-free metric for beta readiness */}
-          <p className="text-2xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             {(() => {
               try {
                 const total = parseInt(localStorage.getItem('bahikhata:session-count') || '0')

@@ -115,7 +115,7 @@ export function ProductPicker({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{selectedProduct.name}</p>
-            <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span>{formatINR(value.unitPrice)}</span>
               <span>•</span>
               <span>GST {value.gstRate}%</span>
@@ -205,7 +205,7 @@ export function ProductPicker({
               <button
                 onClick={() => setCategoryFilter(null)}
                 className={cn(
-                  'px-2 py-0.5 rounded text-3xs font-medium transition',
+                  'px-2 py-0.5 rounded text-xs font-medium transition',
                   !categoryFilter ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'
                 )}
               >
@@ -216,7 +216,7 @@ export function ProductPicker({
                   key={cat}
                   onClick={() => setCategoryFilter(categoryFilter === cat ? null : cat)}
                   className={cn(
-                    'px-2 py-0.5 rounded text-3xs font-medium transition flex items-center gap-1',
+                    'px-2 py-0.5 rounded text-xs font-medium transition flex items-center gap-1',
                     categoryFilter === cat ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'
                   )}
                 >
@@ -236,7 +236,7 @@ export function ProductPicker({
                 <p className="text-xs text-muted-foreground">
                   {search ? `No products match "${search}"` : 'No products in inventory'}
                 </p>
-                <p className="text-3xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Add products in Inventory first, or type a custom name below
                 </p>
               </div>
@@ -252,8 +252,8 @@ export function ProductPicker({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{p.name}</p>
-                    <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
-                      {p.category && <Badge variant="outline" className="text-3xs py-0">{p.category}</Badge>}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {p.category && <Badge variant="outline" className="text-xs py-0">{p.category}</Badge>}
                       <span>{formatINR(isSale ? p.salePrice : p.purchasePrice)}</span>
                       <span>•</span>
                       <span>GST {p.gstRate}%</span>
@@ -265,7 +265,7 @@ export function ProductPicker({
                       the truth, which is that it can always be sold. */}
                   <div className="text-right flex-shrink-0">
                     <p className={cn(
-                      'text-2xs font-medium',
+                      'text-xs font-medium',
                       isService(p) ? 'text-violet-600 dark:text-violet-400' :
                       p.currentStock <= 0 ? 'text-rose-600' :
                       p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
