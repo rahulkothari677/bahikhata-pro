@@ -86,13 +86,23 @@ export default async function globalSetup(config: FullConfig) {
      * state the app never actually produces, and the tests would fail on
      * something that is not a bug.
      */
+    /*
+     * A REGISTERED shop in Rajasthan. Since Phase 1c (#165) a new shop is
+     * "not registered" by default and charges no GST — correctly — so
+     * gst-and-reports.spec.ts got ₹0 tax where it expects ₹180 and e2e-tests
+     * failed from a9bcba9 until this. The other specs sell 0% items, so the
+     * registration changes nothing for them. Not-registered behaviour is
+     * covered by the unit tests (shop-tax, gst-screens-1c2).
+     */
+    const gst = { gstRegistered: true, gstin: '08AAJFG2468H1Z7', state: 'Rajasthan' }
     await db.setting.upsert({
       where: { userId: user.id },
-      update: {},
+      update: gst,
       create: {
         userId: user.id,
         shopName: 'E2E Test Shop',
         ownerName: 'E2E Test Shop',
+        ...gst,
       },
     })
 
