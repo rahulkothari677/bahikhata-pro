@@ -99,7 +99,7 @@ export function MoneyBankingPage() {
     <div className="min-h-screen bg-muted/30 w-full flex-1">
       <div className="sticky top-0 z-20 pt-safe bg-background/80 backdrop-blur-md border-b border-border">
         <div className="flex items-center gap-3 px-4 py-3">
-          <button onClick={handleBack} className="p-2 -ml-2 rounded-lg hover:bg-muted">
+          <button onClick={handleBack} className="min-h-12 min-w-12 inline-flex items-center justify-center p-2 -ml-2 rounded-lg hover:bg-muted">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h2 className="text-lg font-bold">Money & Banking</h2>

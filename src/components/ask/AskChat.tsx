@@ -479,7 +479,7 @@ export function AskChat() {
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Things you can ask</p>
             <button onClick={() => setTipsOpen(false)} aria-label="Close suggestions"
-              className="w-11 h-11 -my-2.5 -mr-2.5 flex items-center justify-center flex-shrink-0">
+              className="w-12 h-12 -my-2.5 -mr-2.5 flex items-center justify-center flex-shrink-0">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -501,7 +501,7 @@ export function AskChat() {
             vanished and there was no way back to them. */}
         {!isEmpty && !tipsOpen && mode === 'idle' && (
           <button onClick={() => setTipsOpen(true)}
-            className="mb-1 ml-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground py-3">
+            className="mb-1 ml-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground py-3.5">
             <Lightbulb className="w-4 h-4" /> Things you can ask
           </button>
         )}

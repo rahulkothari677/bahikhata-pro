@@ -121,7 +121,7 @@ export function LedgerSplitView({ type }: { type: 'sale' | 'purchase' }) {
                 setSelectedTransactionId(null)
                 setPreviousView(null)
               }}
-              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
+              className="min-h-12 min-w-12 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
               aria-label="Close detail"
             >
               <X className="w-4 h-4" />

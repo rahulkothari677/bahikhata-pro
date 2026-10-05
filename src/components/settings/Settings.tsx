@@ -793,7 +793,7 @@ export function Settings({
     )) return
     if (!await confirmDialog(
       'Type DELETE to confirm. This is your last chance to cancel.',
-      { title: 'Type DELETE to Confirm', confirmLabel: 'DELETE — Permanently erase everything', destructive: true }
+      { title: 'Type DELETE to Confirm', confirmLabel: 'DELETE — Permanently erase everything', destructive: true, requireText: 'DELETE' }
     )) return
     try {
       const r = await offlineFetch('/api/account/delete', { method: 'DELETE', offline: { queueable: false } })
@@ -1852,7 +1852,7 @@ export function Settings({
                 <button
                   key={lang.code}
                   onClick={() => { setLanguage(lang.code as any); sonnerToast.success(lang.toast) }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${language === lang.code ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+                  className={`hit-48 px-3 py-1.5 text-xs font-medium rounded-md transition ${language === lang.code ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
                 >
                   {lang.label}
                 </button>
@@ -2940,7 +2940,7 @@ export function Settings({
             {featureSearch && (
               <button
                 onClick={() => setFeatureSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                className="min-h-12 min-w-12 inline-flex items-center justify-center absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
                 aria-label="Clear search"
               >
                 <RotateCcw className="w-3 h-3" />

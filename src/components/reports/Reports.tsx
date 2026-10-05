@@ -348,7 +348,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
         <div className="flex items-center gap-3 no-print">
           <button
             onClick={handleBackToHub}
-            className="p-2 -ml-2 rounded-lg hover:bg-muted"
+            className="min-h-12 min-w-12 inline-flex items-center justify-center p-2 -ml-2 rounded-lg hover:bg-muted"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>

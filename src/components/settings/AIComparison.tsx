@@ -182,7 +182,7 @@ export function AIComparison() {
             useAppStore.getState().setPreviousView(null)
             setView(prev || 'dashboard')
           }}
-          className="p-2 -ml-2 rounded-lg hover:bg-muted"
+          className="min-h-12 min-w-12 inline-flex items-center justify-center p-2 -ml-2 rounded-lg hover:bg-muted"
           aria-label="Go back"
         >
           <ArrowLeft className="w-5 h-5" />

@@ -180,7 +180,10 @@ save.
   on a missing DIRECT_URL until the file was loaded).
 - **After a merge, create the next branch BEFORE the first edit.** On 1 Oct I
   merged 1a and then edited 1b on `main` for an hour; caught it before
-  committing. `git branch --show-current` before touching a file.
+  committing. `git branch --show-current` before touching a file. **Broken
+  again 5 Oct (Phase 4c)**: a new day started on `main` and I edited 25 files
+  before noticing; moved to a branch before any commit. The check goes in the
+  same command as the first look at the repo, every phase.
 - **Do not push unfinished branches** until it is confirmed that Vercel Preview
   builds use a separate database: `npm run build` runs migrations, so a preview
   on the production `DATABASE_URL` would change the live database before merge.
@@ -212,6 +215,23 @@ save.
   child holding an input. New code uses the roles, never `text-green-600`;
   `design-language-guard.test.ts` holds the 12px floor and a ceiling on raw
   shades that may only go down.
+- **48px touch floor (Phase 4c).** Shared Button, Input, Select, ⓘ and Switch
+  carry it; compact sizes only for a mouse (`lg:pointer-fine:`), because a
+  counter tablet is wide AND touch. A control that must LOOK small (a pill, a
+  switch) gets `hit-48` (an invisible 48px tap area). Icon buttons: a 48px box,
+  a small glyph inside, and an `aria-label`. `touch-and-header-guard.test.tsx`
+  allows zero small raw buttons.
+- **Static checks cannot see a size that comes from content.** In 4c the code
+  check passed while the screen still had 30 controls under 48px (switches,
+  native selects, avatar, chips). The real check is measuring every control's
+  rendered box at 375px on each screen (`getBoundingClientRect`, plus the
+  `::after` box for `hit-48`); the code check only stops regressions.
+- **Signing in to the LOCAL copy:** Rahul's rule is that I never enter
+  passwords, with one exception he gave on 5 Oct: the local demo account
+  (LOCAL_DEMO_* in `.env.local`), which exists only in the local database, may
+  be typed into the local sign-in form by me. Never the live site, never
+  printed in a message, never written to a file the server can serve (a
+  script that did that was rightly blocked).
 - **Browser pane under emulation:** ref clicks miss. Take the element's
   `getBoundingClientRect()` centre × the pane's scale (0.4747 at the 375 px
   preset, 0.3535 at 1024 × 680 in this pane) and click that point. Sign-in:

@@ -23,7 +23,7 @@
  * mouseover is invisible to the people this is for, so this is a click-opened
  * popover that also answers to the keyboard.
  *
- * SIZE. The glyph is small but the button is not: 44×44 with a negative margin
+ * SIZE. The glyph is small but the button is not: 48×48 (Phase 4c; was 44) with a negative margin
  * so it does not push the label around. §4 asks for 48dp targets and the
  * earlier Ask work found a 43px control that had slipped a pixel under the
  * floor — an icon this small is exactly where that happens.
@@ -80,9 +80,9 @@ export function InfoHint({
             e.stopPropagation()
           }}
           className={cn(
-            // 44×44 target, pulled in by the same amount so the icon sits tight
+            // 48×48 target, pulled in by the same amount so the icon sits tight
             // to the text it belongs to and the layout does not move.
-            'inline-flex items-center justify-center w-11 h-11 -m-3.5 rounded-full',
+            'inline-flex items-center justify-center w-12 h-12 -m-4 rounded-full',
             'text-muted-foreground/70 hover:text-foreground hover:bg-muted/60',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
             'transition flex-shrink-0 align-middle',

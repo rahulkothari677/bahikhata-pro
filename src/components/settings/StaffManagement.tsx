@@ -207,7 +207,7 @@ export function StaffManagement() {
                     </div>
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : s.id)}
-                      className="p-2 rounded-md hover:bg-muted text-muted-foreground"
+                      className="min-h-12 min-w-12 inline-flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground"
                       aria-label="Toggle permissions"
                     >
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}

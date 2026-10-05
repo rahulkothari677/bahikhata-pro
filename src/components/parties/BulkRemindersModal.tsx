@@ -202,7 +202,7 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
           </div>
           <button
             onClick={() => { setSending(false); setCurrentIndex(null); onClose() }}
-            className="p-1.5 rounded-lg hover:bg-muted"
+            className="min-h-12 min-w-12 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted"
           >
             <X className="w-4 h-4" />
           </button>

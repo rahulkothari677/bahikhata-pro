@@ -1303,7 +1303,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           </div>
           <button
             onClick={() => setStockWarnings([])}
-            className="p-1 rounded text-rose-400 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/30 flex-shrink-0"
+            className="min-h-12 min-w-12 inline-flex items-center justify-center p-1 rounded text-rose-400 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/30 flex-shrink-0"
             aria-label="Dismiss warning"
           >
             <X className="w-4 h-4" />
@@ -1715,7 +1715,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       <button
                         type="button"
                         onClick={() => setBarcodeOpen(true)}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
+                        className="min-h-12 min-w-12 inline-flex items-center justify-center absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
                         aria-label="Scan barcode"
                         title="Scan barcode to find product"
                       >
@@ -1783,7 +1783,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       <button
                         onClick={() => handleAddProduct(p)}
                         aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`}
-                        className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 text-left"
+                        className="flex-1 min-w-0 min-h-12 flex items-center gap-2 sm:gap-3 text-left"
                       >
                         {/* The box icon is hidden on mobile. It is the same
                             generic box on every row, so it distinguishes
@@ -1850,7 +1850,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             <button
                               onClick={() => handleDecrementProduct(p.id)}
                               aria-label={qty === 1 ? `Remove ${p.name} from this sale` : `Reduce ${p.name} to ${qty - 1}`}
-                              className="w-11 h-11 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
+                              className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
                             >
                               {/* At one, the next press removes the line, so say so. */}
                               {qty === 1 ? <Trash2 className="w-3.5 h-3.5" /> : <Minus className="w-4 h-4" />}
@@ -1865,7 +1865,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             <button
                               onClick={() => handleAddProduct(p)}
                               aria-label={`Add another ${p.name}`}
-                              className="w-11 h-11 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
+                              className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
@@ -1874,7 +1874,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           <button
                             onClick={() => handleAddProduct(p)}
                             aria-label={`Add ${p.name}`}
-                            className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 active:scale-95 transition"
+                            className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 active:scale-95 transition"
                           >
                             <Plus className="w-4 h-4 text-primary" />
                           </button>
@@ -2065,11 +2065,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           <span className="text-xs font-bold text-muted-foreground w-4 text-center flex-shrink-0">{i + 1}</span>
                           <p className="flex-1 min-w-0 text-sm font-medium truncate">{item.productName}</p>
                           <span className="text-xs font-bold tabular-nums flex-shrink-0">{formatINR(itemTotal)}</span>
+                          {/* #182: a 48px tap area around the same small ✕ (it was 22px). */}
                           <button
-                            className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                            className="w-12 h-12 -my-3 -mr-2 flex items-center justify-center rounded-lg text-muted-foreground hover:text-bad hover:bg-bad-soft transition flex-shrink-0"
                             onClick={() => handleRemoveItem(i)}
+                            aria-label={`Remove ${item.productName}`}
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-4 h-4" aria-hidden />
                           </button>
                         </div>
                         {/* Row 2: Qty + Unit selector + Price + GST — fills FULL width */}
@@ -2115,7 +2117,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             value={normalizeUnitName(item.unit)}
                             onValueChange={(v) => handleUpdateItem(i, 'unit', v)}
                           >
-                            <SelectTrigger className="w-16 h-8 text-xs px-1 flex-shrink-0">
+                            <SelectTrigger className="w-16 h-12 lg:pointer-fine:h-8 text-sm lg:pointer-fine:text-xs px-1 flex-shrink-0" aria-label="Unit">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -2141,7 +2143,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             value={String(item.gstRate)}
                             onValueChange={(v) => handleUpdateItem(i, 'gstRate', parseFloat(v))}
                           >
-                            <SelectTrigger className="w-14 h-8 text-xs px-1 flex-shrink-0">
+                            <SelectTrigger className="w-14 h-12 lg:pointer-fine:h-8 text-sm lg:pointer-fine:text-xs px-1 flex-shrink-0" aria-label="GST rate">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -2578,7 +2580,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <button
                 type="button"
                 onClick={() => setDetailsOpen(v => !v)}
-                className="w-full flex items-center justify-between gap-2 min-h-[44px] lg:pointer-events-none"
+                className="w-full flex items-center justify-between gap-2 min-h-12 lg:pointer-events-none"
                 aria-expanded={detailsOpen}
               >
                 <h3 className="font-semibold text-sm flex items-center gap-2">

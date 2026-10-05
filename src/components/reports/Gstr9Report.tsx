@@ -74,14 +74,14 @@ export function Gstr9Report() {
 
   const header = (
     <div className="flex items-center justify-between gap-2">
-      <button onClick={() => shiftFy(-1)} aria-label="Previous financial year" className="p-2 rounded-lg hover:bg-muted">
+      <button onClick={() => shiftFy(-1)} aria-label="Previous financial year" className="min-h-12 min-w-12 inline-flex items-center justify-center p-2 rounded-lg hover:bg-muted">
         <ChevronLeft className="w-4 h-4" />
       </button>
       <div className="text-center">
         <p className="text-sm font-bold">FY {fy}</p>
         <p className="text-xs text-muted-foreground">Annual return · GSTR-9</p>
       </div>
-      <button onClick={() => shiftFy(1)} aria-label="Next financial year" className="p-2 rounded-lg hover:bg-muted">
+      <button onClick={() => shiftFy(1)} aria-label="Next financial year" className="min-h-12 min-w-12 inline-flex items-center justify-center p-2 rounded-lg hover:bg-muted">
         <ChevronRight className="w-4 h-4" />
       </button>
     </div>

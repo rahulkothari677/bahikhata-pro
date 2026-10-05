@@ -548,7 +548,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                       </span>
                       <button
                         onClick={() => handleDeleteItem(i)}
-                        className="p-1 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                        className="min-h-12 min-w-12 inline-flex items-center justify-center p-1 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
                         title="Remove this item"
                       >
                         <X className="w-4 h-4" />

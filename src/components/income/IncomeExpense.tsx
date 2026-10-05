@@ -269,13 +269,13 @@ export function IncomeExpense() {
                         </span>
                         <button
                           onClick={() => { setBudgetCategory(cat); setBudgetAmount(String(progress.budget)); setBudgetDialogOpen(true) }}
-                          className="p-0.5 rounded hover:bg-muted text-muted-foreground"
+                          className="min-h-12 min-w-12 inline-flex items-center justify-center p-0.5 rounded hover:bg-muted text-muted-foreground"
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
                         <button
                           onClick={() => { removeBudget(cat); sonnerToast.success(`Budget removed for ${cat}`) }}
-                          className="p-0.5 rounded hover:bg-muted text-muted-foreground"
+                          className="min-h-12 min-w-12 inline-flex items-center justify-center p-0.5 rounded hover:bg-muted text-muted-foreground"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -358,7 +358,7 @@ export function IncomeExpense() {
                     </div>
                     <button
                       onClick={() => { removeRecurring(entry.id); sonnerToast.success('Recurring entry removed') }}
-                      className="p-1.5 rounded-md hover:bg-rose-50 text-rose-600 flex-shrink-0"
+                      className="min-h-12 min-w-12 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-rose-50 text-rose-600 flex-shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

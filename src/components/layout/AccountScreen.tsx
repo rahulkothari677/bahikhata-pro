@@ -413,7 +413,7 @@ export function AccountScreen() {
           <button
             aria-label="Go back"
             onClick={handleBack}
-            className="p-2 -ml-2 rounded-lg hover:bg-muted"
+            className="min-h-12 min-w-12 inline-flex items-center justify-center p-2 -ml-2 rounded-lg hover:bg-muted"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -987,7 +987,7 @@ function AccountSectionContent({
                     }).catch(() => {})
                   }
                 }}
-                className="flex-1 py-2 rounded-lg bg-gradient-saffron text-white text-xs font-medium"
+                className="flex-1 min-h-12 py-2 rounded-lg bg-gradient-saffron text-white text-sm font-medium"
               >
                 Share
               </button>
@@ -999,7 +999,7 @@ function AccountSectionContent({
                     }).catch(() => {})
                   }
                 }}
-                className="flex-1 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition"
+                className="flex-1 min-h-12 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition"
               >
                 Copy vCard
               </button>
@@ -1058,7 +1058,7 @@ function AccountSectionContent({
               useAppStore.getState().setView('dashboard')
               window.location.href = '/reset-password'
             }}
-            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium flex items-center justify-center gap-2 transition"
+            className="w-full min-h-12 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium flex items-center justify-center gap-2 transition"
           >
             <Shield className="w-4 h-4" />
             Send Reset Link

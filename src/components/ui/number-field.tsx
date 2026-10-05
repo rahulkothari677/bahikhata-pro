@@ -123,7 +123,9 @@ export function NumberField({
   // makes entry easy. The wheel bug this component exists for is mouse-only.
   const [isDesktop, setIsDesktop] = React.useState(false)
   React.useEffect(() => {
-    const mq = window.matchMedia('(min-width: 640px)')
+    // Phase 4c: a MOUSE, not just a wide screen. A touch tablet is 640px+
+    // too, and these 20px buttons are not a finger target; its keypad is.
+    const mq = window.matchMedia('(min-width: 640px) and (pointer: fine)')
     const sync = () => setIsDesktop(mq.matches)
     sync()
     mq.addEventListener('change', sync)
@@ -179,6 +181,7 @@ export function NumberField({
       <button
         type="button"
         tabIndex={-1}
+        data-mouse-only
         aria-label="Decrease"
         className={cn(buttonClass, 'left-1')}
         style={{ opacity: revealed && !(disabled || atMin) ? 1 : 0 }}
@@ -214,7 +217,9 @@ export function NumberField({
           // Room for the in-box controls, reserved unconditionally on desktop
           // so the digits do not jump when the buttons fade in.
           isDesktop && (compact ? 'px-6' : 'px-7'),
-          compact && 'h-8 text-sm',
+          // Phase 4c: compact means compact on a desktop; on a phone it is
+          // still a 48px field a thumb can hit (#182).
+          compact && 'h-12 text-base lg:pointer-fine:h-8 lg:pointer-fine:text-sm',
           inputClassName,
         )}
       />
@@ -228,6 +233,7 @@ export function NumberField({
       <button
         type="button"
         tabIndex={-1}
+        data-mouse-only
         aria-label="Increase"
         className={cn(buttonClass, 'right-1')}
         style={{ opacity: revealed && !(disabled || atMax) ? 1 : 0 }}

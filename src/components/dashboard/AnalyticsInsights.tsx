@@ -82,7 +82,7 @@ export function AnalyticsInsights() {
           </div>
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-white/80 hover:text-white text-xs font-medium bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5 transition flex items-center gap-1"
+            className="text-white/80 hover:text-white text-xs font-medium bg-white/10 hover:bg-white/20 hit-48 rounded-full px-3 py-1.5 transition flex items-center gap-1"
           >
             {expanded ? 'Hide' : 'Show'}
             <ChevronDown className={cn('w-3 h-3 transition-transform', !expanded && 'rotate-180')} />

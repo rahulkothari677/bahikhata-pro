@@ -56,7 +56,7 @@ export function ImpersonationBanner() {
         <button
           onClick={() => setDismissed(true)}
           aria-label="Dismiss banner"
-          className="text-amber-100 hover:text-white transition p-1"
+          className="min-h-12 min-w-12 inline-flex items-center justify-center text-amber-100 hover:text-white transition p-1"
         >
           <X className="w-4 h-4" />
         </button>

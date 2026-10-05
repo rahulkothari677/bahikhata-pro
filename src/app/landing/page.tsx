@@ -35,7 +35,7 @@ export default function LandingPage() {
             <a href="#faq" className="text-sm text-muted-foreground hover:text-foreground">FAQ</a>
             <a href="/" className="text-sm font-medium text-primary hover:underline">Open App →</a>
           </div>
-          <button className="md:hidden p-2" onClick={() => setMenuOpen(!menuOpen)}>
+          <button className="md:hidden min-h-12 min-w-12 inline-flex items-center justify-center" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'Close menu' : 'Open menu'}>
             {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>

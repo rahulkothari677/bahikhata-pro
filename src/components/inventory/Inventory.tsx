@@ -213,7 +213,7 @@ export function Inventory() {
             <button
               onClick={() => setInventoryCategory(null)}
               className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border',
+                'hit-48 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border',
                 !inventoryCategory
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-background border-border hover:bg-muted'
@@ -229,7 +229,7 @@ export function Inventory() {
                 key={cat}
                 onClick={() => setInventoryCategory(inventoryCategory === cat ? null : cat)}
                 className={cn(
-                  'px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border',
+                  'hit-48 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border',
                   inventoryCategory === cat
                     ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-background border-border hover:bg-muted'
@@ -261,7 +261,7 @@ export function Inventory() {
               {features?.barcodeScanner && (
                 <button
                   onClick={() => setBarcodeOpen(true)}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
+                  className="min-h-12 min-w-12 inline-flex items-center justify-center absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
                   aria-label="Scan barcode"
                   title="Scan barcode"
                 >
@@ -291,8 +291,8 @@ export function Inventory() {
               <ChevronRight className="w-3 h-3" />
               <span className="text-foreground font-medium">{inventoryCategory}</span>
               <span>• {categoryCounts.get(inventoryCategory)} products • {formatINR(categoryValues.get(inventoryCategory) || 0)} value</span>
-              <button onClick={() => setInventoryCategory(null)} className="ml-2 hover:text-foreground">
-                <X className="w-3 h-3" />
+              <button onClick={() => setInventoryCategory(null)} aria-label="Clear category filter" className="w-12 h-12 -my-3 -mr-3 inline-flex items-center justify-center hover:text-foreground">
+                <X className="w-4 h-4" aria-hidden />
               </button>
             </div>
           )}
@@ -610,7 +610,7 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           <button
             type="button"
             onClick={handleOversoldTap}
-            className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs text-white bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 active:scale-[0.98] transition rounded-md px-2 py-1.5 font-semibold min-h-[32px]"
+            className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs text-white bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 active:scale-[0.98] transition rounded-md px-2 py-1.5 font-semibold min-h-12"
             aria-label={`Record a purchase to fix oversold ${p.name}`}
           >
             <AlertTriangle className="w-3 h-3 flex-shrink-0" />

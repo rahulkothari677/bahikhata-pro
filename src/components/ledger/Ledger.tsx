@@ -492,7 +492,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           </div>
           <button
             onClick={() => useAppStore.getState().setReturnMode(null)}
-            className="text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200 p-1 -mt-1 -mr-1"
+            className="min-h-12 min-w-12 inline-flex items-center justify-center text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200 p-1 -mt-1 -mr-1"
             aria-label="Cancel return mode"
           >
             <X className="w-4 h-4" />
@@ -768,7 +768,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               </span>
               <button
                 onClick={() => setBulkMode(true)}
-                className="flex items-center gap-1.5 min-h-[44px] px-2 -mr-2 text-xs font-medium text-primary hover:underline"
+                className="flex items-center gap-1.5 min-h-12 px-2 -mr-2 text-xs font-medium text-primary hover:underline"
               >
                 <CheckSquare className="w-3.5 h-3.5" />
                 Select

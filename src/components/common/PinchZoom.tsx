@@ -218,7 +218,7 @@ export function PinchZoom({
         <button
           type="button"
           onClick={reset}
-          className="absolute top-2 right-2 inline-flex items-center gap-1.5 rounded-full bg-background/90 backdrop-blur border border-border px-3 h-9 text-xs font-medium shadow-sm"
+          className="absolute top-2 right-2 inline-flex items-center gap-1.5 rounded-full bg-background/90 backdrop-blur border border-border px-4 h-12 text-sm font-medium shadow-sm"
         >
           <RotateCcw className="w-3.5 h-3.5" /> Reset
         </button>

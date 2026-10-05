@@ -172,10 +172,10 @@ describe('the info button, used sparingly', () => {
     /*
      * §4 asks for 48dp targets, and the Ask work found a 43px control that had
      * slipped a pixel under. A 16px icon is exactly where that happens, so the
-     * button is 44px with a negative margin.
+     * button is 48px (Phase 4c; was 44) with a negative margin.
      */
     const hint = readCode('src/components/common/InfoHint.tsx')
-    expect(hint).toMatch(/w-11 h-11/)
+    expect(hint).toMatch(/w-12 h-12/)
   })
 
   it('tapping the info button does not also choose the option', () => {

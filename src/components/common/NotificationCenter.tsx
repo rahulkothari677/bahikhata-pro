@@ -195,7 +195,7 @@ export function NotificationCenter() {
         size="iconTouch"
         variant="ghost"
         onClick={() => { haptic.click(); setOpen(true) }}
-        className="lg:size-9 lg:h-9 relative"
+        className="lg:pointer-fine:size-9 relative"
         title={`${totalCount} notification${totalCount === 1 ? '' : 's'}`}
         aria-label="Notifications"
       >
@@ -242,7 +242,7 @@ export function NotificationCenter() {
               {totalCount > 0 && (
                 <button
                   onClick={clearAll}
-                  className="text-white/80 hover:text-white text-xs font-medium bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5 transition flex items-center gap-1"
+                  className="text-white/80 hover:text-white text-xs font-medium bg-white/10 hover:bg-white/20 hit-48 rounded-full px-3 py-1.5 transition flex items-center gap-1"
                 >
                   <Trash2 className="w-3 h-3" />
                   Clear All
@@ -250,7 +250,7 @@ export function NotificationCenter() {
               )}
               <button
                 onClick={() => { haptic.click(); setOpen(false) }}
-                className="text-white/80 hover:text-white p-1.5 rounded-md hover:bg-white/10"
+                className="min-h-12 min-w-12 inline-flex items-center justify-center text-white/80 hover:text-white p-1.5 rounded-md hover:bg-white/10"
               >
                 <X className="w-5 h-5" />
               </button>

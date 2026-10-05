@@ -167,7 +167,7 @@ export function ProductPicker({
             <button
               type="button"
               onClick={() => setBarcodeOpen(true)}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
+              className="min-h-12 min-w-12 inline-flex items-center justify-center absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
               aria-label="Scan barcode"
               title="Scan barcode to find product"
             >

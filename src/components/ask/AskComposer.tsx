@@ -239,7 +239,7 @@ export function AskComposer({
         )}
         <div className="flex items-center gap-2 rounded-[1.75rem] border border-border/60 bg-card px-2 py-2 shadow-sm">
           <button onClick={endAll} aria-label="Leave voice mode"
-            className="w-11 h-11 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+            className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
             <X className="w-6 h-6" />
           </button>
           <div className={cn('flex-1 min-w-0 flex items-center',
@@ -247,7 +247,7 @@ export function AskComposer({
             <Waveform active={speaking || hearing} tick={tick} />
           </div>
           <button onClick={() => { stopRecognition(); setMode('idle') }} aria-label="Switch to typing"
-            className="w-11 h-11 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+            className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
             <Keyboard className="w-6 h-6" />
           </button>
         </div>
@@ -264,20 +264,20 @@ export function AskComposer({
         )}
         <div className="flex items-center gap-2 rounded-[1.75rem] border border-border/60 bg-card px-2 py-2 shadow-sm">
           <button onClick={() => { onChange(''); endAll() }} aria-label="Cancel dictation"
-            className="w-11 h-11 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+            className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
             <X className="w-6 h-6" />
           </button>
           <div className={cn('flex-1 min-w-0 flex items-center', hearing ? 'text-primary' : 'text-muted-foreground')}>
             <Waveform active={hearing} tick={tick} />
           </div>
           <button onClick={() => { stopRecognition(); setMode('idle') }} aria-label="Stop dictation"
-            className="w-11 h-11 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+            className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
             <Square className="w-5 h-5" />
           </button>
           <button
             onClick={() => { const t = value.trim(); stopRecognition(); setMode('idle'); if (t) onSend(t, true) }}
             disabled={!value.trim()} aria-label="Send"
-            className="w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 disabled:opacity-40"
+            className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 disabled:opacity-40"
           >
             <ArrowUp className="w-6 h-6" />
           </button>
@@ -294,14 +294,14 @@ export function AskComposer({
           <MicOff className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <p className="flex-1">{voiceError}</p>
           <button onClick={() => setVoiceError(null)} aria-label="Dismiss"
-            className="w-11 h-11 -my-2.5 -mr-2.5 flex items-center justify-center flex-shrink-0">
+            className="w-12 h-12 -my-2.5 -mr-2.5 flex items-center justify-center flex-shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
       )}
       <div className="flex items-center gap-1.5 rounded-[1.75rem] border border-border/60 bg-card pl-1.5 pr-1.5 py-1.5 shadow-sm">
         <button aria-label="Add a bill or photo" title="Coming soon" disabled
-          className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 text-muted-foreground disabled:opacity-40">
+          className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-muted-foreground disabled:opacity-40">
           <Plus className="w-6 h-6" />
         </button>
         <input
@@ -314,17 +314,17 @@ export function AskComposer({
         />
         {value.trim() ? (
           <button onClick={() => onSend(value.trim(), false)} disabled={busy} aria-label="Send"
-            className="w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 disabled:opacity-40">
+            className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 disabled:opacity-40">
             {busy ? <Loader2 className="w-6 h-6 animate-spin" /> : <ArrowUp className="w-6 h-6" />}
           </button>
         ) : voiceSupported ? (
           <>
             <button onClick={() => { setMode('dictating'); beginListening('dictating') }} aria-label="Dictate a question"
-              className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 text-muted-foreground hover:text-foreground">
+              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-muted-foreground hover:text-foreground">
               <Mic className="w-6 h-6" />
             </button>
             <button onClick={() => { setMode('voice'); beginListening('voice') }} aria-label="Talk to your books"
-              className="w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
+              className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
               <AudioLines className="w-6 h-6" />
             </button>
           </>

@@ -252,6 +252,25 @@
   }
 }
 
+/* 🔒 Phase 4c — `hit-48`: a control that must LOOK small (a pill in a dense
+ * card header) still gets a 48px finger target. The invisible ::after is
+ * centred on the control and at least 48px each way; taps on it reach the
+ * control. Use it only where a 48px visible box would swamp the layout. */
+@layer components {
+  .hit-48 {
+    position: relative;
+  }
+  .hit-48::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 48px);
+    height: max(100%, 48px);
+    transform: translate(-50%, -50%);
+  }
+}
+
 @utility pb-safe {
   padding-bottom: var(--safe-bottom);
 }
@@ -283,6 +302,13 @@
      controls (select popups, date inputs, scrollbars, autofill) render in
      dark chrome to match the app. The Capacitor StatusBar plugin sets the
      Android status bar color directly, so this doesn't conflict with it. */
+  /* Phase 4c: a native <select> is a finger target too. On a touch screen it
+     is never shorter than 48px, whatever height its screen gave it. */
+  @media (pointer: coarse) {
+    select {
+      min-height: 48px;
+    }
+  }
   html.dark {
     color-scheme: dark;
   }
@@ -942,7 +968,7 @@ html {
 }
 
 .animate-splash3-exit {
-  animation: splash3-exit-anim 0.5s ease-in forwards;
+  animation: splash3-exit-anim 0.2s ease-out forwards; /* Phase 4c: 200ms motion budget */
 }
 
 /* Reduced motion support for V3 */

@@ -1008,7 +1008,7 @@ export function BillScanner() {
                           {formatINR(item.total || 0)}
                         </span>
                         <button
-                          className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                          className="min-h-12 min-w-12 inline-flex items-center justify-center p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
                           onClick={() => removeItem(i)}
                           title="Remove this item"
                         >

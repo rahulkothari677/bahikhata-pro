@@ -10,8 +10,10 @@ export function ViewModeToggle({ mode, onChange }: { mode: 'grid' | 'list'; onCh
       <Button
         variant="ghost"
         size="sm"
-        className={cn('h-7 px-2 gap-1.5', mode === 'grid' && 'bg-background shadow-sm')}
+        className={cn('h-7 px-2 gap-1.5 min-w-12', mode === 'grid' && 'bg-background shadow-sm')}
         onClick={() => onChange('grid')}
+        aria-label="Grid view"
+        aria-pressed={mode === 'grid'}
       >
         <LayoutGrid className="w-3.5 h-3.5" />
         <span className="hidden sm:inline text-xs">Grid</span>
@@ -19,8 +21,10 @@ export function ViewModeToggle({ mode, onChange }: { mode: 'grid' | 'list'; onCh
       <Button
         variant="ghost"
         size="sm"
-        className={cn('h-7 px-2 gap-1.5', mode === 'list' && 'bg-background shadow-sm')}
+        className={cn('h-7 px-2 gap-1.5 min-w-12', mode === 'list' && 'bg-background shadow-sm')}
         onClick={() => onChange('list')}
+        aria-label="List view"
+        aria-pressed={mode === 'list'}
       >
         <List className="w-3.5 h-3.5" />
         <span className="hidden sm:inline text-xs">List</span>

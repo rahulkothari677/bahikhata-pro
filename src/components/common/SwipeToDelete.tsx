@@ -104,7 +104,7 @@ export function SwipeToDelete({
       {showDesktopDelete && (
         <button
           onClick={handleDelete}
-          className="absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-red-600 text-white shadow-md hover:bg-red-700 transition lg:flex hidden items-center gap-1 text-xs"
+          className="min-h-12 min-w-12 inline-flex items-center justify-center absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-red-600 text-white shadow-md hover:bg-red-700 transition lg:flex hidden items-center gap-1 text-xs"
           aria-label="Delete"
         >
           <Trash2 className="w-3.5 h-3.5" />

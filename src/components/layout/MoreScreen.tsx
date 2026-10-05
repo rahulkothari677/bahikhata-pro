@@ -165,7 +165,7 @@ export function MoreScreen() {
       <div className="sticky top-0 z-20 pt-safe bg-background/80 backdrop-blur-md border-b border-border">
         <div className="flex items-center gap-3 px-4 py-3">
           {/* 🔒 V26 Phase 6 §5.1: 44px touch target (was p-2 = ~36px, sub-44). */}
-          <button onClick={handleBack} className="min-h-[44px] min-w-[44px] flex items-center justify-center -ml-2 rounded-lg hover:bg-muted" aria-label="Go back">
+          <button onClick={handleBack} className="min-h-12 min-w-12 flex items-center justify-center -ml-2 rounded-lg hover:bg-muted" aria-label="Go back">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h2 className="text-lg font-bold">More</h2>

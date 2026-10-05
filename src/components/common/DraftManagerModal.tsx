@@ -239,10 +239,12 @@ export function DraftManagerModal({
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="gap-1.5 h-9 text-rose-600 hover:bg-rose-50 hover:text-rose-700 px-3"
+                              className="gap-1.5 h-9 min-w-12 text-bad hover:bg-bad-soft hover:text-bad px-3"
                               onClick={() => setConfirmDeleteId(draft.id)}
+                              aria-label="Delete draft"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              {/* #233: it was a 14px bin with no name. */}
+                              <Trash2 className="w-4 h-4" aria-hidden />
                             </Button>
                           </>
                         ) : (

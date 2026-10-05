@@ -75,7 +75,7 @@ export function SmartInsights() {
           </div>
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-white/80 hover:text-white text-xs font-medium bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5 transition"
+            className="text-white/80 hover:text-white text-xs font-medium bg-white/10 hover:bg-white/20 hit-48 rounded-full px-3 py-1.5 transition"
           >
             {expanded ? 'Hide' : 'Show all'}
           </button>
@@ -129,7 +129,7 @@ export function SmartInsights() {
                       <button
                         onClick={insight.action.onClick}
                         className={cn(
-                          'text-xs font-semibold mt-2.5 hover:underline inline-flex items-center gap-1 rounded-full px-3 py-1.5 transition',
+                          'hit-48 text-xs font-semibold mt-2.5 hover:underline inline-flex items-center gap-1 rounded-full px-3 py-1.5 transition',
                           insight.severity === 'critical' && 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900/60',
                           insight.severity === 'warning' && 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60',
                           insight.severity === 'info' && 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60',
@@ -144,7 +144,7 @@ export function SmartInsights() {
                   {/* Dismiss button — appears on hover */}
                   <button
                     onClick={() => dismissInsight(insight.title)}
-                    className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition flex-shrink-0 -mt-1 -mr-1 p-1"
+                    className="w-12 h-12 -my-3 -mr-3 inline-flex items-center justify-center text-muted-foreground hover:text-foreground lg:pointer-fine:opacity-0 lg:pointer-fine:group-hover:opacity-100 transition flex-shrink-0"
                     aria-label="Dismiss insight"
                     title="Dismiss"
                   >

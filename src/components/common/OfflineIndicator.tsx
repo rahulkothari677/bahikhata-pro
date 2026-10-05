@@ -144,7 +144,7 @@ export function OfflineIndicator() {
             {online && !syncing && pendingCount > 0 && (
               <button
                 onClick={handleManualSync}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/20 hover:bg-white/30 transition flex-shrink-0 min-h-[36px]"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/20 hover:bg-white/30 transition flex-shrink-0 min-h-12"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span className="font-medium">Sync now</span>

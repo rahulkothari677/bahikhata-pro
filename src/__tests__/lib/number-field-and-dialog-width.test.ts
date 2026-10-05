@@ -76,7 +76,8 @@ describe('NumberField', () => {
     // for the digits — the value became unreadable, which is worse than the
     // wheel bug it was solving. Phones now get the plain full-width field.
     expect(nf).toMatch(/isDesktop/)
-    expect(nf).toMatch(/matchMedia\('\(min-width: 640px\)'\)/)
+    // Phase 4c: and only with a MOUSE — a touch tablet is 640px+ too.
+    expect(nf).toMatch(/matchMedia\('\(min-width: 640px\) and \(pointer: fine\)'\)/)
     // Both buttons must be behind the desktop gate.
     const gates = nf.match(/\{isDesktop && \(/g) || []
     expect(gates).toHaveLength(2)

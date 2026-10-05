@@ -143,16 +143,14 @@ export function Header({ className }: { className?: string } = {}) {
 
   return (
     <header className={cn("sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border", className)} style={{ paddingTop: 'var(--safe-top)', minHeight: 'calc(3.5rem + var(--safe-top))' }}>
-      {/* py-1.5, not py-3.
+      {/* py-1, not py-3.
        *
-       * The controls in this row are already 44px tall — that is the minimum
-       * touch target and it is not negotiable. py-3 added 24px on top of that,
-       * making the bar 69px: 13px taller than the 56dp Android toolbar that
-       * WhatsApp, Gmail and every Material app use, and it read as a fat empty
-       * band above the content. 44 + 6 + 6 lands exactly on 56, which is also
-       * what the minHeight above asks for, so the two now agree instead of the
-       * padding quietly overriding it. */}
-      <div className="flex items-center justify-between gap-3 px-4 lg:px-6 py-1.5">
+       * The controls in this row are 48px tall (Phase 4c; they were 44) — the
+       * touch floor, not negotiable. 48 + 4 + 4 lands exactly on the 56dp
+       * Android toolbar that WhatsApp, Gmail and every Material app use, which
+       * is also what the minHeight above asks for, so the two agree instead of
+       * the padding quietly overriding it. */}
+      <div className="flex items-center justify-between gap-2 px-4 lg:px-6 py-1">
         <div className="flex items-center gap-3 min-w-0">
           {/* Hamburger menu hidden on mobile — use "More" tab in bottom nav instead.
               On desktop, sidebar is always visible so no hamburger needed. */}
@@ -160,7 +158,7 @@ export function Header({ className }: { className?: string } = {}) {
             <button
               onClick={handleBack}
               aria-label="Go back"
-              className="p-2.5 -ml-2 rounded-lg hover:bg-muted flex items-center gap-1 text-sm font-medium min-h-[44px]"
+              className="p-2.5 -ml-2 rounded-lg hover:bg-muted flex items-center justify-center gap-1 text-sm font-medium min-h-12 min-w-12"
             >
               <ArrowLeft className="w-5 h-5" />
               <span className="hidden sm:inline">Back</span>
@@ -175,7 +173,7 @@ export function Header({ className }: { className?: string } = {}) {
           {!isDetailView && (
             <button
               onClick={handleAccountClick}
-              className="flex-shrink-0 active:scale-95 transition lg:hidden"
+              className="min-h-12 min-w-12 -ml-1.5 inline-flex items-center justify-center flex-shrink-0 active:scale-95 transition lg:hidden"
               title="View Account"
               aria-label="View Account"
             >
@@ -188,9 +186,12 @@ export function Header({ className }: { className?: string } = {}) {
           )}
 
           {/* Page title — only show on non-dashboard views (dashboard has the greeting) */}
+          {/* #192: the title always reads in full. It may wrap to a second line
+              on a narrow phone rather than end in "Purchase Led…"; the
+              language switch left the phone header to make room. */}
           {currentView !== 'dashboard' && (
             <div className="min-w-0">
-              <h2 className="text-lg lg:text-xl font-bold tracking-tight truncate">{info.title}</h2>
+              <h2 className="text-lg lg:text-xl font-bold tracking-tight leading-snug line-clamp-2 break-words">{info.title}</h2>
               <p className="text-xs text-muted-foreground truncate hidden sm:block">{info.subtitle}</p>
             </div>
           )}
@@ -253,9 +254,12 @@ export function Header({ className }: { className?: string } = {}) {
            */}
           <div className={cn(isNewEntryView && 'hidden lg:contents')}>
             <NotificationCenter />
-            {/* 🔒 V8 U7: Language toggle — prominent in header for regional users.
-                Cycles through the available languages. Quick access from any screen. */}
-            <LanguageToggle />
+            {/* Language: desktop only (Phase 4c, #192). On a phone it pushed
+                the page title into "Purchase Led…"; language is a setting
+                (Settings has the full picker) and is changed once, not daily. */}
+            <div className="hidden lg:contents">
+              <LanguageToggle />
+            </div>
           </div>
 
           {isNewEntryView && (

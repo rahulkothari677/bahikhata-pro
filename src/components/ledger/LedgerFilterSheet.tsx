@@ -92,7 +92,7 @@ function Choice({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'flex items-center justify-center gap-1.5 min-h-[44px] px-3 rounded-xl text-sm font-medium transition border',
+        'flex items-center justify-center gap-1.5 min-h-12 px-3 rounded-xl text-sm font-medium transition border',
         active
           ? 'bg-primary text-primary-foreground border-primary'
           : 'bg-muted/50 text-foreground border-transparent hover:bg-muted',

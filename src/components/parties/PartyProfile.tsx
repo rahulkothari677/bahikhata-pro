@@ -1050,7 +1050,7 @@ export function PartyProfile() {
                   <button
                     onClick={() => forgetAlias(a.id)}
                     aria-label={`Forget the name ${a.saidAs}`}
-                    className="w-8 h-8 min-w-[2rem] rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground"
+                    className="w-12 h-12 -m-2 rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground"
                   >
                     <X className="w-4 h-4" />
                   </button>

@@ -131,7 +131,7 @@ export function OnboardingTour({ onDone, isFirstRun = true }: { onDone?: () => v
         {/* Close button */}
         <button
           onClick={handleDismiss}
-          className="absolute top-3 right-3 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition"
+          className="min-h-12 min-w-12 inline-flex items-center justify-center absolute top-3 right-3 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition"
           aria-label="Skip tour"
         >
           <X className="w-4 h-4" />

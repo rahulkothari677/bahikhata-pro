@@ -184,7 +184,7 @@ export function AuthScreen() {
               <button
                 key={l.code}
                 onClick={() => setLanguage(l.code)}
-                className={`px-2 py-1 rounded-md text-xs font-medium transition ${
+                className={`min-h-12 min-w-12 px-3 rounded-md text-sm font-medium transition ${
                   language === l.code
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-muted'
@@ -200,7 +200,7 @@ export function AuthScreen() {
           <div className="flex gap-2 p-1 bg-muted rounded-lg mb-6">
             <button
               onClick={() => setMode('login')}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
+              className={`flex-1 min-h-12 rounded-md text-sm font-medium transition ${
                 mode === 'login' ? 'bg-background shadow-sm' : 'text-muted-foreground'
               }`}
             >
@@ -208,7 +208,7 @@ export function AuthScreen() {
             </button>
             <button
               onClick={() => setMode('signup')}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
+              className={`flex-1 min-h-12 rounded-md text-sm font-medium transition ${
                 mode === 'signup' ? 'bg-background shadow-sm' : 'text-muted-foreground'
               }`}
             >
@@ -296,7 +296,8 @@ export function AuthScreen() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-muted-foreground hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -341,14 +342,14 @@ export function AuthScreen() {
             {mode === 'login' ? (
               <>
                 Don&apos;t have an account?{' '}
-                <button onClick={() => setMode('signup')} className="text-primary font-medium hover:underline">
+                <button onClick={() => setMode('signup')} className="min-h-12 px-1 text-sm text-primary font-medium hover:underline">
                   Sign up
                 </button>
               </>
             ) : (
               <>
                 Already have an account?{' '}
-                <button onClick={() => setMode('login')} className="text-primary font-medium hover:underline">
+                <button onClick={() => setMode('login')} className="min-h-12 px-1 text-sm text-primary font-medium hover:underline">
                   Sign in
                 </button>
               </>

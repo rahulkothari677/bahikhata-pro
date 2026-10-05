@@ -554,7 +554,7 @@ export function PartySettle() {
                             type="button"
                             onClick={() => setAdvanceGstRate(r)}
                             className={cn(
-                              'flex-1 h-9 rounded-lg text-sm font-medium border transition',
+                              'flex-1 h-12 rounded-lg text-sm font-medium border transition',
                               advanceGstRate === r
                                 ? 'border-primary bg-primary/10 text-primary'
                                 : 'border-border text-muted-foreground',

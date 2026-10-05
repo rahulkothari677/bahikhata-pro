@@ -177,10 +177,15 @@ export function Sidebar() {
         {/* Collapse toggle */}
         <button
           onClick={toggleSidebarCollapsed}
-          className="hidden lg:flex absolute -right-3 top-20 z-50 w-6 h-6 rounded-full bg-sidebar-border text-sidebar-foreground items-center justify-center hover:bg-sidebar-primary hover:text-white transition shadow-md"
+          className="hidden lg:flex absolute -right-6 top-[68px] z-50 w-12 h-12 items-center justify-center group/collapse"
           title={sidebarCollapsed ? t('nav.expand') : t('nav.collapse')}
+          aria-label={sidebarCollapsed ? t('nav.expand') : t('nav.collapse')}
         >
-          {sidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          {/* Phase 4c: a 48px tap area (a counter tablet is touch, not mouse)
+              around the same 24px circle as before. */}
+          <span className="w-6 h-6 rounded-full bg-sidebar-border text-sidebar-foreground flex items-center justify-center group-hover/collapse:bg-sidebar-primary group-hover/collapse:text-white transition shadow-md">
+            {sidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          </span>
         </button>
 
         {/* Main Navigation */}
@@ -295,7 +300,7 @@ export function Sidebar() {
           <div className="border-t border-sidebar-border py-2 flex flex-col items-center gap-2">
             <button
               onClick={() => { setPreviousView(currentView); useAppStore.getState().setAccountOriginView(currentView); setView('account') }}
-              className="w-10 h-10 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-sm font-bold"
+              className="w-12 h-12 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-sm font-bold"
               title="Account"
             >
               {getInitials(userName).charAt(0)}

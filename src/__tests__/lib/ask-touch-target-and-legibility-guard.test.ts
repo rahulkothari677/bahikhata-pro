@@ -31,11 +31,12 @@
 import { describe, test, expect } from '@jest/globals'
 import * as fs from 'fs'
 import * as path from 'path'
+import { buttonTags, MIN_TOUCH_PX } from '@/test-support/design-rules'
 
 const ASK_DIR = path.resolve(process.cwd(), 'src/components/ask')
 
-/** Material 3 is 48dp; iOS HIG is 44pt. 44px (w-11) is the floor we enforce. */
-const MIN_TOUCH_PX = 44
+/* The floor is MIN_TOUCH_PX from test-support/design-rules: 48px since Phase 4c
+   (Material 3's 48dp; it was 44, iOS HIG's 44pt). */
 
 function askFiles(): { name: string; text: string }[] {
   return fs
@@ -56,35 +57,10 @@ function withoutComments(text: string): string {
 
 const lineOf = (text: string, index: number) => text.slice(0, index).split('\n').length
 
-/**
- * Every `<button …>` opening tag, in full.
- *
- * A plain `/<button[\s\S]*?>/` regex does NOT work here and quietly under-
- * reports: it stops at the first `>`, which in `onClick={() => …}` is the
- * arrow, so the className is never examined and the button looks compliant.
- * Tracking brace depth means a `>` inside `{…}` is skipped, and the tag ends
- * at the real one.
- */
-function buttonTags(src: string): { text: string; index: number }[] {
-  const tags: { text: string; index: number }[] = []
-  const OPEN = /<button\b/g
-  for (const m of src.matchAll(OPEN)) {
-    let depth = 0
-    for (let i = m.index!; i < src.length; i++) {
-      const ch = src[i]
-      if (ch === '{') depth++
-      else if (ch === '}') depth--
-      else if (ch === '>' && depth === 0) {
-        tags.push({ text: src.slice(m.index!, i + 1), index: m.index! })
-        break
-      }
-    }
-  }
-  return tags
-}
+/* buttonTags lives in test-support/design-rules (shared with the app-wide 48px guard). */
 
 describe('Ask surface — platform sizing', () => {
-  test('no icon button below 44px (Material 48dp / iOS HIG 44pt)', () => {
+  test('no icon button below the 48px touch floor', () => {
     const violations: string[] = []
     // Tailwind sizes on a 4px grid: w-10 h-10 is 40px, w-9 is 36px — both were
     // shipped and both are under the floor.
@@ -128,11 +104,11 @@ describe('Ask surface — platform sizing', () => {
         if (/\bmin-h-\[/.test(t)) continue                // sized by a floor
         if (/\brounded-full\b/.test(t)) continue          // chip — Material 3 allows 32dp
         const py = /\bpy-(\d+(?:\.\d+)?)\b/.exec(t)
-        // 20px line box + 2x12px padding = 44px. py-3 is the smallest that clears it.
-        if (!py || Number(py[1]) < 3) {
+        // 20px line box + 2x14px padding = 48px. py-3.5 is the smallest that clears it.
+        if (!py || Number(py[1]) < 3.5) {
           violations.push(
             `${name}:${lineOf(src, tag.index)}: padding-sized, ` +
-            `${py ? `py-${py[1]}` : 'no py-'} — under 44px — ` +
+            `${py ? `py-${py[1]}` : 'no py-'} — under 48px — ` +
             t.replace(/\s+/g, ' ').slice(0, 90),
           )
         }
@@ -143,8 +119,8 @@ describe('Ask surface — platform sizing', () => {
       throw new Error(
         `\n\n🔒 ASK TOUCH-TARGET GUARD FAILED.\n\n` +
         `Material Design 3 sets a 48dp minimum; iOS HIG sets 44pt. Anything a\n` +
-        `finger presses on this screen must be at least ${MIN_TOUCH_PX}px (w-11 h-11).\n` +
-        `If the control must look smaller, keep the 44px box and shrink the\n` +
+        `finger presses on this screen must be at least ${MIN_TOUCH_PX}px (w-12 h-12).\n` +
+        `If the control must look smaller, keep the 48px box and shrink the\n` +
         `GLYPH inside it — that is what the negative margins in the top bar do.\n\n` +
         violations.map(v => `  ${v}`).join('\n') + `\n`,
       )

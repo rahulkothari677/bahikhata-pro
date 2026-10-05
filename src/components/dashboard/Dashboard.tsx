@@ -615,8 +615,9 @@ export function Dashboard() {
                 onClick={handleRepeatLastSale}
                 disabled={repeating}
                 variant="outline"
-                className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+                className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2 min-w-12"
                 title={`Repeat your most recent sale`}
+                aria-label="Repeat your most recent sale"
               >
                 {repeating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />}
                 <span className="hidden sm:inline">{repeating ? 'Loading...' : 'Repeat Last Sale'}</span>
@@ -635,8 +636,9 @@ export function Dashboard() {
               <Button
                 onClick={handleShareSummary}
                 variant="outline"
-                className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+                className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2 min-w-12"
                 title="Share today's summary on WhatsApp"
+                aria-label="Share today's summary on WhatsApp"
               >
                 <Share2 className="w-4 h-4" />
                 <span className="hidden sm:inline">Share Summary</span>
@@ -646,8 +648,9 @@ export function Dashboard() {
             <Button
               onClick={() => setShowDayEnd(true)}
               variant="outline"
-              className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+              className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2 min-w-12"
               title="Close the drawer — end of day cash summary"
+              aria-label="Close the drawer"
             >
               <Wallet className="w-4 h-4" />
               <span className="hidden sm:inline">Close Drawer</span>
@@ -1223,7 +1226,7 @@ export function Dashboard() {
                   const url = `https://wa.me/?text=${encodeURIComponent(digestText)}`
                   window.open(url, '_blank')
                 }}
-                className="text-xs font-medium bg-white/20 hover:bg-white/30 rounded-full px-3 py-1.5 transition flex items-center gap-1"
+                className="text-xs font-medium bg-white/20 hover:bg-white/30 hit-48 rounded-full px-3 py-1.5 transition flex items-center gap-1"
               >
                 <Send className="w-3 h-3" /> Share
               </button>

@@ -15,7 +15,8 @@ import { useEffect, useState, useRef } from 'react'
  * - Small green checkmark badge on bottom-right of circle (verification seal)
  * - Everything properly centered, no overlap
  *
- * ─── Animation Choreography (3.8s min, 5.0s max) ──────────────────────
+ * ─── Animation Choreography (designed for 3.8s; since Phase 4c the splash
+ *     leaves as soon as the app is ready, from 0.4s to 3s — see TIMING) ─
  *
  * Stage 1 (0-600ms):    Background gradient mesh fades in
  * Stage 2 (200-1000ms): Badge circle scales in (full circle, no draw)
@@ -36,11 +37,56 @@ import { useEffect, useState, useRef } from 'react'
  * - Rotating accent ring (subtle, slow)
  */
 
-const MIN_DISPLAY_MS = 3800  // 3.8s — full premium experience (cold load)
-const WARM_RELOAD_MIN_MS = 800  // 🐛 UI/UX Fix 5: 0.8s for warm reloads (was 3.8s)
-const MAX_DISPLAY_MS = 5000  // 5.0s — hard fallback
-const EXIT_ANIMATION_MS = 500
+/*
+ * 🔒 Phase 4c (#183) — TIMING. The splash used to hold ~4s on every load and
+ * let a tap fall through to the app beneath it.
+ *
+ *  - It is mounted TWICE (page.tsx: once while the session loads, again when
+ *    it resolves), and each mount started its own clock, so the minimum was
+ *    paid again after the data was already there. All times now count from
+ *    PAGE START (performance.now()), so a second mount cannot restart them.
+ *  - It never skips: an earlier attempt that skipped it entirely was reported
+ *    as "splash screen isn't coming". A first open in a session still gets
+ *    1.2s, enough for the badge and the ₹ to land; a reload in the same
+ *    session gets 0.4s; and nothing waits longer than 3s.
+ *  - Exit is 200ms (the design language's motion budget), not 500ms.
+ *  - A tap that STARTED on the splash and ends after it has gone is a
+ *    "ghost tap": the browser delivers the click to whatever is now under
+ *    the finger (it once opened the language menu). That one click is
+ *    swallowed.
+ */
+export const SPLASH_TIMING = {
+  coldMinMs: 1200,
+  warmMinMs: 400,
+  maxMs: 3000,
+  exitMs: 200,
+  ghostTapMs: 600,
+} as const
 const WARM_RELOAD_KEY = 'bahikhata-splash-shown-this-session'
+
+/** May the splash leave now? `elapsedMs` counts from page start. */
+export function splashMayExit({ elapsedMs, ready, warm }: { elapsedMs: number; ready: boolean; warm: boolean }): boolean {
+  if (elapsedMs >= SPLASH_TIMING.maxMs) return true
+  return ready && elapsedMs >= (warm ? SPLASH_TIMING.warmMinMs : SPLASH_TIMING.coldMinMs)
+}
+
+/** Is this click the tail of a tap that began on the splash? */
+export function isGhostTap(nowMs: number, lastSplashPointerAt: number): boolean {
+  return lastSplashPointerAt > 0 && nowMs - lastSplashPointerAt < SPLASH_TIMING.exitMs + SPLASH_TIMING.ghostTapMs
+}
+
+/** sessionStorage can throw in a private window or with site data blocked. */
+function readWarm(): boolean {
+  try { return typeof window !== 'undefined' && sessionStorage.getItem(WARM_RELOAD_KEY) === 'true' } catch { return false }
+}
+
+let lastSplashPointerAt = 0
+function swallowGhostTap(e: Event) {
+  if (isGhostTap(Date.now(), lastSplashPointerAt)) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+}
 
 export function SplashScreen({
   onFinish,
@@ -50,20 +96,8 @@ export function SplashScreen({
   ready?: boolean
 }) {
   const [exiting, setExiting] = useState(false)
-  const startTimeRef = useRef(Date.now())
   const finishedRef = useRef(false)
-
-  // 🐛 UI/UX Phase 1 Fix 5: Detect warm reload (same browser session).
-  // Cold load = first visit in this tab/session → full 3.8s premium splash.
-  // Warm reload = subsequent navigation/refresh → 0.8s quick splash (still
-  // shows the brand, but doesn't waste the user's time). Uses sessionStorage
-  // so it resets when the tab closes (true cold load next time).
-  // NOTE: The previous attempt (V23 §13.9h) used sessionStorage to SKIP the
-  // splash entirely, which the user reported as "splash screen isn't coming."
-  // This fix KEEPS the splash visible (just shorter) — the user still sees
-  // the brand animation, just not for 3.8s on every reload.
-  const isWarmReload = typeof window !== 'undefined' && sessionStorage.getItem(WARM_RELOAD_KEY) === 'true'
-  const minDisplayMs = isWarmReload ? WARM_RELOAD_MIN_MS : MIN_DISPLAY_MS
+  const warmRef = useRef(readWarm())
 
   // Mark this session as "splash shown" so the next reload is treated as warm
   useEffect(() => {
@@ -74,40 +108,27 @@ export function SplashScreen({
     if (finishedRef.current) return
     finishedRef.current = true
     setExiting(true)
+    window.addEventListener('click', swallowGhostTap, true)
+    setTimeout(() => window.removeEventListener('click', swallowGhostTap, true), SPLASH_TIMING.exitMs + SPLASH_TIMING.ghostTapMs)
     setTimeout(() => {
       onFinish()
-    }, EXIT_ANIMATION_MS)
+    }, SPLASH_TIMING.exitMs)
   }
 
   useEffect(() => {
-    startTimeRef.current = Date.now()
-
-    const minTimer = setTimeout(() => {
-      if (ready && !finishedRef.current) {
-        triggerExit()
-      }
-    }, minDisplayMs)
-
-    const maxTimer = setTimeout(() => {
-      if (!finishedRef.current) {
-        triggerExit()
-      }
-    }, MAX_DISPLAY_MS)
-
+    const check = () => {
+      if (!finishedRef.current && splashMayExit({ elapsedMs: performance.now(), ready, warm: warmRef.current })) triggerExit()
+    }
+    check()
+    const now = performance.now()
+    const min = warmRef.current ? SPLASH_TIMING.warmMinMs : SPLASH_TIMING.coldMinMs
+    const minTimer = setTimeout(check, Math.max(0, min - now))
+    const maxTimer = setTimeout(check, Math.max(0, SPLASH_TIMING.maxMs - now))
     return () => {
       clearTimeout(minTimer)
       clearTimeout(maxTimer)
     }
-  }, [])  // eslint-disable-line react-hooks/exhaustive-deps -- minDisplayMs is stable per mount
-
-  useEffect(() => {
-    if (ready && !exiting && !finishedRef.current) {
-      const elapsed = Date.now() - startTimeRef.current
-      if (elapsed >= minDisplayMs) {
-        triggerExit()
-      }
-    }
-  }, [ready])  // eslint-disable-line react-hooks/exhaustive-deps -- minDisplayMs is stable per mount
+  }, [ready])
 
   const brandLetters = 'EkBook'.split('')
 
@@ -126,6 +147,7 @@ export function SplashScreen({
         backgroundSize: '200% 200%, 200% 200%, 200% 200%, 200% 200%',
         animation: 'splash3-gradient-shift 8s ease-in-out infinite',
       }}
+      onPointerDown={() => { lastSplashPointerAt = Date.now() }}
       aria-label="EkBook loading"
       role="status"
     >

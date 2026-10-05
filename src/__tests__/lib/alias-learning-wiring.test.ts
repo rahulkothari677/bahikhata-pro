@@ -122,9 +122,10 @@ describe('the shopkeeper can see and undo it', () => {
   })
 
   test('the remove button is a real touch target', () => {
-    // 44px floor — the same standard the Ask buttons were fixed to on 12 Aug
-    // after they measured 43px.
-    expect(profile).toMatch(/w-8 h-8 min-w-\[2rem\]/)
+    // 48px floor (Phase 4c). This line used to pin `w-8 h-8 min-w-[2rem]`,
+    // a 32px button, under a comment that claimed 44px — a guard holding the
+    // bug in place. The app-wide rule now lives in touch-and-header-guard.
+    expect(profile).toMatch(/aria-label=\{`Forget the name \$\{a\.saidAs\}`\}\s*className="w-12 h-12/)
   })
 
   test('and nothing is shown when nothing has been learned', () => {

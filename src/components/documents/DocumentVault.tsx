@@ -327,10 +327,17 @@ export function DocumentVault() {
                     {isOwner && (
                       <button
                         onClick={() => handleDelete(doc.id, doc.name)}
-                        className="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-rose-500/90 text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center hover:bg-rose-600"
+                        className="absolute top-0 right-0 w-12 h-12 rounded-lg text-white flex items-center justify-center lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100 transition"
                         title="Delete"
+                        aria-label={`Delete ${doc.name}`}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        {/* Phase 4c: a 48px tap area around a 28px red mark. It
+                            used to appear only on mouse hover, so a phone (no
+                            hover) could never see it; now it shows on touch
+                            screens and keeps the hover reveal on desktop. */}
+                        <span className="w-7 h-7 rounded-lg bg-bad flex items-center justify-center shadow-sm">
+                          <Trash2 className="w-3.5 h-3.5" aria-hidden />
+                        </span>
                       </button>
                     )}
                   </div>
@@ -366,7 +373,7 @@ export function DocumentVault() {
               <h3 className="font-bold text-sm">Upload Document</h3>
               <button
                 onClick={() => { setUploadDialogOpen(false); pendingFileRef.current = null; if (fileInputRef.current) fileInputRef.current.value = '' }}
-                className="p-1.5 rounded-lg hover:bg-muted"
+                className="min-h-12 min-w-12 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted"
               >
                 <X className="w-4 h-4" />
               </button>

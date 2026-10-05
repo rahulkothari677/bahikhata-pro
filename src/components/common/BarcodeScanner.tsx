@@ -317,7 +317,7 @@ export function BarcodeScanner({
         </div>
         <button
           onClick={handleClose}
-          className="p-2 rounded-lg hover:bg-white/10 text-white"
+          className="min-h-12 min-w-12 inline-flex items-center justify-center p-2 rounded-lg hover:bg-white/10 text-white"
           aria-label="Close scanner"
         >
           <X className="w-5 h-5" />
