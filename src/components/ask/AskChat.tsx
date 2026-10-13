@@ -477,7 +477,7 @@ export function AskChat() {
       {tipsOpen && (
         <div className="mb-2 rounded-2xl border border-border/60 bg-card p-3 flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Things you can ask</p>
+            <p className="text-xs text-muted-foreground">Things you can ask</p>
             <button onClick={() => setTipsOpen(false)} aria-label="Close suggestions"
               className="w-12 h-12 -my-2.5 -mr-2.5 flex items-center justify-center flex-shrink-0">
               <X className="w-5 h-5" />

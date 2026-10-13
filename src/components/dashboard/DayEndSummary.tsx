@@ -108,7 +108,7 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
 
             {/* Sales breakdown */}
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sales Today</p>
+              <p className="text-xs font-semibold text-muted-foreground">Sales Today</p>
               <SummaryRow icon={<TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />} label="Cash" value={data.cashSales} highlight />
               {data.upiSales > 0 && (
                 <SummaryRow icon={<TrendingUp className="w-4 h-4 text-blue-600" />} label="UPI" value={data.upiSales} />
@@ -142,7 +142,7 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
             {/* Cash out */}
             {(data.cashPurchases > 0 || data.expenses > 0 || data.udhaarPaid > 0) && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cash Out Today</p>
+                <p className="text-xs font-semibold text-muted-foreground">Cash Out Today</p>
                 {data.cashPurchases > 0 && (
                   <SummaryRow icon={<TrendingDown className="w-4 h-4 text-rose-600" />} label="Cash Purchases" value={-data.cashPurchases} />
                 )}
@@ -158,7 +158,7 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
             {/* Udhaar collected */}
             {data.udhaarCollected > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Udhaar Collected</p>
+                <p className="text-xs font-semibold text-muted-foreground">Udhaar Collected</p>
                 <SummaryRow icon={<HandCoins className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />} label="Payments Received" value={data.udhaarCollected} highlight />
                 {data.udhaarCollected !== data.udhaarCollectedCash && (
                   <p className="text-xs text-muted-foreground">

@@ -1667,7 +1667,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Category selector */}
                 <div>
-                  <Label className="text-xs uppercase text-muted-foreground" htmlFor="field-category">Category</Label>
+                  <Label className="text-xs text-muted-foreground" htmlFor="field-category">Category</Label>
                   <Select
                     value={selectedCategory || '__all__'}
                     onValueChange={(v) => setSelectedCategory(v === '__all__' ? null : v)}
@@ -1692,7 +1692,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
                 {/* Product search */}
                 <div className="sm:col-span-2">
-                  <Label className="text-xs uppercase text-muted-foreground" htmlFor="field-search-product">Search Product</Label>
+                  <Label className="text-xs text-muted-foreground" htmlFor="field-search-product">Search Product</Label>
                   <div className="relative mt-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input id="field-search-product"
@@ -1729,7 +1729,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               {/* Recently used products — quick-pick chips */}
               {!productSearch && !selectedCategory && recentProducts.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
+                  <p className="text-xs text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
                     <Clock className="w-3 h-3" /> Recently Used
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -2247,7 +2247,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               {/* V17-Ext Tier 3: Credit/Debit Note specific fields */}
               {isNote && (
                 <div className="mt-4 space-y-3 rounded-lg bg-violet-50 dark:bg-violet-950/20 p-3 border border-violet-200 dark:border-violet-900">
-                  <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 uppercase tracking-wide">
+                  <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">
                     {isCreditNote ? 'Credit Note' : 'Debit Note'} Details
                   </p>
                   <div>
@@ -2439,7 +2439,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                            * it carries the searched name into the new record.
                            */}
                           {partySearch && (
-                            <div className="px-3 py-1.5 text-xs text-muted-foreground uppercase font-medium border-b border-border">
+                            <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium border-b border-border">
                               {filteredParties.length} match{filteredParties.length !== 1 ? 'es' : ''}
                             </div>
                           )}
@@ -2803,7 +2803,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </div>
                   {!!itcBlockedReason && (
                     <div className="mt-3">
-                      <Label className="text-xs uppercase text-muted-foreground" htmlFor="field-itc-reason">Reason</Label>
+                      <Label className="text-xs text-muted-foreground" htmlFor="field-itc-reason">Reason</Label>
                       <select
                         id="field-itc-reason"
                         value={itcBlockedReason}
@@ -3136,7 +3136,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
          * under a second label teaches the eye to stop reading the strip.
          */}
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-muted-foreground uppercase">
+          <p className="text-xs text-muted-foreground">
             Total{items.length > 0 && ` · ${items.length} item${items.length === 1 ? '' : 's'}`}
           </p>
           <p className="text-lg font-bold tabular-nums leading-tight">{formatINR(totalAmount)}</p>
@@ -3164,7 +3164,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           {/* Same two numbers as the mobile bar. The platforms should not
               disagree about what a sale's headline figures are. */}
           <div>
-            <p className="text-xs text-muted-foreground uppercase">
+            <p className="text-xs text-muted-foreground">
               Total{items.length > 0 && ` · ${items.length} item${items.length === 1 ? '' : 's'}`}
             </p>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>

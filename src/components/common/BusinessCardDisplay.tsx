@@ -238,7 +238,7 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
       <div className="space-y-2">
         <div className="flex items-end gap-2">
           <label className="flex-1 min-w-0">
-            <span className="block text-xs uppercase tracking-wider text-muted-foreground mb-1">
+            <span className="block text-xs text-muted-foreground mb-1">
               Card design
             </span>
             <select

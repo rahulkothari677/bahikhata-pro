@@ -72,7 +72,7 @@ export function InventoryAgingReport({ data }: { data: any }) {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <div className={cn('w-2.5 h-2.5 rounded-full', bucket.bg)} />
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">{bucket.sublabel}</p>
+                <p className="text-xs text-muted-foreground font-semibold">{bucket.sublabel}</p>
               </div>
               <p className="text-xs text-muted-foreground mb-1">{bucket.label}</p>
               <p className={cn('text-lg font-bold', bucket.color)}>{formatINR(bucket.value)}</p>

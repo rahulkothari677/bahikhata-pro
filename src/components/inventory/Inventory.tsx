@@ -145,7 +145,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Package className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_products')}</p>
+              <p className="text-xs text-muted-foreground font-medium">{t('stat.total_products')}</p>
             </div>
             <p className="text-xl font-bold">{products.length}</p>
           </CardContent>
@@ -154,7 +154,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <IndianRupee className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.stock_value')}</p>
+              <p className="text-xs text-muted-foreground font-medium">{t('dash.stock_value')}</p>
             </div>
             <p className="text-xl font-bold">{formatINR(totalStockValue)}</p>
           </CardContent>
@@ -166,7 +166,7 @@ export function Inventory() {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp className="w-4 h-4 text-violet-600" />
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.potential_profit')}</p>
+                <p className="text-xs text-muted-foreground font-medium">{t('stat.potential_profit')}</p>
               </div>
               {/* Same rule as the per-product figure: a negative total is a
                   LOSS and must not be printed in the same neutral weight as a
@@ -182,7 +182,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <AlertTriangle className="w-4 h-4 text-rose-600" />
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.low_out_stock')}</p>
+              <p className="text-xs text-muted-foreground font-medium">{t('stat.low_out_stock')}</p>
             </div>
             <p className="text-xl font-bold">{lowStockCount} <span className="text-sm text-muted-foreground">/ {outOfStockCount}</span></p>
           </CardContent>
@@ -207,7 +207,7 @@ export function Inventory() {
         <CardContent className="p-3">
           <div className="flex items-center gap-2 mb-2">
             <Folder className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('inv.categories')}</p>
+            <p className="text-xs font-semibold text-muted-foreground">{t('inv.categories')}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -362,7 +362,7 @@ export function Inventory() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
-                <tr className="text-left text-xs uppercase text-muted-foreground">
+                <tr className="text-left text-xs text-muted-foreground">
                   <th className="py-3 px-4 font-medium">Product</th>
                   <th className="py-3 px-2 font-medium text-right">{t('inv.buy_price')}</th>
                   <th className="py-3 px-2 font-medium text-right">{t('inv.sale_price')}</th>
@@ -547,12 +547,12 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
             🔒 R15-3 (Round 15): Profit block hidden for hideProfit. */}
         <div className="flex items-baseline justify-between mb-2">
           <div>
-            <p className="text-xs text-muted-foreground uppercase">Sale Price</p>
+            <p className="text-xs text-muted-foreground">Sale Price</p>
             <p className="text-lg font-bold tabular-nums">{formatINR(p.salePrice)}</p>
           </div>
           {!hideProfit && (
             <div className="text-right">
-              <p className="text-xs text-muted-foreground uppercase">{profit < 0 ? 'Loss' : 'Profit'}</p>
+              <p className="text-xs text-muted-foreground">{profit < 0 ? 'Loss' : 'Profit'}</p>
               {/* The "+" used to be hardcoded, so a product sold below cost
                   read "+-₹180" in green — a loss painted as a gain, with a
                   stray double sign. The sign, the colour and the word now all
@@ -572,13 +572,13 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
             and it is the exact thing that made services look broken. */}
         {isService(p) ? (
           <div className="mt-2 pt-2 border-t border-border flex items-center justify-between">
-            <span className="text-xs text-muted-foreground uppercase">Type</span>
+            <span className="text-xs text-muted-foreground">Type</span>
             <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">Service — no stock</span>
           </div>
         ) : (
           <div className="mt-2 pt-2 border-t border-border">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-muted-foreground uppercase">Stock</span>
+              <span className="text-xs text-muted-foreground">Stock</span>
               <span className={cn(
                 'text-xs font-bold tabular-nums',
                 p.currentStock <= 0 ? 'text-rose-600' :

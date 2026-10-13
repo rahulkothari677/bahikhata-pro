@@ -1024,7 +1024,7 @@ function ReportStatCard({ label, value, icon: Icon, color, bg, hint }: { label: 
           <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-shrink-0`}>
             <Icon className="w-4 h-4 text-white" />
           </div>
-          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold leading-tight">{label}</p>
+          <p className="text-xs text-muted-foreground font-semibold leading-tight">{label}</p>
           {hint && <InfoHint text={hint} label={label} />}
         </div>
         <p className={cn('text-xl font-bold tracking-tight tabular-nums', textColor)}>{value}</p>

@@ -226,7 +226,7 @@ export function StaffManagement() {
                   {isExpanded && (
                     <div className="border-t border-border/50 p-3 bg-background">
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        <p className="text-xs font-semibold text-muted-foreground">
                           Module Access
                         </p>
                         {savingPermsId === s.id && (

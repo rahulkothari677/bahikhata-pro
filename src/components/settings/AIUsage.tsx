@@ -354,7 +354,7 @@ function PeriodCard({ label, stats, highlight }: { label: string; stats: PeriodS
     <Card className={highlight ? 'border-primary/30 bg-primary/5' : ''}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</span>
+          <span className="text-xs font-semibold text-muted-foreground">{label}</span>
           <Badge variant="outline" className="text-xs">{stats.calls} calls</Badge>
         </div>
         <div className="space-y-1">

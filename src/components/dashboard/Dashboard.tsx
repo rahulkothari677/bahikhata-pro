@@ -585,7 +585,7 @@ export function Dashboard() {
                 desktop — still the dominant element, but proportional. */}
             <p className="text-xs font-medium text-white/90 mt-0.5">{setting?.shopName || 'My Shop'}</p>
             <div className="mt-1.5">
-              <p className="text-xs text-white/70 uppercase tracking-wide font-medium">Today's sales</p>
+              <p className="text-xs text-white/70 font-medium">Today's sales</p>
               <p className="text-2xl lg:text-3xl font-bold tabular-nums text-white mt-0.5">
                 {formatINR(kpis.todayRevenue)}
               </p>
@@ -1085,15 +1085,15 @@ export function Dashboard() {
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
                 <p className="text-2xl font-bold">{kpis.todayTxnCount}</p>
-                <p className="text-xs text-white/80 uppercase tracking-wide">Sales</p>
+                <p className="text-xs text-white/80">Sales</p>
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatINRCompact(kpis.todayRevenue)}</p>
-                <p className="text-xs text-white/80 uppercase tracking-wide">Revenue</p>
+                <p className="text-xs text-white/80">Revenue</p>
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatINRCompact(kpis.totalReceivable)}</p>
-                <p className="text-xs text-white/80 uppercase tracking-wide">Receivable</p>
+                <p className="text-xs text-white/80">Receivable</p>
               </div>
             </div>
             {features?.whatsappSharing && (
@@ -1334,7 +1334,7 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick,
               </div>
             )}
           </div>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{title}</p>
+          <p className="text-xs text-muted-foreground font-medium">{title}</p>
           <p className="text-xl lg:text-2xl font-bold mt-0.5 tracking-tight tabular-nums">{displayValue}</p>
           {subtitle && <p className="text-xs text-muted-foreground mt-1 truncate">{subtitle}</p>}
         </div>
@@ -1368,7 +1368,7 @@ function MiniStatCard({ label, value, icon: Icon, color, subtitle, onClick }: {
           <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0', bgClass)}>
             <Icon className={cn('w-3.5 h-3.5', color)} />
           </div>
-          <p className="text-xs lg:text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight truncate">{label}</p>
+          <p className="text-xs text-muted-foreground font-medium leading-tight line-clamp-2">{label}</p>
         </div>
         <p className="text-base lg:text-lg font-bold tracking-tight tabular-nums">{value}</p>
         {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
@@ -1385,7 +1385,7 @@ function GstMiniStat({ label, value, color, highlight }: {
 }) {
   return (
     <div className={cn('rounded-lg p-3 border', highlight ? 'bg-muted/50 border-primary/30' : 'bg-card border-border')}>
-      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
+      <p className="text-xs text-muted-foreground font-medium">{label}</p>
       <p className={cn('text-base font-bold mt-1', color)}>{formatINR(value)}</p>
     </div>
   )

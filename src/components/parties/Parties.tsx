@@ -114,7 +114,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Users className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_parties')}</p>
+              <p className="text-xs text-muted-foreground font-medium">{t('stat.total_parties')}</p>
             </div>
             <p className="text-xl font-bold">{parties.length}</p>
           </CardContent>
@@ -123,7 +123,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.customers')}</p>
+              <p className="text-xs text-muted-foreground font-medium">{t('stat.customers')}</p>
             </div>
             <p className="text-xl font-bold">{customers}</p>
           </CardContent>
@@ -132,7 +132,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowDownRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.receivable')}</p>
+              <p className="text-xs text-muted-foreground font-medium">{t('dash.receivable')}</p>
             </div>
             <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatINR(totalReceivable)}</p>
           </CardContent>
@@ -141,7 +141,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowUpRight className="w-4 h-4 text-rose-600" />
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.payable')}</p>
+              <p className="text-xs text-muted-foreground font-medium">{t('dash.payable')}</p>
             </div>
             <p className="text-xl font-bold text-rose-600">{formatINR(totalPayable)}</p>
           </CardContent>
@@ -297,7 +297,7 @@ export function Parties() {
                       <div>
                         {/* 🔒 V26 Phase 8: Bumped from text-xs to text-xs — user reported
                             these labels were too small and hardly visible. */}
-                        <p className="text-xs text-muted-foreground uppercase">Balance</p>
+                        <p className="text-xs text-muted-foreground">Balance</p>
                         <p className={cn(
                           'text-sm font-bold',
                           p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'
@@ -317,7 +317,7 @@ export function Parties() {
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-muted-foreground uppercase">Txns</p>
+                        <p className="text-xs text-muted-foreground">Txns</p>
                         <p className="text-sm font-medium">{p.transactionCount}</p>
                       </div>
                     </div>
@@ -342,7 +342,7 @@ export function Parties() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
-                <tr className="text-left text-xs uppercase text-muted-foreground">
+                <tr className="text-left text-xs text-muted-foreground">
                   <th className="py-3 px-4 font-medium">Name</th>
                   <th className="py-3 px-2 font-medium">Type</th>
                   <th className="py-3 px-2 font-medium">Contact</th>

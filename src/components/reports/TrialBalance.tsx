@@ -48,7 +48,7 @@ export function TrialBalance({ data }: TrialBalanceProps) {
                 <Scale className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Account Summary</p>
+                <p className="text-xs text-muted-foreground font-semibold">Account Summary</p>
                 <p className="text-lg font-bold text-foreground">
                   Debit: {formatINR(summary.totalDebit)} · Credit: {formatINR(summary.totalCredit)}
                 </p>

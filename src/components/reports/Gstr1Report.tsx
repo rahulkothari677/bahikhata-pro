@@ -320,25 +320,25 @@ export function Gstr1Report() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="shadow-card border-border/60">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Taxable Value</p>
+            <p className="text-xs text-muted-foreground">Taxable Value</p>
             <p className="text-xl font-bold tabular-nums">{formatINR(data?.summary?.totalTaxableValue || 0)}</p>
           </CardContent>
         </Card>
         <Card className="shadow-card border-border/60">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Output Tax</p>
+            <p className="text-xs text-muted-foreground">Output Tax</p>
             <p className="text-xl font-bold tabular-nums text-rose-600">{formatINR(data?.summary?.totalOutputTax || 0)}</p>
           </CardContent>
         </Card>
         <Card className="shadow-card border-border/60">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Invoices</p>
+            <p className="text-xs text-muted-foreground">Invoices</p>
             <p className="text-xl font-bold tabular-nums">{data?.summary?.totalInvoiceCount || 0}</p>
           </CardContent>
         </Card>
         <Card className="shadow-card border-border/60">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Credit Notes</p>
+            <p className="text-xs text-muted-foreground">Credit Notes</p>
             <p className="text-xl font-bold tabular-nums text-violet-600">{data?.summary?.totalCreditNotes || 0}</p>
           </CardContent>
         </Card>

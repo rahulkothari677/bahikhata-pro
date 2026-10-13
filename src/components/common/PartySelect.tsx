@@ -174,7 +174,7 @@ export function PartySelect({
                 </Button>
               </div>
               {search && (
-                <div className="px-3 py-1.5 text-xs text-muted-foreground uppercase font-medium border-b border-border">
+                <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium border-b border-border">
                   {filteredParties.length} match{filteredParties.length !== 1 ? 'es' : ''}
                 </div>
               )}

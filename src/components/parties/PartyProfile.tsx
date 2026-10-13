@@ -804,7 +804,7 @@ export function PartyProfile() {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-white/70 text-xs uppercase">Outstanding</p>
+              <p className="text-white/70 text-xs">Outstanding</p>
               <p className={cn('text-2xl font-bold tabular-nums', stats.balance >= 0 ? 'text-white' : 'text-red-200')}>
                 {stats.balance >= 0 ? '+' : ''}{formatINR(animatedBalance)}
               </p>
@@ -1073,7 +1073,7 @@ export function PartyProfile() {
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-muted-foreground" />
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase">GSTIN</p>
+                    <p className="text-xs text-muted-foreground">GSTIN</p>
                     <p className="font-mono text-sm font-medium">{party.gstin}</p>
                   </div>
                 </div>
@@ -1082,7 +1082,7 @@ export function PartyProfile() {
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-muted-foreground" />
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase">Email</p>
+                    <p className="text-xs text-muted-foreground">Email</p>
                     <p className="text-sm font-medium">{party.email}</p>
                   </div>
                 </div>
@@ -1091,7 +1091,7 @@ export function PartyProfile() {
                 <div className="flex items-start gap-2 sm:col-span-2">
                   <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase">Address</p>
+                    <p className="text-xs text-muted-foreground">Address</p>
                     <p className="text-sm">{party.address}</p>
                   </div>
                 </div>
@@ -1243,7 +1243,7 @@ export function PartyProfile() {
                         >
                           <div className="flex items-center gap-1.5 mb-0.5">
                             <HandCoins className="w-3 h-3" />
-                            <span className="text-xs font-semibold uppercase tracking-wide opacity-90">
+                            <span className="text-xs font-semibold opacity-90">
                               {isPayReceived ? 'Received' : 'Paid'}
                             </span>
                             <span className="text-xs opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
@@ -1289,7 +1289,7 @@ export function PartyProfile() {
                           )}
                         >
                           <div className="flex items-center gap-1.5 mb-0.5">
-                            <span className="text-xs font-semibold uppercase tracking-wide opacity-90">
+                            <span className="text-xs font-semibold opacity-90">
                               {entry.type}
                             </span>
                             {entry.invoiceNo && (
@@ -1364,7 +1364,7 @@ function StatCard({ label, value, icon: Icon, color, bg, sub }: {
           <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center', bg)}>
             <Icon className={cn('w-3.5 h-3.5', color)} />
           </div>
-          <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
+          <p className="text-xs text-muted-foreground font-medium">{label}</p>
         </div>
         <p className="text-lg font-bold tabular-nums">{value}</p>
         {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}

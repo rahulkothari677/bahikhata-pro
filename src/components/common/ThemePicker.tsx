@@ -74,7 +74,7 @@ export function ThemePicker({ open, onDone }: { open: boolean; onDone: () => voi
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
           {/* Color swatches — compact grid */}
           <div>
-            <p className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Color</p>
+            <p className="text-xs font-semibold mb-2 text-muted-foreground">Color</p>
             <div className="grid grid-cols-3 gap-2">
               {THEME_OPTIONS.map((theme) => (
                 <button
@@ -105,7 +105,7 @@ export function ThemePicker({ open, onDone }: { open: boolean; onDone: () => voi
 
           {/* Light / Dark toggle — compact horizontal pills */}
           <div>
-            <p className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Mode</p>
+            <p className="text-xs font-semibold mb-2 text-muted-foreground">Mode</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => { haptic.click(); setSelectedDark(false) }}

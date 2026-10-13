@@ -105,7 +105,7 @@ export function ToolsHub() {
             <div className="flex items-center gap-2 px-1 mb-2">
               <TitleIcon className={cn('w-3.5 h-3.5', category.accentColor)} />
               <p className={cn(
-                'text-xs font-semibold uppercase tracking-wider',
+                'text-xs font-semibold',
                 category.accentColor,
               )}>
                 {category.title}

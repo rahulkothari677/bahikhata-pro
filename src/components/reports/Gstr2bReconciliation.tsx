@@ -409,7 +409,7 @@ function SummaryCard({ icon, label, count, itc, color, bg, active, onClick }: {
         <span className={color}>{icon}</span>
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide truncate">{label}</p>
+        <p className="text-xs text-muted-foreground truncate">{label}</p>
         <p className={cn('text-base font-bold tabular-nums', color)}>{count} invoice(s)</p>
         <p className="text-xs text-muted-foreground tabular-nums">ITC: {formatINR(itc)}</p>
       </div>

@@ -627,7 +627,7 @@ export function Gstr3bReport() {
       )}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-white/80 text-xs font-medium uppercase tracking-wide">6.1 Net Tax Payable</p>
+            <p className="text-white/80 text-xs font-medium">6.1 Net Tax Payable</p>
             <p className="text-3xl font-bold tabular-nums mt-1">
               {formatINR(data?.netTaxPayable || 0)}
             </p>
@@ -695,7 +695,7 @@ function SummaryCard({ icon, label, value, color, bg, highlight, isCount }: {
         <span className={color}>{icon}</span>
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide truncate">{label}</p>
+        <p className="text-xs text-muted-foreground truncate">{label}</p>
         <p className={cn('text-base font-bold tabular-nums', color)}>
           {isCount ? value : formatINR(value)}
         </p>

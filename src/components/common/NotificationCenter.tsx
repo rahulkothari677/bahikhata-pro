@@ -279,7 +279,7 @@ export function NotificationCenter() {
                 {/* Unread section */}
                 {unread.length > 0 && (
                   <>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-2 py-1">
+                    <p className="text-xs font-semibold text-muted-foreground px-2 py-1">
                       New ({unread.length})
                     </p>
                     {unread.map((n, i) => (
@@ -301,7 +301,7 @@ export function NotificationCenter() {
                     {unread.length > 0 && (
                       <div className="flex items-center gap-2 px-2 py-3">
                         <div className="flex-1 h-px bg-border" />
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Earlier</span>
+                        <span className="text-xs font-semibold text-muted-foreground">Earlier</span>
                         <div className="flex-1 h-px bg-border" />
                       </div>
                     )}

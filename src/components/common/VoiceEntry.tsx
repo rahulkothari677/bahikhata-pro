@@ -632,7 +632,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
       {/* Example phrases — shown when user hasn't recorded yet */}
       {!isRecording && !accumulatedTranscript && !parsed && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+          <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
             <Sparkles className="w-3 h-3" />
             Try saying
           </p>

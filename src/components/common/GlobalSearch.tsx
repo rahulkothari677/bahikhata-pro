@@ -274,7 +274,7 @@ export function GlobalSearch() {
               {/* Commands section */}
               {commandResults.length > 0 && (
                 <>
-                  <p className="text-xs uppercase text-muted-foreground font-medium px-2 py-1">
+                  <p className="text-xs text-muted-foreground font-medium px-2 py-1">
                     {q ? 'Matching commands' : 'Quick Actions'}
                   </p>
                   {commandResults.map((cmd) => {
@@ -305,7 +305,7 @@ export function GlobalSearch() {
               {/* Search results section */}
               {results.length > 0 && (
                 <>
-                  <p className="text-xs uppercase text-muted-foreground font-medium px-2 py-1 mt-2">
+                  <p className="text-xs text-muted-foreground font-medium px-2 py-1 mt-2">
                     {results.length} search result{results.length !== 1 ? 's' : ''}
                   </p>
                   {results.map((result) => {

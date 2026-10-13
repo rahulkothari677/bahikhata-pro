@@ -641,7 +641,7 @@ export function BillScanner() {
       {/* Bill type selector */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-4">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground" htmlFor="field-i-am-scanning-a">I am scanning a...</Label>
+          <Label className="text-xs text-muted-foreground" htmlFor="field-i-am-scanning-a">I am scanning a...</Label>
           <div className="grid grid-cols-2 gap-3 mt-2">
             <button
               onClick={() => setBillType('purchase')}
@@ -870,19 +870,19 @@ export function BillScanner() {
               {/* 2 rows, 2 columns each — bigger text, clearly visible */}
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wide">Invoice</p>
+                  <p className="text-xs text-white/60">Invoice</p>
                   <p className="font-semibold text-sm">{scanned.invoiceNo || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wide">Date</p>
+                  <p className="text-xs text-white/60">Date</p>
                   <p className="font-semibold text-sm">{scanned.date || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wide">Party</p>
+                  <p className="text-xs text-white/60">Party</p>
                   <p className="font-semibold text-sm truncate">{scanned.sellerName || 'Walk-in'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-white/60 uppercase tracking-wide">Payment</p>
+                  <p className="text-xs text-white/60">Payment</p>
                   <p className="font-semibold text-sm capitalize">{scanned.paymentMode || 'cash'}</p>
                 </div>
               </div>

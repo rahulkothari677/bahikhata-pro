@@ -194,25 +194,25 @@ export function BankReconciliation() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Card className="shadow-card border-border/60">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Bank Txns</p>
+              <p className="text-xs text-muted-foreground">Bank Txns</p>
               <p className="text-xl font-bold tabular-nums">{summary.totalBankTxns}</p>
             </CardContent>
           </Card>
           <Card className="shadow-card border-emerald-200 dark:border-emerald-900/50">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Matched</p>
+              <p className="text-xs text-muted-foreground">Matched</p>
               <p className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{summary.matchedCount}</p>
             </CardContent>
           </Card>
           <Card className="shadow-card border-amber-200 dark:border-amber-900/50">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Unmatched</p>
+              <p className="text-xs text-muted-foreground">Unmatched</p>
               <p className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{summary.unmatchedCount}</p>
             </CardContent>
           </Card>
           <Card className="shadow-card border-border/60">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Match Rate</p>
+              <p className="text-xs text-muted-foreground">Match Rate</p>
               <p className="text-xl font-bold tabular-nums">
                 {summary.totalBankTxns > 0 ? Math.round((summary.matchedCount / summary.totalBankTxns) * 100) : 0}%
               </p>

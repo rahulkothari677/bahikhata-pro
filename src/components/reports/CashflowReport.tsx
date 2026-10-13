@@ -47,7 +47,7 @@ export function CashflowReport({ data }: CashflowReportProps) {
                 )} />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Net Cashflow</p>
+                <p className="text-xs text-muted-foreground font-semibold">Net Cashflow</p>
                 <p className={cn(
                   'text-2xl font-bold tabular-nums',
                   netPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',

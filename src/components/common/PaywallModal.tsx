@@ -84,7 +84,7 @@ export function PaywallModal({
           <div className="rounded-xl bg-muted/50 border border-border p-3 my-2">
             <div className="flex items-center gap-2 mb-1.5">
               <TrendingUp className="w-4 h-4 text-muted-foreground" />
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <p className="text-xs font-semibold text-muted-foreground">
                 Your usage {periodLabel}
               </p>
             </div>

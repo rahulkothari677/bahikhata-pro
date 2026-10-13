@@ -60,15 +60,22 @@
   --color-check-soft: var(--check-soft);
   --color-ai: var(--ai);
   --color-ai-soft: var(--ai-soft);
+  /* Phase 4d: the two smallest steps, one pixel up each, with line heights
+     held so a row barely grows (13 Oct study: cards +1-5px). 12px Noto at
+     these sizes reads like ~13px Roboto. */
+  --text-xs: 0.8125rem;          /* 13px (was 12) */
+  --text-xs--line-height: 1.3077; /* 17px */
+  --text-sm: 0.9375rem;          /* 15px (was 14) */
+  --text-sm--line-height: 1.3333; /* 20px, unchanged */
   /* Money that matters is the largest thing on the screen. */
   --text-money: 2rem;            /* 32px — a bill total, a balance */
   --text-money--line-height: 1.1;
   --text-money-sm: 1.3125rem;    /* 21px — totals in a row of four */
   --text-money-sm--line-height: 1.15;
   /* Font families — set by next/font in layout.tsx */
-  --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
+  --font-sans: var(--font-noto), var(--font-noto-dev), ui-sans-serif, system-ui, -apple-system,
                "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-heading: var(--font-sans), ui-sans-serif,
+  --font-heading: var(--font-noto), var(--font-noto-dev), ui-sans-serif,
                   system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
                "Liberation Mono", "Courier New", monospace;
@@ -126,7 +133,7 @@
   --secondary: oklch(0.96 0.01 60);
   --secondary-foreground: oklch(0.25 0.02 30);
   --muted: oklch(0.96 0.01 60);
-  --muted-foreground: oklch(0.52 0.02 30);
+  --muted-foreground: oklch(0.46 0.02 30); /* Phase 4d: darker, for a bright shop (was 0.52) */
   --accent: oklch(0.94 0.04 145);
   --accent-foreground: oklch(0.25 0.05 145);
   --destructive: oklch(0.58 0.22 25);
@@ -319,8 +326,10 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Mukta (Phase 4a): one family for English and Hindi */
+    /* Noto Sans + Noto Sans Devanagari (Phase 4d) */
     font-family: var(--font-sans);
+    /* Phase 4d: Noto set slightly narrow, so lines stay Mukta-length. */
+    font-stretch: 87.5%;
     font-feature-settings: "rlig" 1, "calt" 1;
     /* Slightly tighter line-height for a more designed feel */
     line-height: 1.5;
@@ -330,7 +339,7 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
-  /* Headings share the body family (Mukta) at heavier weights.
+  /* Headings share the body family (Noto Sans) at heavier weights.
      Apply to h1-h6 and any element with .font-heading class. */
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);

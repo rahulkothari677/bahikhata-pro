@@ -361,7 +361,7 @@ export function AskAnswer({
       {/* The receipts. */}
       {payload.sources?.length ? (
         <div className="pt-2 border-t border-border space-y-0.5">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Where this came from</p>
+          <p className="text-xs text-muted-foreground mb-1.5">Where this came from</p>
           {payload.sources.map(s => (
             <button key={`${s.kind}-${s.id}`} onClick={() => open(s)}
               className="w-full flex items-center justify-between gap-2 py-2.5 px-1.5 min-h-[2.75rem] text-sm hover:bg-muted rounded-lg">

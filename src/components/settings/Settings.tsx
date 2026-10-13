@@ -2956,7 +2956,7 @@ export function Settings({
           ) : (
             filteredFeatureCategories.map((category) => (
             <div key={category.title}>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{category.title}</p>
+              <p className="text-xs font-semibold text-muted-foreground mb-2 px-1">{category.title}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {category.features.map(({ key, label, description, icon: Icon }) => {
                   /* Analytics is the one row backed by real consent rather than

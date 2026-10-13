@@ -76,7 +76,7 @@ const periodLabel = (id: DatePreset | 'all') => (id === 'all' ? 'All time' : get
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2.5">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <h3 className="text-xs font-semibold text-muted-foreground">{title}</h3>
       {children}
     </section>
   )

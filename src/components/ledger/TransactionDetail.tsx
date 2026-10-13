@@ -645,7 +645,7 @@ export function TransactionDetail() {
                   : <ArrowUpRight className="w-7 h-7" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-white/70 uppercase tracking-wide">{isIncome ? 'Income' : 'Expense'}</p>
+                <p className="text-xs text-white/70">{isIncome ? 'Income' : 'Expense'}</p>
                 <h2 className="text-2xl font-bold font-heading tracking-tight truncate">{txn.category || 'Other'}</h2>
                 <p className="text-sm text-white/70">{formatDateMaybeTime(txn.date)}</p>
               </div>
@@ -653,14 +653,14 @@ export function TransactionDetail() {
                 <p className="text-2xl font-bold tabular-nums">
                   {isIncome ? '+' : '-'}{formatINR(txn.totalAmount)}
                 </p>
-                <span className="inline-block mt-1 text-xs font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 uppercase">{txn.paymentMode}</span>
+                <span className="inline-block mt-1 text-xs font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5">{txn.paymentMode}</span>
               </div>
             </div>
           </div>
           {txn.notes && (
             <div className="p-4">
               <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-xs text-muted-foreground uppercase mb-1">Notes</p>
+                <p className="text-xs text-muted-foreground mb-1">Notes</p>
                 <p className="text-sm">{txn.notes}</p>
               </div>
             </div>
@@ -683,7 +683,7 @@ export function TransactionDetail() {
                     : <Truck className="w-6 h-6" />}
                   </div>
                   <div>
-                    <p className="text-white/70 text-xs uppercase tracking-wide">{noteLabel}</p>
+                    <p className="text-white/70 text-xs">{noteLabel}</p>
                     <h2 className="text-xl font-bold font-heading tracking-tight">{txn.invoiceNo || `TXN-${txn.id.slice(-6)}`}</h2>
                     {/* V17-Ext Tier 3: Show note reason if present */}
                     {isNote && txn.noteReason && (
@@ -794,7 +794,7 @@ export function TransactionDetail() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Payment</span>
-                  <Badge variant="secondary" className="uppercase text-xs">{txn.paymentMode}</Badge>
+                  <Badge variant="secondary" className="text-xs">{txn.paymentMode}</Badge>
                 </div>
                 {billShowsGst && (
                   <div className="flex items-center justify-between">
@@ -841,7 +841,7 @@ export function TransactionDetail() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
                       <th className="py-2 pr-2 font-medium">#</th>
                       <th className="py-2 px-2 font-medium">Product</th>
                       <th className="py-2 px-2 font-medium text-right">Qty</th>
@@ -991,7 +991,7 @@ export function TransactionDetail() {
 
               {txn.notes && (
                 <div className="mt-4 rounded-lg bg-muted/50 p-3">
-                  <p className="text-xs text-muted-foreground uppercase mb-1">Notes</p>
+                  <p className="text-xs text-muted-foreground mb-1">Notes</p>
                   <p className="text-sm">{txn.notes}</p>
                 </div>
               )}
@@ -1768,7 +1768,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
       {/* Bill To / Supply Details */}
       <div className="grid grid-cols-2 gap-4 mb-5">
         <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 font-semibold">Bill To</p>
+          <p className="text-xs text-gray-500 mb-1.5 font-semibold">Bill To</p>
           <p className="font-bold text-sm">{txn.party?.name || 'Walk-in Customer'}</p>
           {txn.party?.phone && <p className="text-xs text-gray-700 mt-0.5">{txn.party.phone}</p>}
           {txn.party?.gstin && <p className="text-xs text-gray-700 font-mono mt-0.5">GSTIN: {txn.party.gstin}</p>}
@@ -1777,7 +1777,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
           {supplyLines.shipTo && <p className="text-xs text-gray-700 mt-1"><span className="font-semibold">Ship to:</span> {supplyLines.shipTo}</p>}
         </div>
         <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 font-semibold">Supply Details</p>
+          <p className="text-xs text-gray-500 mb-1.5 font-semibold">Supply Details</p>
           <div className="text-xs space-y-1">
             {billShowsGst && <div className="flex justify-between"><span className="text-gray-500">GST Type:</span><span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</span></div>}
             {billShowsGst && supplyLines.placeOfSupply && <div className="flex justify-between gap-2"><span className="text-gray-500">Place of supply:</span><span className="font-medium text-right">{supplyLines.placeOfSupply}</span></div>}
@@ -1820,7 +1820,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
       {/* Amount in words + totals */}
       <div className="flex justify-between items-start gap-6 mb-5">
         <div className="flex-1">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1 font-semibold">Amount in Words</p>
+          <p className="text-xs text-gray-500 mb-1 font-semibold">Amount in Words</p>
           <p className="text-xs italic font-medium text-gray-800 max-w-xs">{amountToWords(txn.totalAmount)}</p>
         </div>
         <div className="w-72 text-xs space-y-1">

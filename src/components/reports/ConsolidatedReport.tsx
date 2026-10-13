@@ -125,7 +125,7 @@ export function ConsolidatedReport() {
       )}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-white/80 text-xs font-medium uppercase tracking-wide">
+            <p className="text-white/80 text-xs font-medium">
               {viewMode === 'pl' && (total.netProfit === undefined ? 'Consolidated Revenue' : 'Consolidated Net Profit')}
               {viewMode === 'gst' && 'Consolidated Net GST Payable'}
               {viewMode === 'stock' && 'Consolidated Stock Value'}

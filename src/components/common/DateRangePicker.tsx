@@ -222,7 +222,7 @@ export function DateRangePicker({
           {preset === 'custom' && (
             <div className="mt-3 pt-3 border-t border-border space-y-2">
               <div>
-                <label className="text-xs uppercase text-muted-foreground font-medium">From</label>
+                <label className="text-xs text-muted-foreground font-medium">From</label>
                 <Input
                   type="date"
                   value={customFrom}
@@ -231,7 +231,7 @@ export function DateRangePicker({
                 />
               </div>
               <div>
-                <label className="text-xs uppercase text-muted-foreground font-medium">To</label>
+                <label className="text-xs text-muted-foreground font-medium">To</label>
                 <Input
                   type="date"
                   value={customTo}

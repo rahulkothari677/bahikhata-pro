@@ -109,6 +109,17 @@ describe('the app keeps the design language', () => {
     expect(themeTextBelowFloor(CSS)).toEqual([])
   })
 
+  test('readable type (Phase 4d): Noto Sans, slightly narrow, small steps at 13 and 15px', () => {
+    // 13 Oct study: Mukta's short letters made 12px read like ~10.4px. Noto
+    // Sans at 87.5% width has 15% taller letters at the same line length.
+    const layout = stripComments(fs.readFileSync(path.join(SRC, 'app/layout.tsx'), 'utf8'))
+    expect(layout).toMatch(/Noto_Sans\(\{[\s\S]*?axes: \["wdth"\]/)
+    expect(layout).toMatch(/Noto_Sans_Devanagari\(\{[\s\S]*?subsets: \["devanagari"\]/)
+    expect(CSS).toMatch(/font-stretch:\s*87\.5%/)
+    expect(CSS).toMatch(/--text-xs:\s*0\.8125rem/)
+    expect(CSS).toMatch(/--text-sm:\s*0\.9375rem/)
+  })
+
   test('every colour role is defined in light and dark and mapped for Tailwind', () => {
     expect(missingRoleTokens(CSS)).toEqual([])
   })

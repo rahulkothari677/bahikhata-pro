@@ -502,7 +502,7 @@ export function AccountScreen() {
               </div>
 
               <span className={cn(
-                'text-xs font-bold uppercase tracking-wide px-2 py-1 rounded-full flex items-center gap-1 flex-shrink-0',
+                'text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1 flex-shrink-0',
                 planBadge.badgeClassName,
               )}>
                 {PlanIcon && <PlanIcon className="w-2.5 h-2.5" />}
@@ -589,7 +589,7 @@ export function AccountScreen() {
           return (
             <div key={section.subcategory}>
               {section.title && (
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">
+                <p className="text-xs font-semibold text-muted-foreground px-2 mb-2">
                   {section.title}
                 </p>
               )}
@@ -619,7 +619,7 @@ export function AccountScreen() {
                               Shops needed it: the page has one working control. */}
                           {item.badge && (
                             <span className={cn(
-                              'text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full',
+                              'text-xs font-bold px-1.5 py-0.5 rounded-full',
                               item.badgeColor || 'bg-muted text-muted-foreground',
                             )}>
                               {item.badge}
@@ -681,7 +681,7 @@ export function AccountScreen() {
                     AI Scanner · GST Export · WhatsApp · Voice Entry
                   </p>
                 </div>
-                <span className="text-xs font-bold uppercase tracking-wide bg-white/20 px-2 py-1 rounded-full flex-shrink-0">
+                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-full flex-shrink-0">
                   View Plans
                 </span>
               </div>
@@ -904,7 +904,7 @@ function AccountSectionContent({
             knows what a plan costs. */}
         <div className="pt-2">
           <div className="mb-3 px-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <p className="text-xs font-semibold text-muted-foreground">
               Plans &amp; Pricing
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">

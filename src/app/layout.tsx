@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Mukta } from "next/font/google";
+import { Noto_Sans, Noto_Sans_Devanagari } from "next/font/google";
 import "./globals.css";
 /*
  * Business-card monogram typefaces. Imported HERE, not with an `@import` inside
@@ -24,16 +24,22 @@ import dynamic from "next/dynamic";
 const Analytics = dynamic(() => import("@vercel/analytics/react").then(m => ({ default: m.Analytics })))
 const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })))
 
-// 🔒 Phase 4a (Oct 2026): one family for English AND Hindi — Mukta.
-// The design language (final design plan §1) sets one typeface designed for
-// both scripts, so "Cheeni 1 kg" and "चीनी" sit on one line without jumping.
-// Inter had no Devanagari, so every Hindi word fell back to whatever font the
-// phone happened to carry. Still one font request (was Inter; before that
-// Inter + Plus Jakarta Sans, V9 1.7a).
-const mukta = Mukta({
-  subsets: ["latin", "devanagari"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-sans",
+// 🔒 Phase 4d (Oct 2026): Noto Sans + Noto Sans Devanagari, set slightly
+// narrow (font-stretch 87.5% in globals.css). Measured on 13 Oct against 12
+// Hindi+English fonts: small letters 15% taller than Mukta (0.54 vs 0.47 of
+// the size) while lines stay as long (+3% English, -1% Hindi), so text reads
+// bigger and cards keep their size. Mukta (4a) made 12px look like ~10.4px.
+// Both are variable fonts: weight and width come from one file each.
+const notoSans = Noto_Sans({
+  subsets: ["latin"],
+  axes: ["wdth"],
+  variable: "--font-noto",
+  display: "swap",
+});
+const notoDevanagari = Noto_Sans_Devanagari({
+  subsets: ["devanagari"],
+  axes: ["wdth"],
+  variable: "--font-noto-dev",
   display: "swap",
 });
 
@@ -73,7 +79,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={mukta.variable}>
+    <html lang="en" suppressHydrationWarning className={`${notoSans.variable} ${notoDevanagari.variable}`}>
       <body className="antialiased bg-background text-foreground font-sans">
         <ErrorBoundary>
           <OfflineBanner />

@@ -123,14 +123,14 @@ export function PartyBills() {
       <div className="grid grid-cols-2 gap-3">
         <Card className="shadow-card border-border/60">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Open bills</p>
+            <p className="text-xs text-muted-foreground">Open bills</p>
             <p className="text-lg font-bold text-rose-600">{formatINR(totalDue)}</p>
             <p className="text-xs text-muted-foreground">{openBills.length} of {bills.length} bills</p>
           </CardContent>
         </Card>
         <Card className="shadow-card border-border/60">
           <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Party balance</p>
+            <p className="text-xs text-muted-foreground">Party balance</p>
             <p className={cn('text-lg font-bold', balance > 0 ? 'text-emerald-600' : balance < 0 ? 'text-rose-600' : '')}>
               {formatINR(Math.abs(balance))}
             </p>

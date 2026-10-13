@@ -309,7 +309,7 @@ export function SplashScreen({
       </div>
 
       {/* ─── Status text ─────────────────────────────────────────────── */}
-      <p className="absolute bottom-14 left-1/2 -translate-x-1/2 text-xs text-white/50 tracking-[0.2em] uppercase font-medium">
+      <p className="absolute bottom-14 left-1/2 -translate-x-1/2 text-xs text-white/50 tracking-[0.2em] font-medium">
         {ready ? 'Ready' : 'Loading'}
       </p>
 

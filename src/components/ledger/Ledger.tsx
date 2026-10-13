@@ -524,7 +524,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                 * spreads to every other number we show, which is expensive for
                 * an app whose whole claim is that you can rely on it.
                 */}
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+              <p className="text-xs text-muted-foreground font-medium">
                 {isSale ? 'Total Sales' : 'Total Purchases'} <span className="normal-case">({t('dash.incl_gst')})</span>
               </p>
             </div>
@@ -555,7 +555,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                 <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
+                <p className="text-xs text-muted-foreground font-medium">{t('stat.gross_profit')}</p>
               </div>
               <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatINR(totalProfit)}</p>
               <p className="text-xs text-muted-foreground">{totalNetSales > 0 ? ((totalProfit / totalNetSales) * 100).toFixed(1) : 0}% margin</p>
@@ -569,7 +569,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
                 <IndianRupee className="w-3.5 h-3.5 text-violet-600" />
               </div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.paid')}</p>
+              <p className="text-xs text-muted-foreground font-medium">{t('stat.paid')}</p>
             </div>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalPaid)}</p>
           </div>
@@ -581,7 +581,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               <div className="w-7 h-7 rounded-lg bg-rose-500/10 flex items-center justify-center">
                 <IndianRupee className="w-3.5 h-3.5 text-rose-600" />
               </div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Outstanding' : 'Pending Payment'}</p>
+              <p className="text-xs text-muted-foreground font-medium">{isSale ? 'Outstanding' : 'Pending Payment'}</p>
             </div>
             <p className="text-xl font-bold text-rose-600 tabular-nums">{formatINR(totalDue)}</p>
           </div>
@@ -1047,7 +1047,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                             Paid/Unpaid badges would mislead (server stores paid=total on quotes) */}
                         {txn.type !== 'estimate' && (
                           <>
-                            <Badge variant="secondary" className="text-xs py-0 uppercase">{txn.paymentMode}</Badge>
+                            <Badge variant="secondary" className="text-xs py-0">{txn.paymentMode}</Badge>
                             {/* Payment status badge */}
                             {due > 0 ? (
                               <Badge variant="destructive" className="text-xs py-0">

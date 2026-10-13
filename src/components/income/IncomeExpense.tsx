@@ -192,7 +192,7 @@ export function IncomeExpense() {
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
                 <ArrowDownRight className="w-4 h-4 text-white" />
               </div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Income</p>
+              <p className="text-xs text-muted-foreground font-medium">Income</p>
             </div>
             <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(totalIncome)}</p>
           </div>
@@ -205,7 +205,7 @@ export function IncomeExpense() {
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center shadow-md">
                 <ArrowUpRight className="w-4 h-4 text-white" />
               </div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Expenses</p>
+              <p className="text-xs text-muted-foreground font-medium">Expenses</p>
             </div>
             <p className="text-2xl font-bold tabular-nums text-rose-600">{formatINR(totalExpense)}</p>
           </div>
@@ -218,7 +218,7 @@ export function IncomeExpense() {
               <div className={cn('w-9 h-9 rounded-lg bg-gradient-to-br flex items-center justify-center shadow-md', netCashflow >= 0 ? 'from-violet-500 to-purple-600' : 'from-amber-500 to-orange-600')}>
                 <Wallet className="w-4 h-4 text-white" />
               </div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Net Cashflow</p>
+              <p className="text-xs text-muted-foreground font-medium">Net Cashflow</p>
             </div>
             <p className={cn('text-2xl font-bold tabular-nums', netCashflow >= 0 ? 'text-violet-600' : 'text-amber-600 dark:text-amber-400')}>
               {netCashflow >= 0 ? '+' : ''}{formatINR(netCashflow)}
@@ -872,7 +872,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
 
           {/* Payee info - who you paid / received from */}
           <div className="rounded-lg bg-muted/30 p-3 space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <p className="text-xs font-medium text-muted-foreground">
               {isExpense ? 'Paid To' : 'Received From'} (optional)
             </p>
             <div className="grid grid-cols-2 gap-2">
