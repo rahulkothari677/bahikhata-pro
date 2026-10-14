@@ -174,8 +174,10 @@ export function DateRangePicker({
         className="gap-2 font-medium lg:h-9"
       >
         <Calendar className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
-        <span className="hidden sm:inline">{currentPresetLabel}</span>
-        <span className="sm:hidden">Date</span>
+        {/* Phase 5b-3: the period's name on a phone too. It read "Date", so a
+            screen whose cards no longer say "This Month" gave no way to tell
+            which period they show. The labels are short ("This Month"). */}
+        <span>{currentPresetLabel}</span>
         <ChevronDown className="w-3.5 h-3.5 lg:w-3 lg:h-3" />
       </Button>
 

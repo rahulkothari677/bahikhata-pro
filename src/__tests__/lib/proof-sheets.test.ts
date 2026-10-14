@@ -12,7 +12,7 @@
  */
 import { describe, test, expect } from '@jest/globals'
 import {
-  DRAWER_TERMS, drawerProof, listProof, netProfitProof, proofGap, profitProof, salesProof,
+  DRAWER_TERMS, drawerProof, listProof, netProfitProof, proofGap, profitProof, purchasesProof, salesProof,
   type Proof, type SalesGroup,
 } from '@/lib/proof-sheets'
 import { translations } from '@/lib/i18n'
@@ -101,6 +101,27 @@ describe('Profit and net profit', () => {
   })
 })
 
+describe('Purchases (5b-3): paid at billing + on credit = the bills', () => {
+  test('adds up; a fully paid or fully unpaid period has one line', () => {
+    const p = purchasesProof({ total: 12500.5, paid: 9000 })
+    expect(p.rows).toEqual([{ key: 'proof.purchase_paid', amount: 9000 }, { key: 'proof.purchase_due', amount: 3500.5 }])
+    expect(proofGap(p)).toBe(0)
+    expect(purchasesProof({ total: 100, paid: 100 }).rows.map((r) => r.key)).toEqual(['proof.purchase_paid'])
+    expect(purchasesProof({ total: 100, paid: 0 }).rows.map((r) => r.key)).toEqual(['proof.purchase_due'])
+  })
+})
+
+describe('Stock value is the Home feed\'s own sum (5b-3)', () => {
+  // The expression both routes must share: goods only, oversold as 0, rounded per product.
+  const SUM = 'SUM(ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric))'
+  test('both routes compute it the same way', () => {
+    for (const f of ['src/app/api/dashboard/route.ts', 'src/app/api/dashboard/explain/route.ts']) {
+      const code = readCode(f)
+      expect({ f, same: code.includes(SUM) && /FILTER \(\s*WHERE "tracksInventory" = true\s*\)/.test(code) }).toEqual({ f, same: true })
+    }
+  })
+})
+
 describe('A list cut short says so and still adds up', () => {
   const items = [{ label: 'Deepak', amount: 1500 }, { label: 'Suresh', amount: 800 }]
   test('all entries shown: no extra line', () => {
@@ -177,9 +198,11 @@ describe('every line a sheet can show has words in English and Hindi', () => {
     salesProof([{ type: 'sale', paymentMode: 'cash', total: 1, paid: 2, count: 1 }]),
     netProfitProof({ netSales: 2, profit: 1, noCost: 1, income: 1, expenses: 1 }),
     listProof([], 5, 2),
+    purchasesProof({ total: 2, paid: 1 }),
     drawerProof({ cashInFromSales: 1, cashIncome: 1, udhaarCollectedCash: 1, cashRefundsIn: 1, cashOutForPurchases: 1, cashExpenses: 1, udhaarPaidCash: 1, cashRefundsOut: 1 }),
   ]
-  const keys = new Set([...sample.flatMap((p) => p.rows.map((r) => r.key!).filter(Boolean)), 'proof.cmp_last_week', 'proof.cmp_prev_period'])
+  const keys = new Set([...sample.flatMap((p) => p.rows.map((r) => r.key!).filter(Boolean)), 'proof.cmp_last_week', 'proof.cmp_prev_period', 'proof.after_expenses',
+    ...['bills', 'payments', 'entries', 'items'].flatMap((n) => [`proof.${n}_one`, `proof.${n}_n`])])
   test('keys exist', () => {
     const en = translations.en as unknown as Record<string, string>
     const hi = translations.hi as unknown as Record<string, string>

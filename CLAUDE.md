@@ -506,6 +506,12 @@ cause**, never as a new line at the bottom.
   became the last 160 characters of the file. It failed loudly this time, by
   luck. Replaced by matching the `<h2>` element itself. **Grep the guards for
   `indexOf(` + `slice(` windows when a phase touches the file they read.**
+· **14 Oct (5b-2): a brace-matched block that was the wrong block.**
+  `balancedBlock(code, 'export function handleNavAction')` counts from the
+  FIRST `{` — the `opts?: { … }` type in the signature — so the guard read a
+  type and passed with the bug back. Caught only because the break-test gave
+  one failure where two were due. **Count the failures a break-test should
+  give, not just "it went red".**
 
 **Five in three days, all one shape: measuring nearby text instead of the
 structure.** Match the actual thing — balance the braces, parse the argument,

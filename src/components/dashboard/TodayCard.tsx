@@ -141,7 +141,7 @@ export function TodayCard({
             </span>
           </button>
           <p className="text-white/80 text-xs mt-0.5">
-            {proofCountLine(kpis.todayTxnCount, false, t)}
+            {proofCountLine(kpis.todayTxnCount, 'bills', t)}
             {kpis.todayLastWeekRevenue !== undefined && <> · {lastWeek}: <span className="font-semibold text-white tabular-nums">{formatINR(kpis.todayLastWeekRevenue)}</span></>}
           </p>
           {kpis.todayCreditNoteCount > 0 && (

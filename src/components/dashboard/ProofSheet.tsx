@@ -28,16 +28,20 @@ import { useTranslation } from '@/hooks/use-translation'
 import { useDaySummary } from '@/hooks/use-day-summary'
 
 export type ProofSpec =
-  | { kind: 'explain'; metric: 'sales' | 'profit' | 'netProfit' | 'got'; scope: 'today' | 'range'; from?: Date; to?: Date; titleKey: string; periodLabel?: string; shown?: number }
+  | { kind: 'explain'; metric: ProofMetric; scope: 'today' | 'range'; from?: Date; to?: Date; titleKey: string; periodLabel?: string; shown?: number }
   | { kind: 'drawer'; titleKey: string; shown?: number }
 
 export interface ProofAction { label: string; onClick: () => void }
+
+export type ProofMetric = 'sales' | 'profit' | 'got' | 'purchases' | 'expenses' | 'stock'
 
 interface ProofData {
   total: number
   rows: ProofRow[]
   count?: number
   compare?: { key: string; amount: number } | null
+  /** Profit for a period: the figure after expenses and other income (5b-3). */
+  after?: { key: string; amount: number } | null
 }
 
 /** The explain route's address for a spec (exported for the guard). */
@@ -55,7 +59,15 @@ export function proofRowLabel(r: ProofRow, t: (k: string) => string, showsGst: b
   let s = r.key ? t(r.key === 'proof.net_sales' && showsGst ? 'proof.net_sales_gst' : r.key) : (r.label ?? '')
   for (const [k, v] of Object.entries(r.params ?? {})) s = s.replace(`{${k}}`, String(v))
   if (r.mode) s += ` · ${t(`proof.mode_${(PROOF_MODES as readonly string[]).includes(r.mode) ? r.mode : 'other'}`)}`
+  if (r.date) s += ` · ${new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }).format(new Date(r.date))}`
   return s
+}
+
+/** "33 pcs × ₹241.50" under a stock line, or '' (exported for the guard). */
+export function proofRowDetail(r: ProofRow): string {
+  if (r.qty === undefined || r.each === undefined) return ''
+  const qty = Number.isInteger(r.qty) ? String(r.qty) : r.qty.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+  return `${qty}${r.unit ? ` ${r.unit}` : ''} × ${formatINR(r.each)}`
 }
 
 /** Last week's weekday in IST ("Wednesday" / "बुधवार"), for "Same time last {day}". */
@@ -64,10 +76,14 @@ export function lastWeekdayName(language: string, now: Date = new Date()): strin
     .format(new Date(now.getTime() - 7 * 86_400_000))
 }
 
-/** "1 bill" / "12 bills" (payments for the collected sheet). Exported for the guard. */
-export function proofCountLine(n: number, payments: boolean, t: (k: string) => string): string {
-  const key = payments ? (n === 1 ? 'proof.payments_one' : 'proof.payments_n') : (n === 1 ? 'proof.bills_one' : 'proof.bills_n')
-  return t(key).replace('{n}', String(n))
+/** What each sheet counts. */
+export const COUNT_NOUN: Record<ProofMetric, 'bills' | 'payments' | 'entries' | 'items'> = {
+  sales: 'bills', profit: 'bills', purchases: 'bills', got: 'payments', expenses: 'entries', stock: 'items',
+}
+
+/** "1 bill" / "12 bills", "1 payment", "3 entries", "40 items". Exported for the guard. */
+export function proofCountLine(n: number, noun: 'bills' | 'payments' | 'entries' | 'items', t: (k: string) => string): string {
+  return t(`proof.${noun}_${n === 1 ? 'one' : 'n'}`).replace('{n}', String(n))
 }
 
 export function ProofSheet({ spec, onClose, actions = [], showsGst }: {
@@ -109,9 +125,10 @@ export function ProofSheet({ spec, onClose, actions = [], showsGst }: {
   if (!spec) return null
 
   const compareLabel = proof?.compare ? t(proof.compare.key).replace('{day}', lastWeekdayName(language)) : ''
-  const countLine = proof?.count == null ? '' : proofCountLine(proof.count, spec.kind === 'explain' && spec.metric === 'got', t)
+  const countLine = proof?.count == null || spec.kind !== 'explain' ? '' : proofCountLine(proof.count, COUNT_NOUN[spec.metric], t)
   const note = spec.kind === 'drawer' ? t('proof.drawer_note')
-    : spec.metric === 'profit' ? t('proof.profit_note') : ''
+    : spec.metric === 'profit' ? t('proof.profit_note')
+    : spec.metric === 'stock' ? t('proof.stock_note') : ''
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose() }}>
@@ -151,7 +168,10 @@ export function ProofSheet({ spec, onClose, actions = [], showsGst }: {
               <ul className="rounded-2xl border border-border divide-y divide-border overflow-hidden">
                 {proof.rows.map((r, i) => (
                   <li key={i} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                    <span className="min-w-0 break-words">{proofRowLabel(r, t, showsGst)}</span>
+                    <span className="min-w-0 break-words">
+                      {proofRowLabel(r, t, showsGst)}
+                      {proofRowDetail(r) && <span className="block text-xs text-muted-foreground tabular-nums">{proofRowDetail(r)}</span>}
+                    </span>
                     <span className="tabular-nums font-semibold whitespace-nowrap">
                       {r.amount < 0 ? '− ' : ''}{formatINR(Math.abs(r.amount))}
                     </span>
@@ -163,6 +183,11 @@ export function ProofSheet({ spec, onClose, actions = [], showsGst }: {
                 </li>
               </ul>
 
+              {proof.after && (
+                <p className="text-sm text-muted-foreground">
+                  {t(proof.after.key)}: <span className="font-semibold text-foreground tabular-nums">{formatINR(proof.after.amount)}</span>
+                </p>
+              )}
               {proof.compare && (
                 <p className="text-sm text-muted-foreground">
                   {compareLabel}: <span className="font-semibold text-foreground tabular-nums">{formatINR(proof.compare.amount)}</span>

@@ -6,7 +6,7 @@ import { describe, test, expect, jest } from '@jest/globals'
 
 jest.mock('sonner', () => ({ toast: { info: jest.fn(), success: jest.fn(), error: jest.fn() } }))
 
-import { proofCountLine, proofRowLabel, proofUrl } from '@/components/dashboard/ProofSheet'
+import { proofCountLine, proofRowDetail, proofRowLabel, proofUrl } from '@/components/dashboard/ProofSheet'
 import { translations } from '@/lib/i18n'
 import { readCode } from '@/test-support/read-source'
 
@@ -27,12 +27,23 @@ describe('line words', () => {
   })
 })
 
+describe('line details (5b-3)', () => {
+  test('stock: quantity × cost, whole or decimal quantities; nothing without both', () => {
+    expect(proofRowDetail({ label: 'Atta', qty: 33, unit: 'pcs', each: 241.5, amount: 7969.5 })).toBe('33 pcs × ₹241.50')
+    expect(proofRowDetail({ label: 'Rice', qty: 12.5, unit: 'kg', each: 40, amount: 500 })).toBe('12.5 kg × ₹40')
+    expect(proofRowDetail({ label: 'x', amount: 1 })).toBe('')
+  })
+  test('expenses: the date follows the label', () => {
+    expect(proofRowLabel({ label: 'Transport', date: '2026-10-13T06:00:00.000Z', amount: 350 }, t, false)).toBe('Transport · 13 Oct')
+  })
+})
+
 describe('the count line', () => {
   test('one is singular (local copy, 14 Oct: "1 payments")', () => {
-    expect(proofCountLine(1, true, t)).toBe('1 payment')
-    expect(proofCountLine(3, true, t)).toBe('3 payments')
-    expect(proofCountLine(1, false, t)).toBe('1 bill')
-    expect(proofCountLine(10, false, t)).toBe('10 bills')
+    expect(proofCountLine(1, 'payments', t)).toBe('1 payment')
+    expect(proofCountLine(3, 'payments', t)).toBe('3 payments')
+    expect(proofCountLine(1, 'bills', t)).toBe('1 bill')
+    expect(proofCountLine(10, 'bills', t)).toBe('10 bills')
   })
 })
 
@@ -41,8 +52,8 @@ describe('the address', () => {
     expect(proofUrl({ kind: 'explain', metric: 'sales', scope: 'today', titleKey: 'x' })).toBe('/api/dashboard/explain?metric=sales&scope=today')
     const from = new Date('2026-10-01T00:00:00.000Z')
     const to = new Date('2026-10-14T10:00:00.000Z')
-    expect(proofUrl({ kind: 'explain', metric: 'netProfit', scope: 'range', from, to, titleKey: 'x' }))
-      .toBe(`/api/dashboard/explain?metric=netProfit&scope=range&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`)
+    expect(proofUrl({ kind: 'explain', metric: 'profit', scope: 'range', from, to, titleKey: 'x' }))
+      .toBe(`/api/dashboard/explain?metric=profit&scope=range&from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`)
   })
 })
 
@@ -58,10 +69,21 @@ describe('Home\'s numbers open the sheet', () => {
   })
   test('today\'s sales, profit, cash in drawer, udhaar collected, period sales and net profit each open their sheet', () => {
     const all = specs(code).join('\n')
-    for (const m of ["metric: 'sales', scope: 'today'", "metric: 'profit', scope: 'today'", "metric: 'sales', scope: 'range'", "metric: 'netProfit', scope: 'range'", "metric: 'got', scope: 'today'", "kind: 'drawer'"]) {
+    // 5b-3: the Business overview's five — Sales, Profit (its "after expenses" line
+    // replaced the Net profit card), Purchases, Expenses, Stock value.
+    for (const m of ["metric: 'sales', scope: 'today'", "metric: 'profit', scope: 'today'", "metric: 'got', scope: 'today'", "kind: 'drawer'",
+      "metric: 'sales', scope: 'range'", "metric: 'profit', scope: 'range'", "metric: 'purchases', scope: 'range'", "metric: 'expenses', scope: 'range'", "metric: 'stock'"]) {
       expect({ m, found: all.includes(m) }).toEqual({ m, found: true })
     }
     expect(code).toMatch(/<ProofSheet spec=\{proof\}/)
+  })
+  test('every period card follows the one period chip (5b plan: "all cards follow the chosen period")', () => {
+    const period = specs(code).filter((s) => /scope: 'range'/.test(s))
+    expect(period.length).toBeGreaterThanOrEqual(4)
+    expect(period.filter((s) => !/from: dateRange\.from, to: dateRange\.to/.test(s))).toEqual([])
+    // …and no card on Home is labelled with a fixed period of its own any more.
+    expect(code).not.toMatch(/title=\{`\$\{rangeLabel\} Revenue`\}/)
+    expect(code).not.toMatch(/t\('dash\.today_revenue'\)/)
   })
   test('each passes the number it shows, so a stale card is refreshed', () => {
     const all = specs(code)

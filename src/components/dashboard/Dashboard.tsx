@@ -55,7 +55,7 @@ import { todayMarginPct } from '@/lib/unit-profit'
 import { useCountUp } from '@/hooks/use-count-up'
 import { EmptyState } from '@/components/common/EmptyState'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
-import { ProofSheet, type ProofSpec, type ProofAction } from '@/components/dashboard/ProofSheet'
+import { ProofSheet, proofCountLine, type ProofSpec, type ProofAction } from '@/components/dashboard/ProofSheet'
 import { TodayCard, QuickTiles, CollectPayCard } from '@/components/dashboard/TodayCard'
 import { useDaySummary } from '@/hooks/use-day-summary'
 import { useArrivalRequest } from '@/hooks/use-new-entry-request'
@@ -179,7 +179,13 @@ export function Dashboard() {
     if (!spec) return []
     if (spec.kind === 'drawer') return [{ label: t('proof.open_cashbook'), onClick: () => setView('income-expense') }, { label: t('proof.close_day'), onClick: () => setShowDayEnd(true) }]
     if (spec.metric === 'got') return [{ label: t('proof.open_khata'), onClick: () => setView('parties') }]
-    if (spec.metric === 'netProfit') return [{ label: t('proof.open_cashbook'), onClick: () => setView('income-expense') }]
+    if (spec.metric === 'expenses') return [{ label: t('proof.open_cashbook'), onClick: () => setView('income-expense') }]
+    if (spec.metric === 'stock') return [{ label: t('proof.open_items'), onClick: () => { setPreviousView('dashboard'); setView('inventory') } }]
+    if (spec.metric === 'purchases') return [{ label: t('proof.open_bills'), onClick: () => {
+      setPendingDateRange({ from: dateRange.from.toISOString(), to: dateRange.to.toISOString(), preset: spec.periodLabel ?? '' })
+      setPreviousView('dashboard')
+      setView('purchases')
+    } }]
     return spec.scope === 'today'
       ? [{ label: t('proof.open_bills'), onClick: () => navigateToSalesWithDate(todayStart, new Date(), 'Today') }]
       : [{ label: t('proof.open_bills'), onClick: () => navigateToSalesWithDate(dateRange.from, dateRange.to, spec.periodLabel ?? '') }]
@@ -603,88 +609,68 @@ export function Dashboard() {
       <QuickTiles gstStatus={gstStatus(setting)} />
       <CollectPayCard kpis={kpis} />
 
-      {/* Date range selector + KPI header — sticky on desktop so user can change dates without scrolling back to top */}
+      {/* Phase 5b-3 (ledger model §7): the Business overview — five figures under
+          one period chip, each opening how it is worked out. Gone: the two Today
+          cards that ignored the chip (the Today card above has them) and the thin
+          strip (approved choice 4) — stock value is a card here, the GST figure is
+          in the GST summary below. Sticky on desktop so the chip stays in reach. */}
       <div className="flex items-center justify-between gap-3 flex-wrap lg:sticky lg:top-3 lg:z-20 lg:bg-background/80 lg:backdrop-blur-md lg:py-2 lg:-mx-2 lg:px-2 lg:rounded-lg">
-        <div>
-          <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
-          <p className="text-xs text-muted-foreground">{t('dash.filter_hint')}</p>
-        </div>
+        <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
         <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} />
       </div>
 
-      {/* KPI Cards */}
-      <div className={`grid grid-cols-2 ${hideProfit ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-3 lg:gap-4`}>
+      <div className={cn('grid grid-cols-2 gap-3 lg:gap-4', hideProfit ? 'lg:grid-cols-4' : 'lg:grid-cols-3 xl:grid-cols-5')}>
         <KPICard
-          title={t('dash.today_revenue')}
-          value={formatINR(kpis.todayRevenue)}
-          animateValue={kpis.todayRevenue}
-          icon={IndianRupee}
-          gradient="from-amber-500 to-orange-600"
-          // 🔒 AUDIT V24 §3: This figure is GST-INCLUSIVE (Σ totalAmount, net of
-          // credit notes) while the P&L "Revenue" is taxable (ex-GST). Same word,
-          // two numbers = instant distrust. Label the basis explicitly here and
-          // on the P&L report so the difference reads as intentional.
-          subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')}${showsGst ? ` • ${t('dash.incl_gst')}` : ''}`}
-          onClick={() => setProof({ kind: 'explain', metric: 'sales', scope: 'today', titleKey: 'proof.t_sales_today', shown: kpis.todayRevenue })}
-        />
-        {!hideProfit && (
-          <KPICard
-            title={t('dash.today_profit')}
-            value={formatINR(kpis.todayProfit)}
-            animateValue={kpis.todayProfit}
-            icon={TrendingUp}
-            gradient="from-emerald-500 to-teal-600"
-            subtitle={`${t('stat.margin')} ${todayMarginPct(kpis).toFixed(1)}%`}
-            onClick={() => setProof({ kind: 'explain', metric: 'profit', scope: 'today', titleKey: 'proof.t_profit_today', shown: kpis.todayProfit })}
-          />
-        )}
-        <KPICard
-          title={`${rangeLabel} Revenue`}
+          title={t('proof.t_sales_range')}
           value={formatINR(kpis.rangeRevenue)}
           animateValue={kpis.rangeRevenue}
           icon={Wallet}
           gradient="from-rose-500 to-pink-600"
-          // 🐛 UI/UX Phase 3 Fix 5: Suppress trend arrow when growth is 0 (no prior
-          // period to compare against). Was: always showed "↑ 0% vs prev" with an
-          // up-arrow — misleading for new users + early-morning existing users.
-          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')}${showsGst ? ` (${t('dash.incl_gst')})` : ''}${kpis.revenueGrowth !== 0 ? ` • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev` : ''}`}
+          // 🔒 AUDIT V24 §3: GST-inclusive (Σ totalAmount net of returns) while the
+          // P&L "Revenue" is taxable — said on the card so the two read as intended.
+          subtitle={`${proofCountLine(kpis.rangeTxnCount, 'bills', t)}${showsGst ? ` · ${t('dash.incl_gst')}` : ''}${kpis.revenueGrowth !== 0 ? ` · ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% ${t('overview.vs_before')}` : ''}`}
           trend={kpis.revenueGrowth !== 0 ? (kpis.revenueGrowth >= 0 ? 'up' : 'down') : undefined}
           onClick={() => setProof({ kind: 'explain', metric: 'sales', scope: 'range', from: dateRange.from, to: dateRange.to, titleKey: 'proof.t_sales_range', periodLabel: rangeLabel, shown: kpis.rangeRevenue })}
         />
         {!hideProfit && (
           <KPICard
-            title={`${t('dash.net_profit')} (${rangeLabel})`}
-            value={formatINR(kpis.netProfit)}
-            animateValue={kpis.netProfit}
-            icon={PiggyBank}
-            gradient="from-violet-500 to-purple-600"
-            subtitle={`${kpis.profitGrowth !== 0 ? `${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend` : 'No prior period to compare'}`}
-            trend={kpis.profitGrowth !== 0 ? (kpis.profitGrowth >= 0 ? 'up' : 'down') : undefined}
-            onClick={() => setProof({ kind: 'explain', metric: 'netProfit', scope: 'range', from: dateRange.from, to: dateRange.to, titleKey: 'proof.t_net_profit', periodLabel: rangeLabel, shown: kpis.netProfit })}
+            title={t('proof.t_profit')}
+            value={formatINR(kpis.rangeProfit)}
+            animateValue={kpis.rangeProfit}
+            icon={TrendingUp}
+            gradient="from-emerald-500 to-teal-600"
+            subtitle={t('overview.after').replace('{amount}', formatINR(kpis.netProfit))}
+            onClick={() => setProof({ kind: 'explain', metric: 'profit', scope: 'range', from: dateRange.from, to: dateRange.to, titleKey: 'proof.t_profit', periodLabel: rangeLabel, shown: kpis.rangeProfit })}
           />
         )}
-      </div>
-
-      {/* Secondary KPIs. Phase 5b-2: Receivable, Payable and Udhaar collected moved
-          into To collect / To pay and the Today card; 5b-3 folds the rest into the
-          Business overview (the thin strip goes, approved choice 4). */}
-      <div className={cn('grid grid-cols-2 gap-3 lg:gap-4', showsGst ? 'lg:grid-cols-2' : 'lg:grid-cols-1')}>
-        <MiniStatCard
-          label={t('dash.stock_value')}
-          value={formatINR(kpis.totalStockValue)}
-          icon={Boxes}
-          color="text-amber-600 dark:text-amber-400"
-          onClick={() => setView('inventory')}
+        <KPICard
+          title={t('proof.t_purchases')}
+          value={formatINR(kpis.rangePurchases)}
+          animateValue={kpis.rangePurchases}
+          icon={ShoppingCart}
+          gradient="from-sky-500 to-blue-600"
+          onClick={() => setProof({ kind: 'explain', metric: 'purchases', scope: 'range', from: dateRange.from, to: dateRange.to, titleKey: 'proof.t_purchases', periodLabel: rangeLabel, shown: kpis.rangePurchases })}
         />
-        {showsGst && (
-          <MiniStatCard
-            label={`${t('dash.gst_summary')} (${rangeLabel})`}
-            value={hasGst ? formatINR(gstSummary.netPayable) : '—'}
-            icon={Receipt}
-            color="text-violet-600"
-            onClick={() => setView('reports')}
+        <KPICard
+          title={t('proof.t_expenses')}
+          value={formatINR(kpis.rangeExpenses)}
+          animateValue={kpis.rangeExpenses}
+          icon={Receipt}
+          gradient="from-amber-500 to-orange-600"
+          onClick={() => setProof({ kind: 'explain', metric: 'expenses', scope: 'range', from: dateRange.from, to: dateRange.to, titleKey: 'proof.t_expenses', periodLabel: rangeLabel, shown: kpis.rangeExpenses })}
+        />
+        {/* Two slots on a phone and at 1024 px (3 columns), so no row has a gap; one at xl. */}
+        <div className={cn(!hideProfit && 'col-span-2 xl:col-span-1')}>
+          <KPICard
+            title={t('proof.t_stock')}
+            value={formatINR(kpis.totalStockValue)}
+            animateValue={kpis.totalStockValue}
+            icon={Boxes}
+            gradient="from-violet-500 to-purple-600"
+            subtitle={t('overview.today')}
+            onClick={() => setProof({ kind: 'explain', metric: 'stock', scope: 'today', titleKey: 'proof.t_stock', shown: kpis.totalStockValue })}
           />
-        )}
+        </div>
       </div>
 
       {/* 🔒 AUDIT V25 FIX §3 row 9 (Batch 3): Removed duplicate Revenue Target
@@ -1193,7 +1179,9 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick,
           </div>
           <p className="text-xs text-muted-foreground font-medium">{title}</p>
           <p className="text-xl lg:text-2xl font-bold mt-0.5 tracking-tight tabular-nums">{displayValue}</p>
-          {subtitle && <p className="text-xs text-muted-foreground mt-1 truncate">{subtitle}</p>}
+          {/* 5b-3: wraps to two lines — five cards in a row at 1024 px cut
+              "After expenses ₹3…" mid-number. */}
+          {subtitle && <p className="text-xs text-muted-foreground mt-1 line-clamp-2 break-words">{subtitle}</p>}
         </div>
       </div>
     </motion.div>

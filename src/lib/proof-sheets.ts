@@ -25,6 +25,12 @@ export interface ProofRow {
   params?: Record<string, number | string>
   /** A payment mode code ('cash', 'upi', …) shown after a plain label: "Deepak Kumar · UPI". */
   mode?: string
+  /** A date shown after the label: "Transport · 13 Oct" (ISO string). */
+  date?: string
+  /** Quantity × cost shown under the label: "33 pcs × ₹241.50" (stock value). */
+  qty?: number
+  unit?: string
+  each?: number
   amount: number
 }
 
@@ -127,7 +133,23 @@ export function netProfitProof(f: { netSales: number; profit: number; noCost?: n
   return { total: rupees(paise(f.profit) + paise(f.income) - paise(f.expenses)), rows }
 }
 
-// ─── Lists (payments, expenses) ─────────────────────────────────────────
+// ─── Purchases ──────────────────────────────────────────────────────────
+
+/**
+ * Purchases = the bill value of purchases in the period (Home's figure:
+ * purchase totalAmount), split into what was paid at billing and what is
+ * still to pay on those bills.
+ */
+export function purchasesProof(f: { total: number; paid: number }): Proof {
+  const total = paise(f.total)
+  const paid = paise(f.paid)
+  const rows: ProofRow[] = []
+  if (paid !== 0) rows.push({ key: 'proof.purchase_paid', amount: rupees(paid) })
+  if (total - paid !== 0) rows.push({ key: 'proof.purchase_due', amount: rupees(total - paid) })
+  return { total: rupees(total), rows }
+}
+
+// ─── Lists (payments, expenses, stock) ──────────────────────────────────
 
 /**
  * A list of entries that may be cut short. When the database had more
