@@ -27,6 +27,7 @@ import { ArrowRight, TrendingUp, TrendingDown, IndianRupee } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { chartColors } from '@/lib/chart-theme'
 import { formatINR, formatINRCompact, cn } from '@/lib/utils'
+import { salesVsPurchases } from '@/lib/sales-vs-purchases'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.62 0.16 250)', 'oklch(0.62 0.14 200)', 'oklch(0.62 0.22 15)']
 
@@ -49,6 +50,8 @@ export function DashboardCharts({
   t,
   setView,
 }: DashboardChartsProps) {
+  // #237: one set of figures for the Sales vs Purchases card (line, difference, colour).
+  const svp = salesVsPurchases(kpis)
   return (
     <>
       {/* Mini-charts row — quick visual insights at a glance.
@@ -108,7 +111,7 @@ export function DashboardCharts({
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-3">
               {/* 🐛 UI/UX Phase 3 Fix 3b: Show empty state when no data (was: blank PieChart) */}
-              {(kpis.rangeRevenue || 0) === 0 && (kpis.rangePurchases || 0) === 0 ? (
+              {svp.empty ? (
                 <div className="w-20 h-20 flex items-center justify-center text-center text-xs text-muted-foreground/60 leading-tight">
                   No data<br />for range
                 </div>
@@ -118,8 +121,8 @@ export function DashboardCharts({
                   <PieChart>
                     <Pie
                       data={[
-                        { name: 'Sales', value: kpis.rangeRevenue || 0, fill: 'oklch(0.62 0.15 155)' },
-                        { name: 'Purchases', value: kpis.rangePurchases || 0, fill: 'oklch(0.62 0.18 42)' },
+                        { name: 'Sales', value: svp.sales, fill: 'oklch(0.62 0.15 155)' },
+                        { name: 'Purchases', value: svp.purchases, fill: 'oklch(0.62 0.18 42)' },
                       ]}
                       dataKey="value"
                       cx="50%"
@@ -138,20 +141,17 @@ export function DashboardCharts({
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ background: 'oklch(0.62 0.15 155)' }} />
                   <span className="text-xs text-muted-foreground flex-1">Sales</span>
-                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(kpis.rangeRevenue || 0)}</span>
+                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(svp.sales)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ background: 'oklch(0.62 0.18 42)' }} />
                   <span className="text-xs text-muted-foreground flex-1">Purchases</span>
-                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(kpis.totalPayable || 0)}</span>
+                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(svp.purchases)}</span>
                 </div>
                 <div className="flex items-center gap-2 pt-1 border-t border-border/40">
-                  <span className="text-xs text-muted-foreground flex-1">Net</span>
-                  <span className={cn(
-                    'text-sm font-bold tabular-nums',
-                    (kpis.rangeRevenue - (kpis.totalPayable || 0)) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
-                  )}>
-                    {formatINRCompact(kpis.rangeRevenue - (kpis.rangePurchases || 0))}
+                  <span className="text-xs text-muted-foreground flex-1" title="Not profit: stock bought and not yet sold is still yours">Sales − purchases</span>
+                  <span className={cn('text-sm font-bold tabular-nums', svp.differenceIsPositive ? 'text-good' : 'text-bad')}>
+                    {formatINRCompact(svp.difference)}
                   </span>
                 </div>
               </div>
