@@ -6,7 +6,7 @@ import { shouldHideProfit } from '@/lib/profit-visibility'
 import { noStore } from '@/lib/cache'
 import { apiError } from '@/lib/api-error'
 import { activeTransactionWhere } from '@/lib/query-helpers'
-import { istDayStart, istMonthStart } from '@/lib/timezone'
+import { istDayStart, istMonthStart, sameTimeLastWeek } from '@/lib/timezone'
 import { netSalesProfit, netSalesTaxable, netSalesTotal } from '@/lib/net-sales'
 import { fromPaise, roundMoney } from '@/lib/money'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
@@ -28,7 +28,6 @@ import { listProof, netProfitProof, profitProof, salesProof, type Proof, type Pr
  * Read-only. Profit metrics follow the hide-profit setting, like Home.
  */
 
-const WEEK_MS = 7 * 86_400_000
 const PROOF_LIST_LIMIT = 50
 const METRICS = ['sales', 'profit', 'netProfit', 'got'] as const
 type Metric = (typeof METRICS)[number]
@@ -38,8 +37,8 @@ interface Window { from: Date; to: Date; prevFrom: Date; prevTo: Date; compareKe
 /** Today = IST midnight → now, compared with the same hours a week ago. A range = Home's period, compared with the period before (as /api/dashboard). */
 function windowFor(scope: string, fromStr: string | null, toStr: string | null, now: Date): Window | null {
   if (scope === 'today') {
-    const from = istDayStart(now)
-    return { from, to: now, prevFrom: new Date(from.getTime() - WEEK_MS), prevTo: new Date(now.getTime() - WEEK_MS), compareKey: 'proof.cmp_last_week' }
+    const lastWeek = sameTimeLastWeek(now)
+    return { from: istDayStart(now), to: now, prevFrom: lastWeek.from, prevTo: lastWeek.to, compareKey: 'proof.cmp_last_week' }
   }
   if (scope !== 'range') return null
   const from = fromStr ? new Date(fromStr) : istMonthStart(now)

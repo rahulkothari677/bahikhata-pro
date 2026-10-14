@@ -25,6 +25,7 @@ import { offlineFetch } from '@/lib/offline-fetch'
 import { formatINR } from '@/lib/utils'
 import { drawerProof, PROOF_MODES, type DrawerTerms, type ProofRow } from '@/lib/proof-sheets'
 import { useTranslation } from '@/hooks/use-translation'
+import { useDaySummary } from '@/hooks/use-day-summary'
 
 export type ProofSpec =
   | { kind: 'explain'; metric: 'sales' | 'profit' | 'netProfit' | 'got'; scope: 'today' | 'range'; from?: Date; to?: Date; titleKey: string; periodLabel?: string; shown?: number }
@@ -57,6 +58,12 @@ export function proofRowLabel(r: ProofRow, t: (k: string) => string, showsGst: b
   return s
 }
 
+/** Last week's weekday in IST ("Wednesday" / "बुधवार"), for "Same time last {day}". */
+export function lastWeekdayName(language: string, now: Date = new Date()): string {
+  return new Intl.DateTimeFormat(language === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'long', timeZone: 'Asia/Kolkata' })
+    .format(new Date(now.getTime() - 7 * 86_400_000))
+}
+
 /** "1 bill" / "12 bills" (payments for the collected sheet). Exported for the guard. */
 export function proofCountLine(n: number, payments: boolean, t: (k: string) => string): string {
   const key = payments ? (n === 1 ? 'proof.payments_one' : 'proof.payments_n') : (n === 1 ? 'proof.bills_one' : 'proof.bills_n')
@@ -71,21 +78,25 @@ export function ProofSheet({ spec, onClose, actions = [], showsGst }: {
 }) {
   const { t, language } = useTranslation()
   const queryClient = useQueryClient()
-  const url = spec?.kind === 'explain' ? proofUrl(spec) : '/api/day-summary'
+  const url = spec?.kind === 'explain' ? proofUrl(spec) : ''
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    // The drawer shares the Close-the-day sheet's cache: one fetch, one answer.
-    queryKey: spec?.kind === 'drawer' ? ['day-summary'] : ['proof', url],
-    enabled: !!spec,
+  const explain = useQuery({
+    queryKey: ['proof', url],
+    enabled: spec?.kind === 'explain',
     staleTime: 0,
     queryFn: async () => {
       const r = await offlineFetch(url)
       if (!r.ok) throw new Error(`proof ${r.status}`)
-      return r.json()
+      return r.json() as Promise<ProofData>
     },
   })
-  const proof: ProofData | undefined = !data ? undefined
-    : spec?.kind === 'drawer' ? drawerProof(data as DrawerTerms) : (data as ProofData)
+  // The drawer reads the same query as Home's figure and the Close-the-day dialog.
+  const day = useDaySummary(spec?.kind === 'drawer')
+  const active = spec?.kind === 'drawer' ? day : explain
+  const { isLoading, isError, refetch } = active
+  const proof: ProofData | undefined = spec?.kind === 'drawer'
+    ? (day.data ? drawerProof(day.data as DrawerTerms) : undefined)
+    : explain.data
 
   // A sale saved between Home's load and this sheet makes the two differ: refresh Home.
   const shown = spec?.shown
@@ -97,9 +108,7 @@ export function ProofSheet({ spec, onClose, actions = [], showsGst }: {
 
   if (!spec) return null
 
-  const lastWeekDay = new Intl.DateTimeFormat(language === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'long', timeZone: 'Asia/Kolkata' })
-    .format(new Date(Date.now() - 7 * 86_400_000))
-  const compareLabel = proof?.compare ? t(proof.compare.key).replace('{day}', lastWeekDay) : ''
+  const compareLabel = proof?.compare ? t(proof.compare.key).replace('{day}', lastWeekdayName(language)) : ''
   const countLine = proof?.count == null ? '' : proofCountLine(proof.count, spec.kind === 'explain' && spec.metric === 'got', t)
   const note = spec.kind === 'drawer' ? t('proof.drawer_note')
     : spec.metric === 'profit' ? t('proof.profit_note') : ''

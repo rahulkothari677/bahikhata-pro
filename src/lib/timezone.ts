@@ -52,6 +52,17 @@ export function istDayStart(date: Date = new Date()): Date {
 }
 
 /**
+ * The same hours one week ago: last <weekday> from IST midnight to this
+ * time of day. "Today's sales against last Tuesday" compares like with like —
+ * a whole last Tuesday against half of today would read as a bad day every
+ * morning. One helper for Home's figure and its proof sheet (Phase 5b-2).
+ */
+export function sameTimeLastWeek(now: Date = new Date()): { from: Date; to: Date } {
+  const WEEK_MS = 7 * 86_400_000
+  return { from: new Date(istDayStart(now).getTime() - WEEK_MS), to: new Date(now.getTime() - WEEK_MS) }
+}
+
+/**
  * Get the start of the current IST month (1st day, 00:00:00 IST) as a UTC Date.
  *
  * Example: if now is 2026-07-15 10:00 IST, this returns 2026-06-30 18:30 UTC

@@ -40,7 +40,7 @@ const SRC = path.resolve(process.cwd(), 'src')
 const CSS = fs.readFileSync(path.join(SRC, 'app/globals.css'), 'utf8')
 
 /** Ceiling for raw meaning-colour shades in src/. Lower it; never raise it. */
-const RAW_COLOUR_CEILING = 2716
+const RAW_COLOUR_CEILING = 2647  // 5b-2: the new Today card and tiles use the roles (was 2716)
 
 function sourceFiles(): { rel: string; code: string }[] {
   const out: { rel: string; code: string }[] = []

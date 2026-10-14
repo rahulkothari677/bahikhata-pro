@@ -118,6 +118,7 @@ export type NavSurface =
   | 'account'           // AccountScreen menu
   | 'global-search'     // GlobalSearch commands
   | 'new-sheet'         // the bottom bar's + sheet (Phase 5a-3)
+  | 'home-tiles'        // the quick tiles under Home's Today card (Phase 5b-2)
 
 export interface NavDestination {
   /** Unique identifier (e.g. 'gstr-1', 'reconciliation', 'dashboard') */
@@ -154,6 +155,8 @@ export interface NavDestination {
   activeViews?: ViewType[]
   /** Desktop menu only (Phase 5a-5): its place. The bar's tabs come first, in the bar's order. */
   menuOrder?: number
+  /** Home's quick tiles only (Phase 5b-2): its place in the row. Every 'home-tiles' entry needs one. */
+  tileOrder?: number
   /**
    * New sheet only (Phase 5a-3): its place, and which row it sits in: 'ai'
    * (Scan, Speak) at the top, 'grid' in the middle, 'primary' (New sale) as the
@@ -466,7 +469,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'more', 'global-search'],
+    surfaces: ['sidebar-main', 'more', 'global-search', 'home-tiles'],
+    tileOrder: 2,
     shortLabelKey: 'short.cashbook',
     moreGroup: 'books',
     moreOrder: 2,
@@ -519,7 +523,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'inventory',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'more', 'global-search'],
+    surfaces: ['sidebar-main', 'more', 'global-search', 'home-tiles'],
+    tileOrder: 3,
     shortLabelKey: 'short.items',
     moreGroup: 'books',
     moreOrder: 1,
@@ -586,7 +591,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     // 🔒 V26 FIX N5: was ['more'] only — desktop users had no named entry
     // (only the Bulk Reminders button inside Parties). Now in Sidebar Tools + Ctrl+K.
-    surfaces: ['more', 'sidebar-tools', 'global-search'],
+    surfaces: ['more', 'sidebar-tools', 'global-search', 'home-tiles'],
+    tileOrder: 4,
     shortLabelKey: 'short.reminders',
     moreGroup: 'tools',
     moreOrder: 6,
@@ -614,7 +620,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'reports',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'global-search', 'more'],
+    surfaces: ['sidebar-main', 'global-search', 'more', 'home-tiles'],
+    tileOrder: 1,
     moreGroup: 'books',
     moreOrder: 4,
     sortOrder: 8,
@@ -922,7 +929,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
-    surfaces: ['reports-hub'],
+    surfaces: ['reports-hub', 'home-tiles'],
+    tileOrder: 6,
+    shortLabelKey: 'short.gst',
     sortOrder: 4,
     moduleKey: 'reports',
     labelKey: 'nav.label.gst-summary',
@@ -1257,7 +1266,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     // 🔒 V26 FIX N5: Sidebar Tools + Ctrl+K — desktop had only the dashboard
     // hero button, with no named "Day-End" entry anywhere.
-    surfaces: ['more', 'sidebar-tools', 'global-search'],
+    surfaces: ['more', 'sidebar-tools', 'global-search', 'home-tiles'],
+    tileOrder: 5,
     shortLabelKey: 'short.day_end',
     moreGroup: 'tools',
     moreOrder: 5,

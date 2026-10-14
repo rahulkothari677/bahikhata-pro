@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { findProductByScannedCode, matchesProductSearch, resolveProductForEnterKey } from '@/lib/find-product-by-code'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store/app-store'
+import { useArrivalRequest } from '@/hooks/use-new-entry-request'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -240,6 +241,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       setBarcodeOpen(true)
     }
   }, [triggerBarcodeOpen])
+  // Phase 5b-2: "Speak" / "Barcode" from the + sheet, More or search arrive as
+  // requests — the counters above only work when this screen is already open
+  // (the header's mic), and were missed when it opened a moment later.
+  const entryView = estimateMode ? 'new-estimate' : type === 'purchase' ? 'new-purchase' : 'new-sale'
+  useArrivalRequest(entryView, 'voice', () => setShowVoiceEntry(true))
+  useArrivalRequest(entryView, 'barcode', () => setBarcodeOpen(true))
   // Prevents autosave until preset check is complete (avoids creating
   // empty drafts when "Repeat Last Sale" or scanner pre-fills the form)
   const [presetChecked, setPresetChecked] = useState(false)
@@ -1486,7 +1493,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-9 w-9 p-0 -mr-1 -mt-1 flex-shrink-0"
+                className="h-9 w-9 p-0 -mr-1 -mt-1 flex-shrink-0 hit-48"
                 onClick={() => setShowVoiceEntry(false)}
                 aria-label="Close voice entry"
               >

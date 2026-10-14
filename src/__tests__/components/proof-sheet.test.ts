@@ -47,16 +47,25 @@ describe('the address', () => {
 })
 
 describe('Home\'s numbers open the sheet', () => {
-  const code = readCode('src/components/dashboard/Dashboard.tsx')
-  test('today\'s sales, profit, period sales, net profit and udhaar collected each open their sheet', () => {
-    for (const m of ["metric: 'sales', scope: 'today'", "metric: 'profit', scope: 'today'", "metric: 'sales', scope: 'range'", "metric: 'netProfit', scope: 'range'", "metric: 'got', scope: 'today'"]) {
-      expect({ m, found: code.includes(`setProof({ kind: 'explain', ${m}`) }).toEqual({ m, found: true })
+  // 5b-2: the Today card (TodayCard.tsx) holds today's figures; the period
+  // cards stay in Dashboard.tsx. Both hand a ProofSpec to the one sheet.
+  const code = readCode('src/components/dashboard/Dashboard.tsx') + readCode('src/components/dashboard/TodayCard.tsx')
+  /** Every sheet a page can open: { kind: 'explain' | 'drawer', … } literals. */
+  const specs = (src: string) => [...src.matchAll(/\{ kind: '(explain|drawer)'[^}]*\}/g)].map((m) => m[0])
+  test('the reader works on good and bad input', () => {
+    expect(specs("onProof({ kind: 'explain', metric: 'got', scope: 'today', shown: kpis.x })")).toHaveLength(1)
+    expect(specs('setView(\'sales\')')).toEqual([])
+  })
+  test('today\'s sales, profit, cash in drawer, udhaar collected, period sales and net profit each open their sheet', () => {
+    const all = specs(code).join('\n')
+    for (const m of ["metric: 'sales', scope: 'today'", "metric: 'profit', scope: 'today'", "metric: 'sales', scope: 'range'", "metric: 'netProfit', scope: 'range'", "metric: 'got', scope: 'today'", "kind: 'drawer'"]) {
+      expect({ m, found: all.includes(m) }).toEqual({ m, found: true })
     }
     expect(code).toMatch(/<ProofSheet spec=\{proof\}/)
   })
   test('each passes the number it shows, so a stale card is refreshed', () => {
-    const opens = code.match(/setProof\(\{ kind: 'explain'[^)]*\}\)/g) ?? []
-    expect(opens.length).toBeGreaterThanOrEqual(6)
-    expect(opens.filter((o) => !/shown: kpis\./.test(o))).toEqual([])
+    const all = specs(code)
+    expect(all.length).toBeGreaterThanOrEqual(7)
+    expect(all.filter((o) => !/shown: /.test(o))).toEqual([])
   })
 })

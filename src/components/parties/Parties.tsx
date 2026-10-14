@@ -13,7 +13,7 @@ import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
-import { useNewEntryRequest } from '@/hooks/use-new-entry-request'
+import { useNewEntryRequest, useArrivalRequest } from '@/hooks/use-new-entry-request'
 import { useTranslation } from '@/hooks/use-translation'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn, getInitials, formatINRCompact } from '@/lib/utils'
@@ -91,6 +91,9 @@ export function Parties() {
       setBulkRemindersOpen(true)
     }
   }, [triggerBulkReminders])
+  // Phase 5b-2: the Reminders tile / More / search ask as a request, which
+  // also works when Khata was not open yet (the counter above was missed).
+  useArrivalRequest('parties', 'bulk-reminders', () => setBulkRemindersOpen(true))
 
   const filtered = parties.filter(p => {
     if (filter !== 'all' && p.type !== filter && p.type !== 'both') return false

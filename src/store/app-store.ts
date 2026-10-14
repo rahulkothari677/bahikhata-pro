@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { rememberScroll, restoreScroll, scrollToTop } from '@/lib/scroll-memory'
 
+/** What a screen should do when it arrives (pendingArrival / useArrivalRequest). */
+export type ArrivalAction = 'new-entry' | 'day-end' | 'bulk-reminders' | 'voice' | 'barcode'
+
 export type ViewType =
   | 'dashboard'
   | 'ask'
@@ -224,10 +227,16 @@ interface AppState {
   /** Phase 5a-3: the New sheet opened by the bottom bar's + button. */
   newSheetOpen: boolean
   setNewSheetOpen: (open: boolean) => void
-  /** Phase 5a-3: a screen whose add form should open (see useNewEntryRequest). */
-  pendingNewEntryView: ViewType | null
-  requestNewEntry: (view: ViewType) => void
-  clearNewEntryRequest: () => void
+  /**
+   * Something a screen should do when it arrives (see useArrivalRequest):
+   * open its add form, the Close-the-day dialog, bulk reminders, the mic or the
+   * barcode scanner. Phase 5a-3 made this for add forms (#214); 5b-2 widened it
+   * after Close day and Reminders from More, and Speak/Barcode, showed the same
+   * bug — a counter bumped before the screen existed was taken as its baseline.
+   */
+  pendingArrival: { view: ViewType; action: ArrivalAction } | null
+  requestOnArrival: (view: ViewType, action: ArrivalAction) => void
+  clearArrival: () => void
   previousView: ViewType | null
   setPreviousView: (v: ViewType | null) => void
   pendingDateRange: { from: string; to: string; preset: string } | null
@@ -410,9 +419,9 @@ export const useAppStore = create<AppState>()(
       setKhataSide: (side) => set({ khataSide: side }),
       newSheetOpen: false,
       setNewSheetOpen: (open) => set({ newSheetOpen: open }),
-      pendingNewEntryView: null,
-      requestNewEntry: (view) => set({ pendingNewEntryView: view }),
-      clearNewEntryRequest: () => set({ pendingNewEntryView: null }),
+      pendingArrival: null,
+      requestOnArrival: (view, action) => set({ pendingArrival: { view, action } }),
+      clearArrival: () => set({ pendingArrival: null }),
       previousView: null,
       setPreviousView: (v) => set({ previousView: v }),
       pendingDateRange: null,

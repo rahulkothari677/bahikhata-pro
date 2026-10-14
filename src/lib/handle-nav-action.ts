@@ -55,13 +55,13 @@ export function handleNavAction(
       // list view, leaving the user to find the + button themselves.
       // Phase 5a-3: the counter bump fired before the target screen existed, so
       // the form never opened. A request waits until the screen consumes it.
-      if (params.fireTriggerNewEntry && dest.view) store.requestNewEntry(dest.view)
+      if (params.fireTriggerNewEntry && dest.view) store.requestOnArrival(dest.view, 'new-entry')
       else if (params.fireTriggerNewEntry) store.fireTriggerNewEntry()
-      // 🔒 V26 N23: Voice Entry / Barcode Scanner deep-link triggers.
-      // Same pattern — after navigating to new-sale, fire the voice/barcode
-      // trigger so TransactionEntry auto-opens the mic/scanner.
-      if (params.fireTriggerVoiceOpen) store.fireTriggerVoiceOpen()
-      if (params.fireTriggerBarcodeOpen) store.fireTriggerBarcodeOpen()
+      // 🔒 V26 N23: Voice Entry / Barcode Scanner open the mic / scanner on
+      // New Sale. Phase 5b-2: as a request (the counter bump was missed when
+      // New Sale was not open yet — the #214 class).
+      if (params.fireTriggerVoiceOpen && dest.view) store.requestOnArrival(dest.view, 'voice')
+      if (params.fireTriggerBarcodeOpen && dest.view) store.requestOnArrival(dest.view, 'barcode')
       break
 
     case 'navigate-report':
@@ -85,13 +85,15 @@ export function handleNavAction(
       if (dest.view) store.setView(dest.view)
       break
 
+    // Phase 5b-2: requests, not counter bumps (Close day / Reminders from More
+    // opened Home / Khata without the dialog — the #214 class).
     case 'navigate-day-end':
-      store.fireTriggerDayEnd()
+      store.requestOnArrival('dashboard', 'day-end')
       store.setView('dashboard')
       break
 
     case 'navigate-bulk':
-      store.fireTriggerBulkReminders()
+      store.requestOnArrival('parties', 'bulk-reminders')
       store.setView('parties')
       break
 

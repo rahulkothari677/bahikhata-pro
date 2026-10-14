@@ -102,7 +102,7 @@ describe('V26 Phase 5 Batch 5 — Validation + error UX + cold-start + error bou
       'components/income/IncomeExpense.tsx',
       'components/settings/StaffManagement.tsx',
       'components/settings/Settings.tsx',
-      'components/dashboard/DayEndSummary.tsx',
+      'hooks/use-day-summary.ts',  // 5b-2: DayEndSummary's fetch moved into the shared hook
       'components/common/PartySelect.tsx',
       'components/ledger/TransactionDetail.tsx',
       'components/ledger/TransactionEntry.tsx',

@@ -8,7 +8,7 @@ import { withCache, noStore } from '@/lib/cache'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { getReceivablePayable } from '@/lib/party-balance'
-import { istDayStart, istMonthStart, getISTDateParts, IST_OFFSET_MS } from '@/lib/timezone'
+import { istDayStart, istMonthStart, getISTDateParts, IST_OFFSET_MS, sameTimeLastWeek } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
 
@@ -107,6 +107,12 @@ export async function GET(req: NextRequest) {
     // Using the greater of rangeTo/now ensures today's KPIs are always
     // included in the query, regardless of the selected range.
     const effectiveRangeEnd = rangeTo > now ? rangeTo : now
+
+    // Phase 5b-2: "today's sales against last <weekday>" — the same hours a
+    // week ago (shared with the proof sheet). The KPI scan must reach back to
+    // it even when the chosen period is short.
+    const lastWeek = sameTimeLastWeek(now)
+    const scanFrom = lastWeek.from < prevRangeFrom ? lastWeek.from : prevRangeFrom
 
     // === BATCH 1: Static data (4 small queries — wakes the DB if cold) ===
     // 🔒 V8.1: Wrapped in withConnectionRetry — if the DB is cold (Neon
@@ -247,6 +253,7 @@ export async function GET(req: NextRequest) {
         today_net_sales_paise: string;
         today_count: bigint;
         today_credit_note_count: bigint;
+        lastweek_revenue_paise: string; lastweek_count: bigint;
         range_revenue_paise: string; range_profit_paise: string;
         range_expenses_paise: string; range_purchases_paise: string;
         range_income_paise: string; range_sale_count: bigint;
@@ -267,6 +274,9 @@ export async function GET(req: NextRequest) {
             - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "subtotal" - "discountAmount" ELSE 0 END), 0)::numeric AS today_net_sales,
             COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_count,
             COUNT(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_credit_note_count,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${lastWeek.from} AND "date" <= ${lastWeek.to} THEN "totalAmount" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${lastWeek.from} AND "date" <= ${lastWeek.to} THEN "totalAmount" ELSE 0 END), 0)::numeric AS lastweek_revenue,
+            COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${lastWeek.from} AND "date" <= ${lastWeek.to} THEN 1 END) AS lastweek_count,
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
             - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric
@@ -298,7 +308,7 @@ export async function GET(req: NextRequest) {
           FROM "Transaction"
           WHERE "userId" = ${userId}
             AND "deletedAt" IS NULL
-            AND "date" >= ${prevRangeFrom}
+            AND "date" >= ${scanFrom}
             AND "date" <= ${effectiveRangeEnd}
         )
         SELECT
@@ -307,6 +317,8 @@ export async function GET(req: NextRequest) {
           today_net_sales AS today_net_sales_paise,
           today_count,
           today_credit_note_count,
+          lastweek_revenue AS lastweek_revenue_paise,
+          lastweek_count,
           range_revenue AS range_revenue_paise,
           range_profit AS range_profit_paise,
           range_expenses AS range_expenses_paise,
@@ -445,6 +457,8 @@ export async function GET(req: NextRequest) {
     const todayNetSales = fromPaise(Number(kpi.today_net_sales_paise))
     const todayTxnCount = Number(kpi.today_count)
     const todayCreditNoteCount = Number(kpi.today_credit_note_count)
+    const todayLastWeekRevenue = fromPaise(Number(kpi.lastweek_revenue_paise))
+    const todayLastWeekCount = Number(kpi.lastweek_count)
     const rangeRevenue = fromPaise(Number(kpi.range_revenue_paise))
     const rangeProfit = fromPaise(Number(kpi.range_profit_paise))
     const rangeExpenses = fromPaise(Number(kpi.range_expenses_paise))
@@ -467,6 +481,15 @@ export async function GET(req: NextRequest) {
 
     // Receivable/Payable
     const { totalReceivable, totalPayable } = receivablePayable
+    // Phase 5b-2: "₹18,619 from 12 customers; ₹1,500 to 1 supplier". Counted
+    // from the same per-party balances the totals add (balance > 0 / < 0), so
+    // the count and the rupees can never describe different parties.
+    let receivableCount = 0
+    let payableCount = 0
+    for (const b of receivablePayable.partyBalances.values()) {
+      if (b.balance > 0) receivableCount++
+      else if (b.balance < 0) payableCount++
+    }
 
     // GST summary
     // 🔒 V17 PAISE MIGRATION Phase 2F-b: SQL returns paise; convert to rupees via fromPaise().
@@ -661,6 +684,8 @@ export async function GET(req: NextRequest) {
         todayNetSales,  // #134: before GST, net of returns — the margin % base
         todayTxnCount,
         todayCreditNoteCount,  // 🔒 V17 Audit Phase 1 P0.3: for "net of returns" UI
+        todayLastWeekRevenue,  // Phase 5b-2: same hours last week (sameTimeLastWeek)
+        todayLastWeekCount,
         rangeRevenue,
         rangeProfit,
         rangeExpenses,
@@ -671,6 +696,8 @@ export async function GET(req: NextRequest) {
         netProfit: roundMoney(rangeProfit + rangeIncome - rangeExpenses),
         totalReceivable,
         totalPayable,
+        receivableCount,  // Phase 5b-2: parties with balance > 0
+        payableCount,     // Phase 5b-2: parties with balance < 0
         totalStockValue,
         productCount,
         partyCount,

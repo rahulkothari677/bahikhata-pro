@@ -106,6 +106,11 @@ export function caseBlock(source: string, name: string): string {
  * The replacement for `src.slice(i, i + 700)`. Counts braces from the first
  * `{` after the marker, so the block ends where the code says it ends however
  * long it grows.
+ *
+ * The FIRST `{` — so a marker before a signature with an object type
+ * (`function f(opts?: { … })`) returns that type, not the body. Point the
+ * marker past the signature, or read the whole file. (5b-2: a guard on
+ * handleNavAction read only its `opts` type and passed with the bug back.)
  */
 export function balancedBlock(source: string, marker: string | RegExp): string {
   const at = typeof marker === 'string'

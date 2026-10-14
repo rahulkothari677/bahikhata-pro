@@ -16,12 +16,9 @@ import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type D
 import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
-  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat, Loader2,
-  BookOpenText, Share2, Calendar, Target, HandCoins, FileText,
+  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat,
+  BookOpenText, Share2, Calendar, Target,
   AlertCircle, Send, ShoppingCart, Check,
-  // Same icon the nav registry gives Ask — deliberately NOT a magnifying
-  // glass, which was reported as the feature "missing" when it wore one.
-  MessageCircleQuestion,
 } from 'lucide-react'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
@@ -59,6 +56,9 @@ import { useCountUp } from '@/hooks/use-count-up'
 import { EmptyState } from '@/components/common/EmptyState'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { ProofSheet, type ProofSpec, type ProofAction } from '@/components/dashboard/ProofSheet'
+import { TodayCard, QuickTiles, CollectPayCard } from '@/components/dashboard/TodayCard'
+import { useDaySummary } from '@/hooks/use-day-summary'
+import { useArrivalRequest } from '@/hooks/use-new-entry-request'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -80,6 +80,9 @@ export function Dashboard() {
   const [showDayEnd, setShowDayEnd] = useState(false)
   // Phase 5b-1: the "how is this worked out?" sheet for a tapped number.
   const [proof, setProof] = useState<ProofSpec | null>(null)
+  // Phase 5b-2: "Close day" from More, search or a Home tile opens the dialog
+  // even when Home was not open yet.
+  useArrivalRequest('dashboard', 'day-end', () => setShowDayEnd(true))
 
   // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): When MoreScreen's "Day-End Summary" is
   // tapped, it calls fireTriggerDayEnd() + setView('dashboard'). This effect
@@ -135,6 +138,8 @@ export function Dashboard() {
   // → two full dashboard API calls on every page load (28s + 41s on cold DB).
   // Now: ONE hook, ONE cache key, ONE API call. React Query dedupes.
   const { data, isLoading, error } = useDashboard(dateRange)
+  // Phase 5b-2: Cash in drawer on the Today card (the Close-the-day dialog's own query).
+  const { data: daySummary } = useDaySummary()
 
   // 🔒 V9 4.1: Track loading state in ref for the waking-message timer
   useEffect(() => {
@@ -579,168 +584,24 @@ export function Dashboard() {
 
   return (
     <div className="space-y-3 lg:space-y-5">
-      {/* Greeting banner — also the "Cash in Hand" deep-link target */}
-      {/* 🔒 AUDIT V25 FIX BUG-032 (Batch 6): id='cash-in-hand' for scroll-target deep-link. */}
-      <motion.div
-        id="cash-in-hand"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl bg-gradient-saffron p-3 lg:p-5 text-white shadow-lg relative overflow-hidden"
-      >
-        <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -mr-24 -mt-24" />
-        <div className="absolute bottom-0 right-20 w-32 h-32 bg-white/5 rounded-full -mb-16" />
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div>
-            <p className="text-white/80 text-xs font-medium">{t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'}</p>
-            {/* 🔒 V26 Phase 8: Scale back the hero — was too big on mobile.
-                Phase 6 §2.3 inverted the hierarchy (revenue dominant, shop name
-                demoted) but made the revenue text-3xl/4xl which is too large on
-                a 360px mobile screen. Now: text-2xl on mobile, text-3xl on
-                desktop — still the dominant element, but proportional. */}
-            <p className="text-xs font-medium text-white/90 mt-0.5">{setting?.shopName || 'My Shop'}</p>
-            <div className="mt-1.5">
-              {/* Phase 5b-1: the figure opens how it is worked out. */}
-              <button
-                type="button"
-                onClick={() => setProof({ kind: 'explain', metric: 'sales', scope: 'today', titleKey: 'proof.t_sales_today', shown: kpis.todayRevenue })}
-                className="text-left rounded-lg min-h-12 -mx-1 px-1 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white"
-                aria-label={`${t('proof.t_sales_today')} ${formatINR(kpis.todayRevenue)}. ${t('proof.tap_hint')}`}
-              >
-                <span className="block text-xs text-white/70 font-medium">{t('proof.t_sales_today')}</span>
-                <span className="block text-2xl lg:text-3xl font-bold tabular-nums text-white mt-0.5">
-                  {formatINR(kpis.todayRevenue)}
-                </span>
-              </button>
-              <p className="text-white/80 text-xs mt-0.5">
-                {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
-                {/* 🔒 V17 Audit Phase 1 P0.3: Show "net of returns" badge if credit notes exist today */}
-                {kpis.todayCreditNoteCount > 0 && (
-                  <span className="ml-2 inline-flex items-center gap-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                    <FileText className="w-3 h-3" />
-                    {kpis.todayCreditNoteCount} return{kpis.todayCreditNoteCount !== 1 ? 's' : ''} netted
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              onClick={() => setView('new-sale')}
-              className="bg-white text-primary hover:bg-white/90 gap-2 shadow-md"
-            >
-              <Plus className="w-4 h-4" />
-              New Sale
-            </Button>
-            {/* Repeat Last Sale — loads the last sale's items into a new sale form */}
-            {features?.repeatLastSale && (
-              <Button
-                onClick={handleRepeatLastSale}
-                disabled={repeating}
-                variant="outline"
-                className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2 min-w-12"
-                title={`Repeat your most recent sale`}
-                aria-label="Repeat your most recent sale"
-              >
-                {repeating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />}
-                <span className="hidden sm:inline">{repeating ? 'Loading...' : 'Repeat Last Sale'}</span>
-              </Button>
-            )}
-            <Button
-              onClick={() => setView('scanner')}
-              variant="outline"
-              className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
-            >
-              <ScanLine className="w-4 h-4" />
-              {t('dash.scan_bill')}
-            </Button>
-            {/* Share Today's Summary via WhatsApp */}
-            {features?.whatsappSharing && kpis.todayTxnCount > 0 && (
-              <Button
-                onClick={handleShareSummary}
-                variant="outline"
-                className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2 min-w-12"
-                title="Share today's summary on WhatsApp"
-                aria-label="Share today's summary on WhatsApp"
-              >
-                <Share2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Share Summary</span>
-              </Button>
-            )}
-            {/* 🔒 V17-Ext §5.4: Close the Drawer — day-end cash reconciliation */}
-            <Button
-              onClick={() => setShowDayEnd(true)}
-              variant="outline"
-              className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2 min-w-12"
-              title="Close the drawer — end of day cash summary"
-              aria-label="Close the drawer"
-            >
-              <Wallet className="w-4 h-4" />
-              <span className="hidden sm:inline">Close Drawer</span>
-            </Button>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* 🔒 V22-8 (Phase 6): Quick Action Shortcuts — horizontal scrollable row
-          of one-tap actions. Inspired by PhonePe's quick actions row.
-          Visible on all screen sizes; horizontally scrollable on mobile.
-          🐛 UI/UX Phase 3 Fix 1: Removed 'New Sale' from this row — it was
-          redundant with the hero card's 'New Sale' button (directly above)
-          AND the mobile FAB / desktop Header button. Three 'New Sale' buttons
-          on one screen was cognitive overload. Now: hero card is the primary
-          CTA, FAB/Header is the secondary, this row shows OTHER quick actions. */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-        {[
-          /*
-           * 🔒 B4: ASK GOES FIRST, and it is here at all because of where it
-           * was NOT.
-           *
-           * Its nav-registry entry is surfaces: ['sidebar-main', 'more',
-           * 'global-search'] — so on desktop it sits in the sidebar, and on a
-           * PHONE it is inside More. Two taps, and only for someone who
-           * already knows it exists. That is the wrong place for the one
-           * screen that now tells a shopkeeper their GSTR-1 would trigger a
-           * DRC-01B notice (A1).
-           *
-           * It is not added to the registry instead, because there is no
-           * 'dashboard' surface in NavSurface and this row is a plain array —
-           * inventing a surface for one row would be a second navigation
-           * vocabulary, and those disagree eventually.
-           */
-          { label: 'Ask', icon: MessageCircleQuestion, view: 'ask' as const, color: 'bg-primary/10 text-primary' },
-          { label: 'Add Product', icon: Package, view: 'inventory' as const, color: 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400' },
-          /*
-           * 🔒 2026-08-13: 'Scan Bill' removed from this row on Rahul's
-           * instruction — five cards, not six.
-           *
-           * Scanning is NOT removed from the app. It stays on the hero card
-           * ("Scan a Bill", directly above this row) and in More, so this is a
-           * duplicate leaving, not a feature. Same reasoning that removed 'New
-           * Sale' from this row in UI/UX Phase 3: a shortcut row that repeats
-           * what is already one tap away costs attention and buys nothing.
-           */
-          { label: 'Add Party', icon: Wallet, view: 'parties' as const, color: 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400' },
-          { label: 'Reports', icon: Receipt, view: 'reports' as const, color: 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400' },
-          { label: 'Income', icon: HandCoins, view: 'income-expense' as const, color: 'bg-teal-100 dark:bg-teal-950 text-teal-600 dark:text-teal-400' },
-        ].map((action) => {
-          const ActionIcon = action.icon
-          return (
-            <button
-              key={action.label}
-              onClick={() => {
-                setPreviousView('dashboard')
-                setView(action.view)
-              }}
-              className="card-hover flex flex-col items-center gap-1.5 p-2.5 rounded-2xl bg-card border border-border/60 shadow-card hover:border-primary/30 flex-shrink-0 min-w-[72px] active:scale-95"
-            >
-              <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', action.color)}>
-                <ActionIcon className="w-4 h-4" />
-              </div>
-              <span className="text-xs font-medium text-center leading-tight">{action.label}</span>
-            </button>
-          )
-        })}
-      </div>
+      {/* Phase 5b-2 (ledger model §7): the Today card, quick tiles, To collect / To pay. */}
+      <TodayCard
+        kpis={kpis}
+        ownerName={setting?.ownerName || 'Shop Owner'}
+        shopName={setting?.shopName || 'My Shop'}
+        hideProfit={!!hideProfit}
+        drawerCash={daySummary?.expectedCash}
+        canRepeat={!!features?.repeatLastSale}
+        repeating={repeating}
+        canShare={!!features?.whatsappSharing && kpis.todayTxnCount > 0}
+        onRepeat={handleRepeatLastSale}
+        onShare={handleShareSummary}
+        onNewSale={() => setView('new-sale')}
+        onScan={() => setView('scanner')}
+        onProof={setProof}
+      />
+      <QuickTiles gstStatus={gstStatus(setting)} />
+      <CollectPayCard kpis={kpis} />
 
       {/* Date range selector + KPI header — sticky on desktop so user can change dates without scrolling back to top */}
       <div className="flex items-center justify-between gap-3 flex-wrap lg:sticky lg:top-3 lg:z-20 lg:bg-background/80 lg:backdrop-blur-md lg:py-2 lg:-mx-2 lg:px-2 lg:rounded-lg">
@@ -804,37 +665,10 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* Secondary KPIs */}
-      <div className={cn('grid grid-cols-2 gap-3 lg:gap-4', showsGst ? 'lg:grid-cols-4' : 'lg:grid-cols-3')}>
-        <MiniStatCard
-          label={t('dash.receivable')}
-          value={formatINR(kpis.totalReceivable)}
-          icon={ArrowDownRight}
-          color="text-emerald-600 dark:text-emerald-400"
-          onClick={() => setView('parties')}
-        />
-        <MiniStatCard
-          label={t('dash.payable')}
-          value={formatINR(kpis.totalPayable)}
-          icon={ArrowUpRight}
-          color="text-rose-600"
-          onClick={() => setView('parties')}
-        />
-        {/* 🔒 FIX M-NEW-2: Collections Today — udhaar payments received today */}
-        {kpis.todayCollections > 0 && (
-          <MiniStatCard
-            // "Collected Today" read as ALL money taken in today, but this KPI
-            // counts udhaar settlements only — money paid at billing is not in
-            // it. On a ₹600 sale with ₹200 at the counter and ₹400 settled, it
-            // showed ₹400 and looked like a shortfall.
-            label="Udhaar Collected Today"
-            value={formatINR(kpis.todayCollections)}
-            icon={HandCoins}
-            color="text-blue-600"
-            subtitle={`${kpis.todayCollectionCount} payment${kpis.todayCollectionCount === 1 ? '' : 's'}`}
-            onClick={() => setProof({ kind: 'explain', metric: 'got', scope: 'today', titleKey: 'proof.t_got', shown: kpis.todayCollections })}
-          />
-        )}
+      {/* Secondary KPIs. Phase 5b-2: Receivable, Payable and Udhaar collected moved
+          into To collect / To pay and the Today card; 5b-3 folds the rest into the
+          Business overview (the thin strip goes, approved choice 4). */}
+      <div className={cn('grid grid-cols-2 gap-3 lg:gap-4', showsGst ? 'lg:grid-cols-2' : 'lg:grid-cols-1')}>
         <MiniStatCard
           label={t('dash.stock_value')}
           value={formatINR(kpis.totalStockValue)}

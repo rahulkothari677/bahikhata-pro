@@ -41,7 +41,8 @@ describe('V26 Phase 6 Batch 3 — Experience investments', () => {
   // ─── §2.3: Dashboard hierarchy inversion ────────────────────────────────
 
   test('§2.3: Dashboard hero — today\'s revenue is the dominant element, shop name demoted', () => {
-    const src = readFile('components/dashboard/Dashboard.tsx')
+    // Phase 5b-2: the hero is the Today card, in its own file.
+    const src = readFile('components/dashboard/TodayCard.tsx')
     // 🔒 V26 Phase 8: Updated from text-3xl/4xl to text-2xl/3xl — the Phase 6
     // sizes were too big on mobile. Revenue is still the dominant element.
     expect(src).toMatch(/text-2xl.*lg:text-3xl.*font-bold.*tabular-nums/)
