@@ -75,6 +75,15 @@ describe('the More page', () => {
     expect(tooLong).toEqual([])
   })
 
+  test('More is phone-only, so everything on it has a visible home on the computer too', () => {
+    // 15 Oct (Phase 5 feature check): 5a-4 moved Business Card and Refer & Earn
+    // from Account to More; the computer has no More page, so they were left
+    // in Ctrl+K search only. Their computer home is now the Tools page.
+    const COMPUTER = ['sidebar-main', 'sidebar-tools', 'reports-hub', 'account', 'home-tiles']
+    const hidden = NAV_REGISTRY.filter((d) => d.surfaces?.includes('more') && !d.surfaces.some((s) => COMPUTER.includes(s)))
+    expect(hidden.map((d) => d.id)).toEqual([])
+  })
+
   test('every More entry belongs to a group the page draws (nothing silently dropped)', () => {
     const drawn = new Set(g.flatMap((x) => x.items.map((d) => d.id)))
     const declared = NAV_REGISTRY.filter((d) => d.surfaces?.includes('more')).map((d) => d.id)

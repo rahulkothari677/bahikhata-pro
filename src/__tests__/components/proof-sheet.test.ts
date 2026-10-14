@@ -6,7 +6,7 @@ import { describe, test, expect, jest } from '@jest/globals'
 
 jest.mock('sonner', () => ({ toast: { info: jest.fn(), success: jest.fn(), error: jest.fn() } }))
 
-import { proofCountLine, proofRowDetail, proofRowLabel, proofUrl } from '@/components/dashboard/ProofSheet'
+import { proofCountLine, proofMargin, proofRowDetail, proofRowLabel, proofUrl } from '@/components/dashboard/ProofSheet'
 import { translations } from '@/lib/i18n'
 import { readCode } from '@/test-support/read-source'
 
@@ -24,6 +24,13 @@ describe('line words', () => {
   test('"Sales" says "before GST" only for a shop that charges GST (most shops never see GST)', () => {
     expect(proofRowLabel({ key: 'proof.net_sales', amount: 1 }, t, false)).toBe('Sales')
     expect(proofRowLabel({ key: 'proof.net_sales', amount: 1 }, t, true)).toBe('Sales before GST')
+  })
+})
+
+describe('margin (15 Oct feature check: the old Today\'s Profit card showed it)', () => {
+  test('profit ÷ sales before GST, from the sheet\'s own lines; none without sales', () => {
+    expect(proofMargin({ total: 27, rows: [{ key: 'proof.net_sales', amount: 1010 }, { key: 'proof.cost', amount: -483 }] })!.toFixed(1)).toBe('2.7')
+    expect(proofMargin({ total: 0, rows: [] })).toBeNull()
   })
 })
 

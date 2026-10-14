@@ -44,6 +44,28 @@ const TOOLS_CATEGORY_META: Partial<Record<NavSubcategoryId, { title: string; tit
   'business':            { title: 'Business',           titleIcon: Store, accentColor: 'text-fuchsia-600 dark:text-fuchsia-400' },
 }
 
+/**
+ * The Tools page's sections, in registry order. Exported for the guard.
+ *
+ * 15 Oct (Phase 5 feature check): an entry whose section had no title here
+ * was dropped without a word — neither shown nor put under "Other" — so
+ * moving Business Card here with its Account section ('account-info') would
+ * have hidden it. Anything without a known section now goes under "Other".
+ */
+export function toolsCategories(toolsItems: NavDestination[]) {
+  const ordered: { subcategory: NavSubcategoryId; title: string; titleIcon: LucideIcon; accentColor: string; tools: NavDestination[] }[] = []
+  const other: NavDestination[] = []
+  for (const [subcat, items] of groupBySubcategory(toolsItems)) {
+    const meta = subcat ? TOOLS_CATEGORY_META[subcat] : undefined
+    if (meta) ordered.push({ subcategory: subcat!, ...meta, tools: items })
+    else other.push(...items)
+  }
+  if (other.length > 0) {
+    ordered.push({ subcategory: 'other' as NavSubcategoryId, title: 'Other', titleIcon: ChevronRight, accentColor: 'text-muted-foreground', tools: other })
+  }
+  return ordered
+}
+
 export function ToolsHub() {
   const { t } = useTranslation()
   const { previousView, setView, setPreviousView } = useAppStore()
@@ -60,31 +82,7 @@ export function ToolsHub() {
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isFlagEnabled, isOwner, isFounder])
 
-  const categories = useMemo(() => {
-    const grouped = groupBySubcategory(toolsItems)
-    const ordered: { subcategory: NavSubcategoryId; title: string; titleIcon: LucideIcon; accentColor: string; tools: NavDestination[] }[] = []
-    for (const [subcat, items] of grouped) {
-      if (subcat && TOOLS_CATEGORY_META[subcat] && items.length > 0) {
-        ordered.push({
-          subcategory: subcat,
-          ...TOOLS_CATEGORY_META[subcat]!,
-          tools: items,
-        })
-      }
-    }
-    // Include uncategorized items
-    const uncategorized = grouped.get(undefined)
-    if (uncategorized && uncategorized.length > 0) {
-      ordered.push({
-        subcategory: 'other' as NavSubcategoryId,
-        title: 'Other',
-        titleIcon: ChevronRight,
-        accentColor: 'text-muted-foreground',
-        tools: uncategorized,
-      })
-    }
-    return ordered
-  }, [toolsItems])
+  const categories = useMemo(() => toolsCategories(toolsItems), [toolsItems])
 
   return (
     <div className="space-y-5">

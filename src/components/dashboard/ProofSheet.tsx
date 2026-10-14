@@ -70,6 +70,12 @@ export function proofRowDetail(r: ProofRow): string {
   return `${qty}${r.unit ? ` ${r.unit}` : ''} × ${formatINR(r.each)}`
 }
 
+/** Profit as a % of sales before GST, read from a profit sheet's own lines (null without sales). Exported for the guard. */
+export function proofMargin(p: { total: number; rows: ProofRow[] }): number | null {
+  const sales = p.rows.find((r) => r.key === 'proof.net_sales')?.amount ?? 0
+  return sales > 0 ? (p.total / sales) * 100 : null
+}
+
 /** Last week's weekday in IST ("Wednesday" / "बुधवार"), for "Same time last {day}". */
 export function lastWeekdayName(language: string, now: Date = new Date()): string {
   return new Intl.DateTimeFormat(language === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'long', timeZone: 'Asia/Kolkata' })
@@ -183,6 +189,14 @@ export function ProofSheet({ spec, onClose, actions = [], showsGst }: {
                 </li>
               </ul>
 
+              {/* 15 Oct (Phase 5 feature check): the margin the old Today's Profit
+                  card showed under its figure — profit ÷ sales before GST, the
+                  same rule as todayMarginPct (#134). */}
+              {spec.kind === 'explain' && spec.metric === 'profit' && proofMargin(proof) !== null && (
+                <p className="text-sm text-muted-foreground">
+                  {t('proof.margin')}: <span className="font-semibold text-foreground tabular-nums">{proofMargin(proof)!.toFixed(1)}%</span>
+                </p>
+              )}
               {proof.after && (
                 <p className="text-sm text-muted-foreground">
                   {t(proof.after.key)}: <span className="font-semibold text-foreground tabular-nums">{formatINR(proof.after.amount)}</span>

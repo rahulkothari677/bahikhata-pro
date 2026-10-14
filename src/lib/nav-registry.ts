@@ -1328,10 +1328,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate-account',
     actionParams: { accountSection: 'business-card' },
     category: 'account',
-    subcategory: 'account-info',
+    subcategory: 'business',
     accountGroup: 'business',
     frequency: 'tertiary',
-    surfaces: ['more', 'global-search'],
+    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 15 Oct: the computer has no More page; its Tools page is the visible home
     moreGroup: 'grow',
     moreOrder: 1,
     sortOrder: 2,
@@ -1445,7 +1445,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'business',
     accountGroup: 'plan',
     frequency: 'tertiary',
-    surfaces: ['more', 'global-search'],
+    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 15 Oct: the computer has no More page; its Tools page is the visible home
     moreGroup: 'grow',
     moreOrder: 2,
     sortOrder: 2,
