@@ -211,7 +211,7 @@ export default async function globalSetup(config: FullConfig) {
       // Wait for something the app really renders once signed in. There is no
       // /dashboard URL to wait for — this is one page at / that swaps views.
       await page
-        .getByRole('button', { name: 'Dashboard' })
+        .getByRole('button', { name: 'Home', exact: true })
         .first()
         .waitFor({ state: 'visible', timeout: 60_000 })
 

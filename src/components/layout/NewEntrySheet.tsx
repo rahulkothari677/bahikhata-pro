@@ -16,7 +16,7 @@ import { useMemo } from 'react'
 import { Plus } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { useAppStore } from '@/store/app-store'
-import { NAV_REGISTRY, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
+import { NAV_REGISTRY, filterByPermissions, navShortName, type NavDestination } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { useTranslation } from '@/hooks/use-translation'
@@ -46,7 +46,7 @@ export function NewEntrySheet() {
     { canAccess, isFlagEnabled: () => true, isOwner: true, isFounder: true, platform: 'mobile' },
   )), [canAccess])
 
-  const name = (d: NavDestination) => t(d.shortLabelKey ?? d.labelKey ?? '') || d.label
+  const name = (d: NavDestination) => navShortName(d, t)
   const open = (d: NavDestination) => {
     haptic.click()
     setNewSheetOpen(false)

@@ -21,7 +21,7 @@ import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { haptic } from '@/lib/haptic'
 import { prefetchView } from '@/lib/prefetch'
 import { cn } from '@/lib/utils'
-import { NAV_REGISTRY, filterByPermissions, getById, type NavDestination } from '@/lib/nav-registry'
+import { NAV_REGISTRY, filterByPermissions, getById, navShortName, type NavDestination } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { ChevronRight, ArrowLeft, Settings as SettingsIcon } from 'lucide-react'
 import { useTranslation } from '@/hooks/use-translation'
@@ -78,7 +78,7 @@ export function MoreScreen() {
     setPreviousView(null)
   }
 
-  const name = (d: NavDestination) => t(d.shortLabelKey ?? d.labelKey ?? '') || d.label
+  const name = (d: NavDestination) => navShortName(d, t)
   const account = getById('go-to-account')
   const help = getById('help-support')
 

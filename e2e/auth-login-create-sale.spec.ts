@@ -35,7 +35,7 @@ test.describe('Critical Flow: record a sale and find it in the ledger', () => {
   test('the dashboard loads for a signed-in shopkeeper', async ({ loggedInPage }) => {
     // The bottom navigation only renders with a session, so its presence is
     // the signed-in signal — not a URL, because this app never changes URL.
-    await expect(loggedInPage.getByRole('button', { name: 'Dashboard' }).first()).toBeVisible()
+    await expect(loggedInPage.getByRole('button', { name: 'Home', exact: true }).first()).toBeVisible()
     await expect(loggedInPage.getByRole('button', { name: 'New Sale' }).first()).toBeVisible()
   })
 

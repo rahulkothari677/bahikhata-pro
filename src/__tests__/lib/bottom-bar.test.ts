@@ -19,7 +19,7 @@ function barTabs(registry: NavDestination[]) {
   return registry
     .filter((d) => d.surfaces?.includes('bottom-nav'))
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-    .map((d) => ({ id: d.id, nameKey: d.shortLabelKey ?? d.labelKey, lit: d.barActiveViews ?? [d.view] }))
+    .map((d) => ({ id: d.id, nameKey: d.shortLabelKey ?? d.labelKey, lit: d.activeViews ?? [d.view] }))
 }
 
 describe('the rule reads the bar the way the bar does (good and bad input)', () => {
@@ -62,9 +62,11 @@ describe('the bottom bar', () => {
     expect([en['nav.home'], en['nav.bills'], en['nav.khata']]).toEqual(['Home', 'Bills', 'Khata'])
   })
 
-  test('the bar lights a tab from barActiveViews, not from the view name alone', () => {
+  test('the bar lights a tab with the shared rule (isNavActive reads activeViews), not from the view name alone', () => {
+    // 5a-5: the desktop menu uses the same isNavActive; its behaviour is
+    // tested in desktop-menu.test.ts.
     const code = stripComments(fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/MobileBottomNav.tsx'), 'utf8'))
-    expect(code).toMatch(/barActiveViews/)
+    expect(code).toMatch(/isNavActive\(tab, currentView\)/)
     expect(code).not.toMatch(/const isActive = currentView === tabView/)
   })
 })

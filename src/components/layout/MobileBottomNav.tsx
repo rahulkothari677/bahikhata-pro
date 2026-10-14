@@ -30,7 +30,7 @@ import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
 import { useRef, useMemo } from 'react'
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 3): BottomNav now renders from the NavRegistry.
-import { NAV_REGISTRY, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
+import { NAV_REGISTRY, filterByPermissions, isNavActive, navShortName, type NavDestination } from '@/lib/nav-registry'
 import { useTranslation } from '@/hooks/use-translation'
 
 export function MobileBottomNav() {
@@ -81,7 +81,7 @@ export function MobileBottomNav() {
   // each view — previousView is the best proxy.
   // Phase 5a-2: a tab is lit for its own view and for the views it hosts
   // (Bills for Sales and Purchases; Khata for a party's pages).
-  const tabIsActive = (tab: NavDestination) => (tab.barActiveViews ?? [tab.view || 'dashboard']).includes(currentView)
+  const tabIsActive = (tab: NavDestination) => isNavActive(tab, currentView)
   const anyTabActive = visibleTabs.some(tabIsActive)
   const isMoreActive = !anyTabActive && (
     currentView === 'more' ||
@@ -126,7 +126,7 @@ export function MobileBottomNav() {
           {/* Left side: Dashboard + Sales */}
           {visibleTabs.slice(0, 2).map((tab: NavDestination) => {
             const Icon = tab.barIcon ?? tab.icon
-            const name = t(tab.shortLabelKey ?? tab.labelKey ?? '') || tab.label
+            const name = navShortName(tab, t)
             const tabView = tab.view || 'dashboard'
             const isActive = tabIsActive(tab)
             return (
@@ -178,7 +178,7 @@ export function MobileBottomNav() {
           {/* Right side: Purchases + More */}
           {visibleTabs.slice(2).map((tab: NavDestination) => {
             const Icon = tab.barIcon ?? tab.icon
-            const name = t(tab.shortLabelKey ?? tab.labelKey ?? '') || tab.label
+            const name = navShortName(tab, t)
             const tabView = tab.view || 'dashboard'
             const isActive = tabIsActive(tab)
             return (

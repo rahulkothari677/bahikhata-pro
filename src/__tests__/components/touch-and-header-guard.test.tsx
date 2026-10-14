@@ -153,9 +153,17 @@ describe('the header reads in full on a phone (#140, #192)', () => {
   })
 
   test('the page title wraps instead of truncating', () => {
-    const title = header.slice(header.indexOf('{info.title}') - 160, header.indexOf('{info.title}'))
-    expect(title).toMatch(/line-clamp-2/)
-    expect(title).not.toMatch(/\btruncate\b/)
+    // The <h2> element that holds the title, read whole — was a fixed
+    // 160-character window before '{info.title}', which read the language
+    // menu once 5a-5 renamed the variable (indexOf -1; Cause 7).
+    const titleClasses = (code: string) => code.match(/<h2 className="([^"]*)">\{title\}<\/h2>/)?.[1] ?? null
+    expect(titleClasses('<h2 className="text-lg line-clamp-2">{title}</h2>')).toBe('text-lg line-clamp-2')
+    expect(titleClasses('<p>{title}</p>')).toBeNull()
+    const classes = titleClasses(header)
+    expect(classes).toMatch(/line-clamp-2/)
+    expect(classes).not.toMatch(/\btruncate\b/)
+    // One line only: the grey second line repeated the title (#243, 5a-5).
+    expect(header).not.toMatch(/subtitle/)
   })
 })
 

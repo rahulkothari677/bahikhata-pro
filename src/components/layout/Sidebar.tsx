@@ -10,6 +10,11 @@
  *
  * Design reference: Linear (grouped sidebar), Notion (collapsible sections),
  * Stripe Dashboard (categorized nav).
+ *
+ * Phase 5a-5 (#168): the narrow menu (the default since August) shows a word
+ * under every icon. Entries, names, order and the lit rule are the phone's:
+ * Home, Bills, Khata first; Purchases lives inside Bills. Sized so all nine
+ * fit a 680 px-tall window without scrolling.
  */
 
 import { useAppStore, type ViewType } from '@/store/app-store'
@@ -23,7 +28,7 @@ import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
 import { prefetchView } from '@/lib/prefetch'
-import { NAV_REGISTRY, filterByPermissions, groupBySubcategory, type NavDestination, type NavSubcategoryId } from '@/lib/nav-registry'
+import { NAV_REGISTRY, filterByPermissions, groupBySubcategory, isNavActive, navShortName, type NavDestination, type NavSubcategoryId } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { Calculator } from 'lucide-react'
 import {
@@ -55,8 +60,15 @@ const TOOLS_SECTION_META: Partial<Record<NavSubcategoryId, { title: string; acce
   'business':            { title: 'Business',           accentColor: 'text-amber-500 dark:text-amber-400' },
 }
 
+/** The desktop menu's entries, in menu order (Phase 5a-5). Exported for the guard. */
+export function desktopMenu(items: NavDestination[]): NavDestination[] {
+  return items
+    .filter((d) => d.surfaces?.includes('sidebar-main'))
+    .sort((a, b) => (a.menuOrder ?? 99) - (b.menuOrder ?? 99))
+}
+
 export function Sidebar() {
-  const { currentView, setView, setPreviousView, sidebarCollapsed, toggleSidebarCollapsed, selectedTransactionType } = useAppStore()
+  const { currentView, setView, setPreviousView, sidebarCollapsed, toggleSidebarCollapsed } = useAppStore()
   const { t } = useTranslation()
   const { data: session } = useSession()
   const { canAccess, isCA } = useStaffPermissions()
@@ -82,13 +94,13 @@ export function Sidebar() {
   // → 'aiScanner' (camelCase) was undefined → ?? true → AI features NEVER hidden on desktop.
   // Now: uses useAppStore.getState().features (same as MoreScreen) — consistent across platforms.
   const mainNavItems = useMemo(() => {
-    return filterByPermissions(
+    return desktopMenu(filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-main')),
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
       }, isOwner, isFounder, platform: 'desktop', gstStatus: shopGst }
-    ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    ))
   }, [canAccess, isOwner, isFounder, shopGst])
 
   const toolsItems = useMemo(() => {
@@ -159,7 +171,7 @@ export function Sidebar() {
         {/* Brand */}
         <div className={cn(
           'flex items-center border-b border-sidebar-border p-5',
-          sidebarCollapsed ? 'lg:justify-center lg:px-3' : 'justify-between'
+          sidebarCollapsed ? 'lg:justify-center lg:p-3' : 'justify-between'
         )}>
           <div className={cn('flex items-center gap-3', sidebarCollapsed && 'lg:gap-0')}>
             <div className="w-10 h-10 rounded-xl bg-gradient-saffron flex items-center justify-center shadow-lg flex-shrink-0">
@@ -177,7 +189,7 @@ export function Sidebar() {
         {/* Collapse toggle */}
         <button
           onClick={toggleSidebarCollapsed}
-          className="hidden lg:flex absolute -right-6 top-[68px] z-50 w-12 h-12 items-center justify-center group/collapse"
+          className={cn('hidden lg:flex absolute -right-6 z-50 w-12 h-12 items-center justify-center group/collapse', sidebarCollapsed ? 'top-[50px]' : 'top-[68px]')}
           title={sidebarCollapsed ? t('nav.expand') : t('nav.collapse')}
           aria-label={sidebarCollapsed ? t('nav.expand') : t('nav.collapse')}
         >
@@ -188,23 +200,17 @@ export function Sidebar() {
           </span>
         </button>
 
-        {/* Main Navigation */}
-        <nav className={cn('flex-1 overflow-y-auto px-3 py-4 space-y-1', sidebarCollapsed && 'lg:px-2')}>
+        {/* Main Navigation.
+            Phase 5a-5 (#168): the narrow menu shows a short word under every
+            icon — it was ten bare icons. The names and the order are the
+            phone's (navShortName, menuOrder): Home, Bills, Khata first. */}
+        <nav className={cn('flex-1 overflow-y-auto px-3 py-4 space-y-1', sidebarCollapsed && 'lg:px-1 lg:py-1.5 lg:space-y-0.5')}>
           {mainNavItems.map((item: NavDestination) => {
             const Icon = item.icon
-            const itemId = item.view || item.id
-            const active = currentView === itemId ||
-              (currentView === 'transaction-detail' && ((selectedTransactionType === 'purchase' && itemId === 'purchases') || (selectedTransactionType !== 'purchase' && itemId === 'sales'))) ||
-              (currentView === 'new-sale' && itemId === 'sales') ||
-              (currentView === 'new-purchase' && itemId === 'purchases') ||
-              (currentView === 'party-profile' && itemId === 'parties')
-            // A11Y (2026-07-26): when the rail is collapsed this button is an
-            // icon with no visible text. `title` alone is only a last-resort
-            // fallback in the accessible-name algorithm and is announced
-            // inconsistently by mobile screen readers, so an explicit
-            // aria-label is set unconditionally — harmless when the label is
-            // visible, essential when it is not. MobileBottomNav already
-            // labels its tabs this way; the desktop rail did not.
+            const name = navShortName(item, t)
+            const active = isNavActive(item, currentView)
+            // A11Y (2026-07-26): an explicit aria-label, so the button's name is
+            // the word alone and not "word + description" in the wide menu.
             return (
               <button
                 key={item.id}
@@ -212,20 +218,23 @@ export function Sidebar() {
                 onMouseEnter={() => item.view && prefetchView(item.view)}
                 onTouchStart={() => item.view && prefetchView(item.view)}
                 className={cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative',
-                  sidebarCollapsed && 'lg:justify-center lg:px-2',
+                  'w-full min-h-12 flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative',
+                  sidebarCollapsed && 'lg:flex-col lg:justify-center lg:gap-0.5 lg:px-0.5 lg:py-1',
                   active
                     ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg'
                     : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 )}
-                title={sidebarCollapsed ? item.labelKey ? t(item.labelKey) : item.label : undefined}
-                aria-label={item.labelKey ? t(item.labelKey) : item.label}
+                aria-label={name}
+                aria-current={active ? 'page' : undefined}
               >
                 <Icon className={cn('w-[18px] h-[18px] flex-shrink-0', active && 'text-white')} />
+                {sidebarCollapsed && (
+                  <span className="text-xs font-medium leading-tight text-center break-words w-full">{name}</span>
+                )}
                 {!sidebarCollapsed && (
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{item.labelKey ? t(item.labelKey) : item.label}</span>
+                      <span className="text-sm font-medium truncate">{name}</span>
                       {item.badge && (
                         <span className={cn(
                           'text-xs px-1.5 py-0.5 rounded-full font-bold',
@@ -242,7 +251,7 @@ export function Sidebar() {
                       'text-xs truncate',
                       active ? 'text-white/80' : 'text-sidebar-foreground/65'
                     )}>
-                      {item.descKey ? t(item.descKey) : (item.description || (item.labelKey ? t(item.labelKey) : item.label))}
+                      {item.descKey ? t(item.descKey) : (item.description || name)}
                     </p>
                   </div>
                 )}
@@ -302,6 +311,7 @@ export function Sidebar() {
               onClick={() => { setPreviousView(currentView); useAppStore.getState().setAccountOriginView(currentView); setView('account') }}
               className="w-12 h-12 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-sm font-bold"
               title="Account"
+              aria-label="Account"
             >
               {getInitials(userName).charAt(0)}
             </button>

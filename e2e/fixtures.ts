@@ -56,7 +56,7 @@ export const test = base.extend<Fixtures>({
      * session. Waiting on a DOM element the app really produces, rather than on
      * a URL it never navigates to.
      */
-    const signedIn = page.getByRole('button', { name: 'Dashboard' }).first()
+    const signedIn = page.getByRole('button', { name: 'Home', exact: true }).first()
     await signedIn.waitFor({ state: 'visible', timeout: 45_000 }).catch(() => {
       throw new Error(
         `E2E session not usable for ${E2E_EMAIL}. The saved storageState did not ` +

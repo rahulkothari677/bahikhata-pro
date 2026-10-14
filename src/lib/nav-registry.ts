@@ -143,13 +143,17 @@ export interface NavDestination {
    * Falls back to labelKey / label.
    */
   shortLabelKey?: string
-  /**
-   * Bottom bar only (Phase 5a-2, ledger model): the tab's icon and the other
-   * views that light it. Bills is the Sales ledger and is also lit on
-   * Purchases; Khata is Parties and stays lit on a party's pages.
-   */
+  /** Bottom bar only (Phase 5a-2, ledger model): the tab's icon. */
   barIcon?: LucideIcon
-  barActiveViews?: ViewType[]
+  /**
+   * The views that light this entry, on the bottom bar AND the desktop menu
+   * (Phase 5a-2, 5a-5: one rule, isNavActive). Bills is the Sales ledger and
+   * is also lit on Purchases and on a bill; Khata stays lit on a party's
+   * pages. Default: just its own view.
+   */
+  activeViews?: ViewType[]
+  /** Desktop menu only (Phase 5a-5): its place. The bar's tabs come first, in the bar's order. */
+  menuOrder?: number
   /**
    * New sheet only (Phase 5a-3): its place, and which row it sits in: 'ai'
    * (Scan, Speak) at the top, 'grid' in the middle, 'primary' (New sale) as the
@@ -276,6 +280,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 1,
+    menuOrder: 1,
     shortLabelKey: 'nav.home',
     barIcon: House,
     keywords: 'dashboard home overview charts stats kpi',
@@ -298,9 +303,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 3,
+    menuOrder: 2,
     shortLabelKey: 'nav.bills',
     barIcon: ReceiptText,
-    barActiveViews: ['sales', 'purchases'],
+    activeViews: ['sales', 'purchases', 'new-sale', 'new-purchase', 'transaction-detail'],
     keywords: 'sales ledger transactions history sell bills',
     labelKey: 'nav.label.sales',
     descKey: 'nav.desc.sales',
@@ -317,7 +323,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'transactions',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'global-search'],
+    surfaces: ['global-search'],  // 5a-5: Bills holds Sales | Purchases on desktop too
     sortOrder: 4,
     keywords: 'purchases ledger transactions buy stock bills',
     labelKey: 'nav.label.purchases',
@@ -465,6 +471,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     moreGroup: 'books',
     moreOrder: 2,
     sortOrder: 6,
+    menuOrder: 5,
     keywords: 'income expense rent salary money',
     labelKey: 'nav.label.income-expense',
     descKey: 'nav.desc.income-expense',
@@ -494,6 +501,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     moreGroup: 'tools',
     moreOrder: 8,
     sortOrder: 0,
+    menuOrder: 9,
     keywords: 'ask question search kitna baaki sale profit query',
     labelKey: 'nav.label.ask',
     descKey: 'nav.desc.ask',
@@ -516,6 +524,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     moreGroup: 'books',
     moreOrder: 1,
     sortOrder: 5,
+    menuOrder: 4,
     keywords: 'inventory products stock items',
     labelKey: 'nav.label.inventory',
     descKey: 'nav.desc.inventory',
@@ -556,8 +565,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 7,
+    menuOrder: 3,
     shortLabelKey: 'nav.khata',
-    barActiveViews: ['parties', 'party-profile', 'party-bills', 'party-settle'],
+    activeViews: ['parties', 'party-profile', 'party-bills', 'party-settle'],
     keywords: 'parties customers suppliers dues balance khata udhaar',
     labelKey: 'nav.label.parties',
     descKey: 'nav.desc.parties',
@@ -608,6 +618,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     moreGroup: 'books',
     moreOrder: 4,
     sortOrder: 8,
+    menuOrder: 6,
     keywords: 'reports gst pl profit loss stock analysis',
     labelKey: 'nav.label.reports',
     descKey: 'nav.desc.reports',
@@ -631,6 +642,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'global-search'],
     sortOrder: 9,
+    menuOrder: 7,
     keywords: 'tools voice scanner barcode ai insights day-end cash reminders returns',
     labelKey: 'nav.label.tools',
     descKey: 'nav.desc.tools',
@@ -1057,6 +1069,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     sheetOrder: 1,
     shortLabelKey: 'new.scan',
     sortOrder: 2,
+    menuOrder: 8,
     keywords: 'scan bill ai camera photo ocr scanner',
     labelKey: 'nav.label.scanner',
     descKey: 'nav.desc.scanner',
@@ -1791,6 +1804,24 @@ export function getByFrequency(frequency: NavFrequency): NavDestination[] {
 /** Get a destination by id. */
 export function getById(id: string): NavDestination | undefined {
   return NAV_REGISTRY.find(d => d.id === id)
+}
+
+/**
+ * Is this entry lit on the current view? One rule for the bottom bar and the
+ * desktop menu (Phase 5a-5). Before it, the menu kept its own list of special
+ * cases and the bar another, so Bills could be lit in one and not the other.
+ */
+export function isNavActive(dest: Pick<NavDestination, 'activeViews' | 'view'>, view: string): boolean {
+  return (dest.activeViews ?? [dest.view || 'dashboard']).includes(view as ViewType)
+}
+
+/**
+ * The short name every compact surface shows: the bottom bar, the + sheet,
+ * More's tiles and the desktop menu (Phase 5a-5). One function, so a thing
+ * cannot be "Bills" on the phone and "Sales" on the computer.
+ */
+export function navShortName(dest: Pick<NavDestination, 'shortLabelKey' | 'labelKey' | 'label'>, t: (key: string) => string): string {
+  return t(dest.shortLabelKey ?? dest.labelKey ?? '') || dest.label
 }
 
 /** Get all destinations in a subcategory. */

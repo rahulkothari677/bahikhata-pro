@@ -17,27 +17,41 @@ import { offlineFetch } from '@/lib/offline-fetch'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { NotificationCenter } from '@/components/common/NotificationCenter'
 
-const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
-  dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
-  inventory: { titleKey: 'short.items', subtitleKey: 'short.items' },  // 5a-4: the name More uses
+/** Each screen's title (i18n key). Phase 5a-5: one line; the grey line under
+ *  it repeated the title on every screen (#243). */
+const viewTitleKeys: Record<string, string> = {
+  dashboard: 'nav.dashboard',
+  inventory: 'short.items',  // 5a-4: the name More uses
   // Phase 5a-2: Sales and Purchases are one tab, Bills, with a switch on the screen.
-  sales: { titleKey: 'nav.bills', subtitleKey: 'nav.bills' },
-  purchases: { titleKey: 'nav.bills', subtitleKey: 'nav.bills' },
-  'income-expense': { titleKey: 'short.cashbook', subtitleKey: 'short.cashbook' },  // 5a-4
-  parties: { titleKey: 'nav.khata', subtitleKey: 'nav.khata' },
-  scanner: { titleKey: 'nav.scanner', subtitleKey: 'nav.scanner' },
-  reports: { titleKey: 'nav.reports', subtitleKey: 'nav.reports' },
-  settings: { titleKey: 'nav.settings', subtitleKey: 'nav.settings' },
-  'transaction-detail': { titleKey: 'nav.sales', subtitleKey: 'nav.sales' },
-  'party-profile': { titleKey: 'nav.parties', subtitleKey: 'nav.parties' },
-  'new-sale': { titleKey: 'action.new_sale', subtitleKey: 'action.new_sale' },
-  'new-purchase': { titleKey: 'action.new_purchase', subtitleKey: 'action.new_purchase' },
+  sales: 'nav.bills',
+  purchases: 'nav.bills',
+  'income-expense': 'short.cashbook',  // 5a-4
+  parties: 'nav.khata',
+  scanner: 'new.scan',  // 5a-5: the menu's name
+  reports: 'nav.reports',
+  tools: 'nav.label.tools',  // 5a-5: was missing, so the title read "Dashboard"
+  settings: 'nav.settings',
+  'transaction-detail': 'nav.sales',
+  'party-profile': 'nav.khata',  // 5a-5: the tab it sits under
+  'party-bills': 'nav.khata',  // 5a-5: was missing ("Dashboard")
+  'new-sale': 'action.new_sale',
+  'new-purchase': 'action.new_purchase',
   // 🔒 V26 P6: Added missing title keys (was: fell back to 'nav.dashboard')
-  'new-estimate': { titleKey: 'nav.label.estimates', subtitleKey: 'nav.label.estimates' },
-  'document-vault': { titleKey: 'nav.label.document-vault', subtitleKey: 'nav.label.document-vault' },
-  'ai-usage': { titleKey: 'nav.label.ai-usage', subtitleKey: 'nav.label.ai-usage' },
-  'ai-comparison': { titleKey: 'nav.label.ai-comparison', subtitleKey: 'nav.label.ai-comparison' },
-  'pricing': { titleKey: 'nav.label.subscription', subtitleKey: 'nav.label.subscription' },
+  'new-estimate': 'nav.label.estimates',
+  'document-vault': 'nav.label.document-vault',
+  'ai-usage': 'nav.label.ai-usage',
+  'ai-comparison': 'nav.label.ai-comparison',
+  'pricing': 'nav.label.subscription',
+}
+
+/**
+ * The title key for a screen, or undefined when it has none (exported for the
+ * guard). Phase 5a-5: an unknown screen gets no title; the old fallback
+ * called Tools and a party's bills "Dashboard".
+ */
+export function headerTitleKey(view: string, selectedTransactionType?: string | null): string | undefined {
+  if (view === 'transaction-detail' && selectedTransactionType === 'purchase') return 'nav.purchases'
+  return viewTitleKeys[view]
 }
 
 // Views where "New Entry" should trigger a dialog (not navigate)
@@ -61,11 +75,8 @@ export function Header({ className }: { className?: string } = {}) {
   // 🔒 V26 N10: Compute titleKeys WITHOUT mutating the module-level viewTitleKeys
   // object. Was: `titleKeys.titleKey = 'nav.purchases'` mutated the shared object,
   // so after viewing one purchase, every subsequent sale detail showed "Purchase Ledger".
-  const baseTitleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
-  const titleKeys = (currentView === 'transaction-detail' && selectedTransactionType === 'purchase')
-    ? { titleKey: 'nav.purchases', subtitleKey: 'nav.purchases' }
-    : baseTitleKeys
-  const info = { title: t(titleKeys.titleKey), subtitle: t(titleKeys.subtitleKey) }
+  const titleKey = headerTitleKey(currentView, selectedTransactionType)
+  const title = titleKey ? t(titleKey) : ''
 
   const { data: settingData } = useQuery({
     queryKey: ['setting'],
@@ -190,10 +201,9 @@ export function Header({ className }: { className?: string } = {}) {
           {/* #192: the title always reads in full. It may wrap to a second line
               on a narrow phone rather than end in "Purchase Led…"; the
               language switch left the phone header to make room. */}
-          {currentView !== 'dashboard' && (
+          {currentView !== 'dashboard' && title && (
             <div className="min-w-0">
-              <h2 className="text-lg lg:text-xl font-bold tracking-tight leading-snug line-clamp-2 break-words">{info.title}</h2>
-              <p className="text-xs text-muted-foreground truncate hidden sm:block">{info.subtitle}</p>
+              <h2 className="text-lg lg:text-xl font-bold tracking-tight leading-snug line-clamp-2 break-words">{title}</h2>
             </div>
           )}
 

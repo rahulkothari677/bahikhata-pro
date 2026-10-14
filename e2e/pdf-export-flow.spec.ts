@@ -18,7 +18,7 @@ import { E2E_CUSTOMER } from './seed-e2e-user'
 test.describe('Paperwork screens open and show real content', () => {
   test('the parties screen lists the shop\'s customers', async ({ loggedInPage }) => {
     const page = loggedInPage
-    await page.getByRole('button', { name: 'Parties' }).first().click()
+    await page.getByRole('button', { name: 'Khata', exact: true }).first().click()
 
     // The seeded customer must be there. Asserting a NAMED row, not just that
     // some list rendered — an empty list would satisfy the weaker check.
