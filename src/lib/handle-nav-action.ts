@@ -38,6 +38,8 @@ export function handleNavAction(
 
   const kind = dest.actionKind || 'navigate'
   const params = dest.actionParams || {}
+  // Phase 5a-3: "Got payment" opens Khata on Customers, "Gave payment" on Suppliers.
+  if (params.khataSide) store.setKhataSide(params.khataSide)
 
   // Nothing to do about scroll position here: store.setView starts every
   // forward navigation at the top on its own. 'navigate-scroll' still works,
@@ -51,7 +53,10 @@ export function handleNavAction(
       // the trigger-new-entry counter after navigating so the target view
       // (Inventory/Parties) opens its add dialog. Was: just navigated to the
       // list view, leaving the user to find the + button themselves.
-      if (params.fireTriggerNewEntry) store.fireTriggerNewEntry()
+      // Phase 5a-3: the counter bump fired before the target screen existed, so
+      // the form never opened. A request waits until the screen consumes it.
+      if (params.fireTriggerNewEntry && dest.view) store.requestNewEntry(dest.view)
+      else if (params.fireTriggerNewEntry) store.fireTriggerNewEntry()
       // 🔒 V26 N23: Voice Entry / Barcode Scanner deep-link triggers.
       // Same pattern — after navigating to new-sale, fire the voice/barcode
       // trigger so TransactionEntry auto-opens the mic/scanner.

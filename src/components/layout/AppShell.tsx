@@ -42,6 +42,7 @@ import { Header } from './Header'
 import { MobileBottomNav } from './MobileBottomNav'
 import { OfflineIndicator } from '@/components/common/OfflineIndicator'
 import { KeyboardShortcuts } from '@/components/common/KeyboardShortcuts'
+import { NewEntrySheet } from './NewEntrySheet'
 import { GlobalSearch } from '@/components/common/GlobalSearch'
 import { ThemePicker } from '@/components/common/ThemePicker'
 import { Onboarding } from '@/components/layout/Onboarding'
@@ -155,6 +156,8 @@ export function AppShell({
       {/* Global overlays — always present regardless of branch */}
       {features?.keyboardShortcuts && <KeyboardShortcuts />}
       {features?.globalSearch && <GlobalSearch />}
+      {/* Phase 5a-3: the + New sheet, opened from the bottom bar (and the desktop menu in 5a-5). */}
+      <NewEntrySheet />
 
       {/* Desktop sidebar — wrapped so 'desktop-only' hides it on mobile */}
       {showSidebar && (

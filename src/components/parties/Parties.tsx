@@ -13,6 +13,7 @@ import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
+import { useNewEntryRequest } from '@/hooks/use-new-entry-request'
 import { useTranslation } from '@/hooks/use-translation'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn, getInitials, formatINRCompact } from '@/lib/utils'
@@ -41,7 +42,9 @@ export function Parties() {
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
   // Phase 5a-2: Khata shows one side at a time (Customers | Suppliers), like Bills.
-  const [filter, setFilter] = useState<'all' | 'customer' | 'supplier'>('customer')
+  // Phase 5a-3: the side lives in the store, so the + sheet can open Suppliers.
+  const filter = useAppStore((s) => s.khataSide)
+  const setFilter = useAppStore((s) => s.setKhataSide)
   const [dialogOpen, setDialogOpen] = useState(false)
   /** #31: the party being corrected, or null when adding a new one. */
   const [editingParty, setEditingParty] = useState<any | null>(null)
@@ -63,6 +66,9 @@ export function Parties() {
   })
 
   const parties: any[] = data?.parties || []
+
+  // Phase 5a-3: "Add Customer/Supplier" / + sheet "New customer" from another screen.
+  useNewEntryRequest('parties', () => setDialogOpen(true))
 
   // Listen for global "New Entry" trigger from Header (only if fired on this view)
   const lastTriggerRef = useRef(triggerNewEntry)

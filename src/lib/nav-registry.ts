@@ -35,7 +35,7 @@ import {
   Database, UserCog, Gift, HelpCircle, Star, LogOut, Info,
   Palette, Bell, Crown, Search, MessageCircleQuestion,
   TrendingUp, Clock, Scale, Receipt, Hash, Wallet as WalletIcon,
-  Plus, UserPlus, House, ReceiptText,
+  Plus, UserPlus, House, ReceiptText, ArrowDownLeft, ArrowUpRight,
   type LucideIcon,
 } from 'lucide-react'
 import type { ViewType, FeatureKey } from '@/store/app-store'
@@ -117,6 +117,7 @@ export type NavSurface =
   | 'reports-hub'       // ReportsHub grid
   | 'account'           // AccountScreen menu
   | 'global-search'     // GlobalSearch commands
+  | 'new-sheet'         // the bottom bar's + sheet (Phase 5a-3)
 
 export interface NavDestination {
   /** Unique identifier (e.g. 'gstr-1', 'reconciliation', 'dashboard') */
@@ -143,6 +144,14 @@ export interface NavDestination {
   barLabelKey?: string
   barIcon?: LucideIcon
   barActiveViews?: ViewType[]
+  /**
+   * New sheet only (Phase 5a-3): its short name ("Purchase", not "New Purchase"),
+   * its place, and which row it sits in: 'ai' (Scan, Speak) at the top, 'grid'
+   * in the middle, 'primary' (New sale) as the big button nearest the thumb.
+   */
+  sheetLabelKey?: string
+  sheetOrder?: number
+  sheetRow?: 'ai' | 'grid' | 'primary'
   /** i18n key for the description. If set, surfaces use t(descKey) instead of description. */
   descKey?: string
   /** Tailwind text color class for the icon */
@@ -174,6 +183,7 @@ export interface NavDestination {
     fireTriggerNewEntry?: boolean     // opens Inventory/Parties add dialog
     fireTriggerVoiceOpen?: boolean    // opens TransactionEntry voice dialog
     fireTriggerBarcodeOpen?: boolean  // opens TransactionEntry barcode scanner
+    khataSide?: 'customer' | 'supplier'  // Phase 5a-3: which side Khata opens on
   }
 
   // ─── Categorization ──────────────────────────────────
@@ -318,7 +328,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'secondary',
-    surfaces: ['more', 'global-search'],
+    surfaces: ['more', 'global-search', 'new-sheet'],
+    sheetRow: 'primary',
+    sheetOrder: 0,
+    sheetLabelKey: 'new.sale',
     sortOrder: 1,
     moduleKey: 'sales',  // 🔒 V26 N16
     keywords: 'new sale create add record',
@@ -337,7 +350,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'secondary',
-    surfaces: ['more', 'global-search'],
+    surfaces: ['more', 'global-search', 'new-sheet'],
+    sheetRow: 'grid',
+    sheetOrder: 1,
+    sheetLabelKey: 'new.purchase',
     sortOrder: 2,
     moduleKey: 'purchases',  // 🔒 V26 N16
     keywords: 'new purchase create add record buy stock',
@@ -356,7 +372,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     // 🔒 V26 FIX N5: was ['more'] only → desktop users had NO way to discover
     // returns (More is only reachable from the lg:hidden mobile bottom nav).
     // Now also in the desktop Sidebar Tools section and Ctrl+K search.
-    surfaces: ['more', 'sidebar-tools', 'global-search'],
+    surfaces: ['more', 'sidebar-tools', 'global-search', 'new-sheet'],
+    sheetRow: 'grid',
+    sheetOrder: 6,
+    sheetLabelKey: 'new.return',
     keywords: 'sale return credit note refund customer wapas',
     sortOrder: 3,
     labelKey: 'nav.label.sale-return',
@@ -409,7 +428,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'secondary',
-    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools,
+    surfaces: ['more', 'sidebar-tools', 'global-search', 'new-sheet'],  // 🔒 V26 P5: added sidebar-tools,
+    sheetRow: 'grid',
+    sheetOrder: 5,
+    sheetLabelKey: 'new.estimate',
     sortOrder: 5,
     labelKey: 'nav.label.estimates',
     descKey: 'nav.desc.estimates',
@@ -1001,7 +1023,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'tools',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'more', 'global-search'],
+    surfaces: ['sidebar-main', 'more', 'global-search', 'new-sheet'],
+    sheetRow: 'ai',
+    sheetOrder: 1,
+    sheetLabelKey: 'new.scan',
     sortOrder: 2,
     keywords: 'scan bill ai camera photo ocr scanner',
     labelKey: 'nav.label.scanner',
@@ -1089,7 +1114,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
-    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools
+    surfaces: ['more', 'sidebar-tools', 'global-search', 'new-sheet'],  // 🔒 V26 P5: added sidebar-tools
+    sheetRow: 'ai',
+    sheetOrder: 2,
+    sheetLabelKey: 'new.speak',
     keywords: 'voice entry speak bol ke sale mic',
     sortOrder: 2,
     labelKey: 'nav.label.voice-entry',
@@ -1588,7 +1616,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionParams: { fireTriggerNewEntry: true },
     category: 'inventory',
     frequency: 'primary',
-    surfaces: ['global-search'],
+    surfaces: ['global-search', 'new-sheet'],
+    sheetRow: 'grid',
+    sheetOrder: 7,
+    sheetLabelKey: 'new.item',
     keywords: 'add new product create inventory item',
     labelKey: 'nav.label.add-product',
     descKey: 'nav.desc.add-product',
@@ -1607,10 +1638,69 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionParams: { fireTriggerNewEntry: true },
     category: 'parties',
     frequency: 'primary',
-    surfaces: ['global-search'],
+    surfaces: ['global-search', 'new-sheet'],
+    sheetRow: 'grid',
+    sheetOrder: 8,
+    sheetLabelKey: 'new.customer',
     keywords: 'add new customer supplier party create',
     labelKey: 'nav.label.add-party',
     descKey: 'nav.desc.add-party',
+  },
+  // ═══ Phase 5a-3: entries only the New sheet (and search) offer ═══════════
+  {
+    id: 'got-payment',
+    label: 'Got payment',
+    description: 'Money a customer paid you',
+    icon: ArrowDownLeft,
+    iconColor: 'text-good',
+    iconBg: 'bg-good-soft',
+    view: 'parties',
+    actionKind: 'toast-navigate',
+    actionParams: { khataSide: 'customer', toastTitle: 'Pick the customer', toastDescription: 'Then tap Receive Payment on their page.' },
+    category: 'parties',
+    frequency: 'secondary',
+    surfaces: ['new-sheet', 'global-search'],
+    sheetRow: 'grid',
+    sheetOrder: 2,
+    sheetLabelKey: 'new.got_payment',
+    keywords: 'got payment received money customer paid udhaar wapas mila',
+    moduleKey: 'parties',
+  },
+  {
+    id: 'gave-payment',
+    label: 'Gave payment',
+    description: 'Money you paid a supplier',
+    icon: ArrowUpRight,
+    iconColor: 'text-bad',
+    iconBg: 'bg-bad-soft',
+    view: 'parties',
+    actionKind: 'toast-navigate',
+    actionParams: { khataSide: 'supplier', toastTitle: 'Pick the supplier', toastDescription: 'Then tap Make Payment on their page.' },
+    category: 'parties',
+    frequency: 'secondary',
+    surfaces: ['new-sheet', 'global-search'],
+    sheetRow: 'grid',
+    sheetOrder: 3,
+    sheetLabelKey: 'new.gave_payment',
+    keywords: 'gave payment paid supplier money out',
+    moduleKey: 'parties',
+  },
+  {
+    id: 'new-income-expense',
+    label: 'Income / Expense',
+    description: 'Record money in or out that is not a bill',
+    icon: Wallet,
+    view: 'income-expense',
+    actionKind: 'navigate',
+    actionParams: { fireTriggerNewEntry: true },
+    category: 'transactions',
+    frequency: 'secondary',
+    surfaces: ['new-sheet', 'global-search'],
+    sheetRow: 'grid',
+    sheetOrder: 4,
+    sheetLabelKey: 'new.income_expense',
+    keywords: 'expense income kharcha money out rent salary electricity',
+    moduleKey: 'incomeExpense',
   },
   {
     id: 'go-to-account',

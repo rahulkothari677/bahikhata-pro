@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
+import { useNewEntryRequest } from '@/hooks/use-new-entry-request'
 import { useTranslation } from '@/hooks/use-translation'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
@@ -53,6 +54,9 @@ export function IncomeExpense() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogType, setDialogType] = useState<'income' | 'expense'>('expense')
   const [choiceOpen, setChoiceOpen] = useState(false)
+
+  // Phase 5a-3: + sheet "Income / Expense" from another screen.
+  useNewEntryRequest('income-expense', () => setChoiceOpen(true))
 
   // Listen for global "New Entry" trigger from Header (only if fired on this view)
   const lastTriggerRef = useRef(triggerNewEntry)

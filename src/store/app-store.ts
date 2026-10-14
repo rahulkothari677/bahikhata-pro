@@ -217,6 +217,17 @@ interface AppState {
   // sales/purchase ledger telling the user to pick a transaction to return.
   returnMode: 'sale' | 'purchase' | null
   setReturnMode: (mode: 'sale' | 'purchase' | null) => void
+  /** Phase 5a-3: the side Khata shows. Kept in the store so the + sheet's
+   *  "Gave payment" (and later Home's To pay card) can open Suppliers. */
+  khataSide: 'all' | 'customer' | 'supplier'
+  setKhataSide: (side: 'all' | 'customer' | 'supplier') => void
+  /** Phase 5a-3: the New sheet opened by the bottom bar's + button. */
+  newSheetOpen: boolean
+  setNewSheetOpen: (open: boolean) => void
+  /** Phase 5a-3: a screen whose add form should open (see useNewEntryRequest). */
+  pendingNewEntryView: ViewType | null
+  requestNewEntry: (view: ViewType) => void
+  clearNewEntryRequest: () => void
   previousView: ViewType | null
   setPreviousView: (v: ViewType | null) => void
   pendingDateRange: { from: string; to: string; preset: string } | null
@@ -395,6 +406,13 @@ export const useAppStore = create<AppState>()(
       // 🔒 Feature Phase 6: Guided returns
       returnMode: null,
       setReturnMode: (mode) => set({ returnMode: mode }),
+      khataSide: 'customer',
+      setKhataSide: (side) => set({ khataSide: side }),
+      newSheetOpen: false,
+      setNewSheetOpen: (open) => set({ newSheetOpen: open }),
+      pendingNewEntryView: null,
+      requestNewEntry: (view) => set({ pendingNewEntryView: view }),
+      clearNewEntryRequest: () => set({ pendingNewEntryView: null }),
       previousView: null,
       setPreviousView: (v) => set({ previousView: v }),
       pendingDateRange: null,

@@ -23,12 +23,12 @@
  */
 
 import { useAppStore, type ViewType } from '@/store/app-store'
-import { Menu, Plus, Calculator, ShoppingCart, Truck, Wallet } from 'lucide-react'
+import { Menu, Plus, Calculator } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useRef, useMemo } from 'react'
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 3): BottomNav now renders from the NavRegistry.
 import { NAV_REGISTRY, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
 import { useTranslation } from '@/hooks/use-translation'
@@ -38,22 +38,12 @@ export function MobileBottomNav() {
   const { currentView, setView, previousView } = useAppStore()
   const { canAccess, isCA } = useStaffPermissions()
 
-  // 🔒 V17 Audit Phase 10: Long-press quick-action menu state
-  const [showQuickMenu, setShowQuickMenu] = useState(false)
+  // Phase 5a-3: a tap on + opens the New sheet (every kind of entry); holding
+  // + goes straight to New sale, so a busy counter loses nothing. Was: tap =
+  // New Sale, and a hidden long-press menu with three entries.
+  const setNewSheetOpen = useAppStore((s) => s.setNewSheetOpen)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const quickMenuRef = useRef<HTMLDivElement>(null)
-
-  // Close quick menu on outside click
-  useEffect(() => {
-    if (!showQuickMenu) return
-    const handleClick = (e: MouseEvent) => {
-      if (quickMenuRef.current && !quickMenuRef.current.contains(e.target as Node)) {
-        setShowQuickMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [showQuickMenu])
+  const longPressFired = useRef(false)
 
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 3): Tabs from NavRegistry, filtered by
   // surfaces: ['bottom-nav'] + permissions. Was: hardcoded TABS array with
@@ -98,11 +88,12 @@ export function MobileBottomNav() {
     currentView === 'account' ||
     previousView === 'more')
 
-  // 🔒 V17 Audit Phase 10: Long-press handlers for the + button
   const handlePlusTouchStart = () => {
+    longPressFired.current = false
     longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true
       haptic.medium()
-      setShowQuickMenu(true)
+      setView('new-sale')
     }, 500) // 500ms long-press
   }
   const handlePlusTouchEnd = () => {
@@ -112,18 +103,11 @@ export function MobileBottomNav() {
     }
   }
   const handlePlusClick = () => {
-    // If the menu is showing, don't also navigate (the long-press already fired)
-    if (showQuickMenu) return
+    // The long-press already went to New sale; the click that follows it must not open the sheet too.
+    if (longPressFired.current) { longPressFired.current = false; return }
     haptic.medium()
-    setView('new-sale')
+    setNewSheetOpen(true)
   }
-
-  // Quick menu actions
-  const quickActions = [
-    { label: 'New Sale', icon: ShoppingCart, view: 'new-sale' as ViewType, color: 'text-emerald-600 dark:text-emerald-400' },
-    { label: 'New Purchase', icon: Truck, view: 'new-purchase' as ViewType, color: 'text-amber-600 dark:text-amber-400' },
-    { label: 'Income/Expense', icon: Wallet, view: 'income-expense' as ViewType, color: 'text-blue-600' },
-  ]
 
   return (
     <>
@@ -175,43 +159,19 @@ export function MobileBottomNav() {
                 <span className="text-xs font-medium text-violet-600 dark:text-violet-400">CA Mode</span>
               </div>
             ) : (
-              <>
-                <button
-                  onClick={handlePlusClick}
-                  onTouchStart={handlePlusTouchStart}
-                  onTouchEnd={handlePlusTouchEnd}
-                  onTouchMove={handlePlusTouchEnd}
-                  className="w-12 h-12 -mt-6 rounded-full bg-gradient-saffron text-white flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-transform"
-                  aria-label="New Sale (long-press for more options)"
-                >
+              <button
+                onClick={handlePlusClick}
+                onTouchStart={handlePlusTouchStart}
+                onTouchEnd={handlePlusTouchEnd}
+                onTouchMove={handlePlusTouchEnd}
+                className="flex flex-col items-center gap-0.5 min-w-12 -mt-6"
+                aria-label="New entry (hold for New sale)"
+              >
+                <span className="w-12 h-12 rounded-full bg-gradient-saffron text-white flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-transform">
                   <Plus className="w-6 h-6" strokeWidth={2.5} />
-                </button>
-                {/* 🔒 V17 Audit Phase 10: Long-press quick-action menu */}
-                {showQuickMenu && (
-                  <div
-                    ref={quickMenuRef}
-                    className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-xl shadow-xl py-1 min-w-[160px] z-50"
-                  >
-                    {quickActions.map((action) => {
-                      const ActionIcon = action.icon
-                      return (
-                        <button
-                          key={action.view}
-                          onClick={() => {
-                            haptic.click()
-                            setShowQuickMenu(false)
-                            setView(action.view)
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition text-left"
-                        >
-                          <ActionIcon className={cn('w-4 h-4', action.color)} />
-                          <span className="text-sm font-medium">{action.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </>
+                </span>
+                <span className="text-xs font-medium text-muted-foreground">{t('new.title')}</span>
+              </button>
             )}
           </div>
 

@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
+import { useNewEntryRequest } from '@/hooks/use-new-entry-request'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn } from '@/lib/utils'
 import { isService } from '@/lib/inventory-tracking'
@@ -72,6 +73,9 @@ export function Inventory() {
   })
 
   const products: any[] = data?.products || []
+
+  // Phase 5a-3: "Add Product" / + sheet "New item" from another screen.
+  useNewEntryRequest('inventory', () => { setEditingProduct(null); setDialogOpen(true) })
 
   // Listen for global "New Entry" trigger from Header (only if it was fired on this view)
   const lastTriggerRef = useRef(triggerNewEntry)
