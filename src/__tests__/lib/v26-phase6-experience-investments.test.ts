@@ -47,8 +47,10 @@ describe('V26 Phase 6 Batch 3 — Experience investments', () => {
     expect(src).toMatch(/text-2xl.*lg:text-3xl.*font-bold.*tabular-nums/)
     // Shop name must be demoted (not the largest text).
     expect(src).toMatch(/text-xs font-medium.*shopName|shopName.*text-xs font-medium/)
-    // "Today's sales" label must exist above the revenue number.
-    expect(src).toMatch(/Today's sales/)
+    // "Today's sales" label must exist above the revenue number. Phase 5b-1:
+    // it is the translated key (Hindi shops read "आज की बिक्री"), on the
+    // button that opens how the figure is worked out.
+    expect(src).toMatch(/t\('proof\.t_sales_today'\)\}<\/span>\s*<span className="block text-2xl/)
   })
 
   // ─── §6.2: Balance-first party rows with Hindi gloss ────────────────────

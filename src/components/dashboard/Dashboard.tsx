@@ -58,6 +58,7 @@ import { todayMarginPct } from '@/lib/unit-profit'
 import { useCountUp } from '@/hooks/use-count-up'
 import { EmptyState } from '@/components/common/EmptyState'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
+import { ProofSheet, type ProofSpec, type ProofAction } from '@/components/dashboard/ProofSheet'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -77,6 +78,8 @@ export function Dashboard() {
   const [repeating, setRepeating] = useState(false)
   // 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog
   const [showDayEnd, setShowDayEnd] = useState(false)
+  // Phase 5b-1: the "how is this worked out?" sheet for a tapped number.
+  const [proof, setProof] = useState<ProofSpec | null>(null)
 
   // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): When MoreScreen's "Day-End Summary" is
   // tapped, it calls fireTriggerDayEnd() + setView('dashboard'). This effect
@@ -165,6 +168,17 @@ export function Dashboard() {
   // Today's date range for "today" KPIs
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
+
+  // Phase 5b-1: each sheet ends with a way to the records behind it.
+  const proofActions = (spec: ProofSpec | null): ProofAction[] => {
+    if (!spec) return []
+    if (spec.kind === 'drawer') return [{ label: t('proof.open_cashbook'), onClick: () => setView('income-expense') }, { label: t('proof.close_day'), onClick: () => setShowDayEnd(true) }]
+    if (spec.metric === 'got') return [{ label: t('proof.open_khata'), onClick: () => setView('parties') }]
+    if (spec.metric === 'netProfit') return [{ label: t('proof.open_cashbook'), onClick: () => setView('income-expense') }]
+    return spec.scope === 'today'
+      ? [{ label: t('proof.open_bills'), onClick: () => navigateToSalesWithDate(todayStart, new Date(), 'Today') }]
+      : [{ label: t('proof.open_bills'), onClick: () => navigateToSalesWithDate(dateRange.from, dateRange.to, spec.periodLabel ?? '') }]
+  }
 
   // Show offline-no-data state if: offline AND query failed (any error) AND no cached data
   const isOfflineNoData = !isOnline() && !!error && !data
@@ -585,10 +599,18 @@ export function Dashboard() {
                 desktop — still the dominant element, but proportional. */}
             <p className="text-xs font-medium text-white/90 mt-0.5">{setting?.shopName || 'My Shop'}</p>
             <div className="mt-1.5">
-              <p className="text-xs text-white/70 font-medium">Today's sales</p>
-              <p className="text-2xl lg:text-3xl font-bold tabular-nums text-white mt-0.5">
-                {formatINR(kpis.todayRevenue)}
-              </p>
+              {/* Phase 5b-1: the figure opens how it is worked out. */}
+              <button
+                type="button"
+                onClick={() => setProof({ kind: 'explain', metric: 'sales', scope: 'today', titleKey: 'proof.t_sales_today', shown: kpis.todayRevenue })}
+                className="text-left rounded-lg min-h-12 -mx-1 px-1 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white"
+                aria-label={`${t('proof.t_sales_today')} ${formatINR(kpis.todayRevenue)}. ${t('proof.tap_hint')}`}
+              >
+                <span className="block text-xs text-white/70 font-medium">{t('proof.t_sales_today')}</span>
+                <span className="block text-2xl lg:text-3xl font-bold tabular-nums text-white mt-0.5">
+                  {formatINR(kpis.todayRevenue)}
+                </span>
+              </button>
               <p className="text-white/80 text-xs mt-0.5">
                 {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
                 {/* 🔒 V17 Audit Phase 1 P0.3: Show "net of returns" badge if credit notes exist today */}
@@ -742,7 +764,7 @@ export function Dashboard() {
           // two numbers = instant distrust. Label the basis explicitly here and
           // on the P&L report so the difference reads as intentional.
           subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')}${showsGst ? ` • ${t('dash.incl_gst')}` : ''}`}
-          onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
+          onClick={() => setProof({ kind: 'explain', metric: 'sales', scope: 'today', titleKey: 'proof.t_sales_today', shown: kpis.todayRevenue })}
         />
         {!hideProfit && (
           <KPICard
@@ -752,7 +774,7 @@ export function Dashboard() {
             icon={TrendingUp}
             gradient="from-emerald-500 to-teal-600"
             subtitle={`${t('stat.margin')} ${todayMarginPct(kpis).toFixed(1)}%`}
-            onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
+            onClick={() => setProof({ kind: 'explain', metric: 'profit', scope: 'today', titleKey: 'proof.t_profit_today', shown: kpis.todayProfit })}
           />
         )}
         <KPICard
@@ -766,7 +788,7 @@ export function Dashboard() {
           // up-arrow — misleading for new users + early-morning existing users.
           subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')}${showsGst ? ` (${t('dash.incl_gst')})` : ''}${kpis.revenueGrowth !== 0 ? ` • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev` : ''}`}
           trend={kpis.revenueGrowth !== 0 ? (kpis.revenueGrowth >= 0 ? 'up' : 'down') : undefined}
-          onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
+          onClick={() => setProof({ kind: 'explain', metric: 'sales', scope: 'range', from: dateRange.from, to: dateRange.to, titleKey: 'proof.t_sales_range', periodLabel: rangeLabel, shown: kpis.rangeRevenue })}
         />
         {!hideProfit && (
           <KPICard
@@ -777,7 +799,7 @@ export function Dashboard() {
             gradient="from-violet-500 to-purple-600"
             subtitle={`${kpis.profitGrowth !== 0 ? `${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend` : 'No prior period to compare'}`}
             trend={kpis.profitGrowth !== 0 ? (kpis.profitGrowth >= 0 ? 'up' : 'down') : undefined}
-            onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
+            onClick={() => setProof({ kind: 'explain', metric: 'netProfit', scope: 'range', from: dateRange.from, to: dateRange.to, titleKey: 'proof.t_net_profit', periodLabel: rangeLabel, shown: kpis.netProfit })}
           />
         )}
       </div>
@@ -810,7 +832,7 @@ export function Dashboard() {
             icon={HandCoins}
             color="text-blue-600"
             subtitle={`${kpis.todayCollectionCount} payment${kpis.todayCollectionCount === 1 ? '' : 's'}`}
-            onClick={() => setView('parties')}
+            onClick={() => setProof({ kind: 'explain', metric: 'got', scope: 'today', titleKey: 'proof.t_got', shown: kpis.todayCollections })}
           />
         )}
         <MiniStatCard
@@ -1292,6 +1314,7 @@ export function Dashboard() {
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
       <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />
+      <ProofSheet spec={proof} onClose={() => setProof(null)} actions={proofActions(proof)} showsGst={showsGst} />
     </div>
   )
 }
