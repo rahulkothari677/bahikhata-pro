@@ -17,7 +17,7 @@ import { translations } from '@/lib/i18n'
 import { newSheetEntries } from '@/components/layout/NewEntrySheet'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { useAppStore } from '@/store/app-store'
-import { stripComments } from '@/test-support/read-source'
+import { stripComments, balancedBlock } from '@/test-support/read-source'
 
 const sheet = newSheetEntries(NAV_REGISTRY)
 const every = [...sheet.ai, ...sheet.grid, ...(sheet.primary ? [sheet.primary] : [])]
@@ -66,10 +66,12 @@ describe('the + New sheet', () => {
 
   test('the + button: a tap opens the sheet, holding goes straight to New sale', () => {
     const code = stripComments(fs.readFileSync(path.resolve(process.cwd(), 'src/components/layout/MobileBottomNav.tsx'), 'utf8'))
-    const click = code.slice(code.indexOf('const handlePlusClick'), code.indexOf('const handlePlusClick') + 400)
+    // Each handler's own body, cut at its closing brace (was a 400-character
+    // window, which would read into the JSX below; 5a close).
+    const click = balancedBlock(code, 'const handlePlusClick')
     expect(click).toMatch(/setNewSheetOpen\(true\)/)
     expect(click).not.toMatch(/setView\('new-sale'\)/)
-    const hold = code.slice(code.indexOf('const handlePlusTouchStart'), code.indexOf('const handlePlusTouchEnd'))
+    const hold = balancedBlock(code, 'const handlePlusTouchStart')
     expect(hold).toMatch(/setView\('new-sale'\)/)
   })
 })

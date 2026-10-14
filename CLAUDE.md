@@ -437,6 +437,10 @@ cause**, never as a new line at the bottom.
 · **And a third time (12 Aug):** a follow-up with no history returned null from
   `resolveFollowUp`, and the model invented a subject. Null from any parser
   means "no rule matched" — never "refused".
+· **14 Oct, the same shape in the UI:** the header's title lookup fell back to
+  "Dashboard" for any screen it did not know, so Tools and a party's bills were
+  titled "Dashboard" for months (#243). A lookup that misses shows nothing,
+  never a plausible wrong name — and a guard lists every screen that must hit.
 
 **Cause 4 — Verifying the wrong layer**
 · Reported work without opening the browser · verified by API only
@@ -497,6 +501,11 @@ cause**, never as a new line at the bottom.
   not:** CI checks out Unix line endings, so GitHub was green throughout. The
   failure was local, on my machine only — which I should have checked before
   saying it, and which is Cause 6 wearing a new coat.
+· **14 Oct (5a-5): a 160-character window before `'{info.title}'`** in the
+  header guard. Renaming the variable made `indexOf` return -1, and the window
+  became the last 160 characters of the file. It failed loudly this time, by
+  luck. Replaced by matching the `<h2>` element itself. **Grep the guards for
+  `indexOf(` + `slice(` windows when a phase touches the file they read.**
 
 **Five in three days, all one shape: measuring nearby text instead of the
 structure.** Match the actual thing — balance the braces, parse the argument,
