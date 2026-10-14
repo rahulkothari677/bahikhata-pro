@@ -50,8 +50,8 @@ describe('the + New sheet', () => {
     const hi = translations.hi as unknown as Record<string, string>
     for (const d of every) {
       expect(d.view).toBeTruthy()
-      expect(en[d.sheetLabelKey!]).toBeTruthy()
-      expect(hi[d.sheetLabelKey!]).toBeTruthy()
+      expect(en[d.shortLabelKey!]).toBeTruthy()
+      expect(hi[d.shortLabelKey!]).toBeTruthy()
     }
   })
 

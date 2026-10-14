@@ -126,7 +126,7 @@ export function MobileBottomNav() {
           {/* Left side: Dashboard + Sales */}
           {visibleTabs.slice(0, 2).map((tab: NavDestination) => {
             const Icon = tab.barIcon ?? tab.icon
-            const name = t(tab.barLabelKey ?? tab.labelKey ?? '') || tab.label
+            const name = t(tab.shortLabelKey ?? tab.labelKey ?? '') || tab.label
             const tabView = tab.view || 'dashboard'
             const isActive = tabIsActive(tab)
             return (
@@ -178,7 +178,7 @@ export function MobileBottomNav() {
           {/* Right side: Purchases + More */}
           {visibleTabs.slice(2).map((tab: NavDestination) => {
             const Icon = tab.barIcon ?? tab.icon
-            const name = t(tab.barLabelKey ?? tab.labelKey ?? '') || tab.label
+            const name = t(tab.shortLabelKey ?? tab.labelKey ?? '') || tab.label
             const tabView = tab.view || 'dashboard'
             const isActive = tabIsActive(tab)
             return (
@@ -204,10 +204,10 @@ export function MobileBottomNav() {
               'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
               isMoreActive ? 'text-primary' : 'text-muted-foreground',
             )}
-            aria-label="More"
+            aria-label={t('nav.more')}
           >
             <Menu className="w-5 h-5" strokeWidth={isMoreActive ? 2.5 : 2} />
-            <span className="text-xs font-medium">More</span>
+            <span className="text-xs font-medium">{t('nav.more')}</span>
           </button>
         </div>
       </nav>

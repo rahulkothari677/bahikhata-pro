@@ -137,21 +137,29 @@ export interface NavDestination {
   /** i18n key for the label. If set, surfaces use t(labelKey) instead of label. */
   labelKey?: string
   /**
-   * Bottom bar only (Phase 5a-2, ledger model): the tab's own name and icon,
-   * and the other views that light the tab. Bills is the Sales ledger and is
-   * also lit on Purchases; Khata is Parties and stays lit on a party's pages.
+   * The short name (i18n key) every compact surface uses: the bottom bar, the
+   * + New sheet, More's tiles and the desktop rail (Phase 5a-2..5). One field,
+   * so a thing has one short name everywhere ("Bills", "Purchase", "Cashbook").
+   * Falls back to labelKey / label.
    */
-  barLabelKey?: string
+  shortLabelKey?: string
+  /**
+   * Bottom bar only (Phase 5a-2, ledger model): the tab's icon and the other
+   * views that light it. Bills is the Sales ledger and is also lit on
+   * Purchases; Khata is Parties and stays lit on a party's pages.
+   */
   barIcon?: LucideIcon
   barActiveViews?: ViewType[]
   /**
-   * New sheet only (Phase 5a-3): its short name ("Purchase", not "New Purchase"),
-   * its place, and which row it sits in: 'ai' (Scan, Speak) at the top, 'grid'
-   * in the middle, 'primary' (New sale) as the big button nearest the thumb.
+   * New sheet only (Phase 5a-3): its place, and which row it sits in: 'ai'
+   * (Scan, Speak) at the top, 'grid' in the middle, 'primary' (New sale) as the
+   * big button nearest the thumb. Its name comes from shortLabelKey.
    */
-  sheetLabelKey?: string
   sheetOrder?: number
   sheetRow?: 'ai' | 'grid' | 'primary'
+  /** More page only (Phase 5a-4): its open group and place in it. Every 'more' entry needs one. */
+  moreGroup?: 'books' | 'tools' | 'grow'
+  moreOrder?: number
   /** i18n key for the description. If set, surfaces use t(descKey) instead of description. */
   descKey?: string
   /** Tailwind text color class for the icon */
@@ -268,7 +276,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 1,
-    barLabelKey: 'nav.home',
+    shortLabelKey: 'nav.home',
     barIcon: House,
     keywords: 'dashboard home overview charts stats kpi',
     labelKey: 'nav.label.dashboard',
@@ -290,7 +298,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 3,
-    barLabelKey: 'nav.bills',
+    shortLabelKey: 'nav.bills',
     barIcon: ReceiptText,
     barActiveViews: ['sales', 'purchases'],
     keywords: 'sales ledger transactions history sell bills',
@@ -328,10 +336,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'secondary',
-    surfaces: ['more', 'global-search', 'new-sheet'],
+    surfaces: ['global-search', 'new-sheet'],
     sheetRow: 'primary',
     sheetOrder: 0,
-    sheetLabelKey: 'new.sale',
+    shortLabelKey: 'new.sale',
     sortOrder: 1,
     moduleKey: 'sales',  // 🔒 V26 N16
     keywords: 'new sale create add record',
@@ -350,10 +358,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'secondary',
-    surfaces: ['more', 'global-search', 'new-sheet'],
+    surfaces: ['global-search', 'new-sheet'],
     sheetRow: 'grid',
     sheetOrder: 1,
-    sheetLabelKey: 'new.purchase',
+    shortLabelKey: 'new.purchase',
     sortOrder: 2,
     moduleKey: 'purchases',  // 🔒 V26 N16
     keywords: 'new purchase create add record buy stock',
@@ -372,10 +380,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     // 🔒 V26 FIX N5: was ['more'] only → desktop users had NO way to discover
     // returns (More is only reachable from the lg:hidden mobile bottom nav).
     // Now also in the desktop Sidebar Tools section and Ctrl+K search.
-    surfaces: ['more', 'sidebar-tools', 'global-search', 'new-sheet'],
+    surfaces: ['sidebar-tools', 'global-search', 'new-sheet'],
     sheetRow: 'grid',
     sheetOrder: 6,
-    sheetLabelKey: 'new.return',
+    shortLabelKey: 'new.return',
     keywords: 'sale return credit note refund customer wapas',
     sortOrder: 3,
     labelKey: 'nav.label.sale-return',
@@ -399,6 +407,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'toast-navigate',
     // 🔒 V26 FIX N5: same desktop-discoverability fix as sale-return above.
     surfaces: ['more', 'sidebar-tools', 'global-search'],
+    shortLabelKey: 'short.purchase_return',
+    moreGroup: 'books',
+    moreOrder: 5,
     keywords: 'purchase return debit note refund supplier wapas',
     sortOrder: 4,
     labelKey: 'nav.label.purchase-return',
@@ -428,10 +439,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'secondary',
-    surfaces: ['more', 'sidebar-tools', 'global-search', 'new-sheet'],  // 🔒 V26 P5: added sidebar-tools,
+    surfaces: ['sidebar-tools', 'global-search', 'new-sheet'],  // 🔒 V26 P5: added sidebar-tools,
     sheetRow: 'grid',
     sheetOrder: 5,
-    sheetLabelKey: 'new.estimate',
+    shortLabelKey: 'new.estimate',
     sortOrder: 5,
     labelKey: 'nav.label.estimates',
     descKey: 'nav.desc.estimates',
@@ -450,6 +461,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'sale-purchase',
     frequency: 'primary',
     surfaces: ['sidebar-main', 'more', 'global-search'],
+    shortLabelKey: 'short.cashbook',
+    moreGroup: 'books',
+    moreOrder: 2,
     sortOrder: 6,
     keywords: 'income expense rent salary money',
     labelKey: 'nav.label.income-expense',
@@ -477,6 +491,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     frequency: 'primary',
     surfaces: ['sidebar-main', 'more', 'global-search'],
+    moreGroup: 'tools',
+    moreOrder: 8,
     sortOrder: 0,
     keywords: 'ask question search kitna baaki sale profit query',
     labelKey: 'nav.label.ask',
@@ -496,6 +512,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'inventory',
     frequency: 'primary',
     surfaces: ['sidebar-main', 'more', 'global-search'],
+    shortLabelKey: 'short.items',
+    moreGroup: 'books',
+    moreOrder: 1,
     sortOrder: 5,
     keywords: 'inventory products stock items',
     labelKey: 'nav.label.inventory',
@@ -515,7 +534,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'items-stock',
     frequency: 'secondary',
     // 🔒 V26 FIX N5: desktop-discoverable via Ctrl+K (Inventory itself is in the sidebar)
-    surfaces: ['more', 'global-search'],
+    surfaces: ['global-search'],
     keywords: 'low stock alert reorder running out kam',
     sortOrder: 2,
     labelKey: 'nav.label.low-stock-alerts',
@@ -535,9 +554,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'parties',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'bottom-nav', 'more', 'global-search'],
+    surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 7,
-    barLabelKey: 'nav.khata',
+    shortLabelKey: 'nav.khata',
     barActiveViews: ['parties', 'party-profile', 'party-bills', 'party-settle'],
     keywords: 'parties customers suppliers dues balance khata udhaar',
     labelKey: 'nav.label.parties',
@@ -558,6 +577,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     // 🔒 V26 FIX N5: was ['more'] only — desktop users had no named entry
     // (only the Bulk Reminders button inside Parties). Now in Sidebar Tools + Ctrl+K.
     surfaces: ['more', 'sidebar-tools', 'global-search'],
+    shortLabelKey: 'short.reminders',
+    moreGroup: 'tools',
+    moreOrder: 6,
     keywords: 'whatsapp reminder payment udhaar collect dunning message',
     sortOrder: 4,
     labelKey: 'nav.label.whatsapp-reminders',
@@ -582,7 +604,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'reports',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'global-search'],
+    surfaces: ['sidebar-main', 'global-search', 'more'],
+    moreGroup: 'books',
+    moreOrder: 4,
     sortOrder: 8,
     keywords: 'reports gst pl profit loss stock analysis',
     labelKey: 'nav.label.reports',
@@ -625,7 +649,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst-tax',
     frequency: 'secondary',
-    surfaces: ['sidebar-tools', 'more'],
+    surfaces: ['sidebar-tools'],
     sortOrder: 4,
     labelKey: 'nav.label.reconciliation',
     descKey: 'nav.desc.reconciliation',
@@ -643,7 +667,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst-tax',
     frequency: 'secondary',
-    surfaces: ['sidebar-tools', 'more'],
+    surfaces: ['sidebar-tools'],
     sortOrder: 5,
     labelKey: 'nav.label.period-lock',
     descKey: 'nav.desc.period-lock',
@@ -662,6 +686,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'banking', // 🔒 V26 P8: moved from 'money-banking' to group with Cashflow + Consolidated
     frequency: 'secondary',
     surfaces: ['more', 'reports-hub'],
+    shortLabelKey: 'short.bank',
+    moreGroup: 'books',
+    moreOrder: 3,
     sortOrder: 1,
     labelKey: 'nav.label.bank-reconciliation',
     descKey: 'nav.desc.bank-reconciliation',
@@ -681,7 +708,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],  // 🔒 V26 BUG-047: also surface in More
+    surfaces: ['reports-hub'],  // 🔒 V26 BUG-047: also surface in More
     sortOrder: 1,
     moduleKey: 'reports',  // 🔒 V26 BUG-047: gate behind reports permission
     labelKey: 'nav.label.pl',
@@ -700,7 +727,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 2,
     moduleKey: 'reports',
     labelKey: 'nav.label.bill-profit',
@@ -719,7 +746,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 3,
     moduleKey: 'reports',
     labelKey: 'nav.label.item-profit',
@@ -738,7 +765,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 4,
     moduleKey: 'reports',
     labelKey: 'nav.label.party-statement',
@@ -757,7 +784,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 5,
     moduleKey: 'reports',
     labelKey: 'nav.label.debt-aging',
@@ -776,7 +803,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 6,
     moduleKey: 'reports',
     labelKey: 'nav.label.trial-balance',
@@ -805,7 +832,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 6,
     moduleKey: 'reports',
   },
@@ -823,7 +850,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 1,
     moduleKey: 'reports',
     labelKey: 'nav.label.gstr-1',
@@ -843,7 +870,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 2,
     moduleKey: 'reports',
     labelKey: 'nav.label.gstr-3b',
@@ -863,7 +890,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 3,
     moduleKey: 'reports',
     labelKey: 'nav.label.gstr-2b',
@@ -883,7 +910,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 4,
     moduleKey: 'reports',
     labelKey: 'nav.label.gst-summary',
@@ -903,7 +930,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 5,
     moduleKey: 'reports',
     labelKey: 'nav.label.hsn-summary',
@@ -923,7 +950,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 6,
     moduleKey: 'reports',
     labelKey: 'nav.label.gstr-9',
@@ -943,7 +970,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'inventory-reports',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 1,
     moduleKey: 'reports',
     labelKey: 'nav.label.stock-report',
@@ -962,7 +989,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'inventory-reports',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 2,
     moduleKey: 'reports',
     labelKey: 'nav.label.inventory-aging',
@@ -982,7 +1009,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'banking',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 2,
     moduleKey: 'reports',
     labelKey: 'nav.label.cashflow',
@@ -1001,7 +1028,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'banking',
     frequency: 'secondary',
-    surfaces: ['more', 'reports-hub'],
+    surfaces: ['reports-hub'],
     sortOrder: 3,
     moduleKey: 'reports',
     labelKey: 'nav.label.consolidated',
@@ -1024,9 +1051,11 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     frequency: 'primary',
     surfaces: ['sidebar-main', 'more', 'global-search', 'new-sheet'],
+    moreGroup: 'tools',
+    moreOrder: 1,
     sheetRow: 'ai',
     sheetOrder: 1,
-    sheetLabelKey: 'new.scan',
+    shortLabelKey: 'new.scan',
     sortOrder: 2,
     keywords: 'scan bill ai camera photo ocr scanner',
     labelKey: 'nav.label.scanner',
@@ -1049,6 +1078,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     moduleKey: 'settings',
     surfaces: ['sidebar-tools', 'more'],
+    shortLabelKey: 'short.documents',
+    moreGroup: 'tools',
+    moreOrder: 4,
     sortOrder: 1,
     labelKey: 'nav.label.document-vault',
     descKey: 'nav.desc.document-vault',
@@ -1071,6 +1103,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     featureFlag: 'aiScanner',
     founderOnly: true,  // 🔒 V26 N7: API is founder-only — hide from non-founders
     surfaces: ['sidebar-tools', 'more'],
+    moreGroup: 'tools',
+    moreOrder: 9,
     sortOrder: 2,
     labelKey: 'nav.label.ai-usage',
     descKey: 'nav.desc.ai-usage',
@@ -1092,6 +1126,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     featureFlag: 'aiScanner',
     surfaces: ['sidebar-tools', 'more'],
+    moreGroup: 'tools',
+    moreOrder: 10,
     sortOrder: 3,
     labelKey: 'nav.label.ai-comparison',
     descKey: 'nav.desc.ai-comparison',
@@ -1115,9 +1151,11 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'smart-tools',
     frequency: 'secondary',
     surfaces: ['more', 'sidebar-tools', 'global-search', 'new-sheet'],  // 🔒 V26 P5: added sidebar-tools
+    moreGroup: 'tools',
+    moreOrder: 2,
     sheetRow: 'ai',
     sheetOrder: 2,
-    sheetLabelKey: 'new.speak',
+    shortLabelKey: 'new.speak',
     keywords: 'voice entry speak bol ke sale mic',
     sortOrder: 2,
     labelKey: 'nav.label.voice-entry',
@@ -1141,6 +1179,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'smart-tools',
     frequency: 'secondary',
     surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools
+    shortLabelKey: 'short.barcode',
+    moreGroup: 'tools',
+    moreOrder: 3,
     keywords: 'barcode scan billing fast qr',
     sortOrder: 3,
     labelKey: 'nav.label.barcode-scanner',
@@ -1163,6 +1204,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     // 🔒 V26 FIX N5: desktop had NO entry naming Smart Insights (V25 §2.4's
     // surviving half). Ctrl+K now jumps straight to the dashboard section.
     surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools,
+    moreGroup: 'tools',
+    moreOrder: 7,
     keywords: 'smart insights ai alerts suggestions tips',
     sortOrder: 5,
     labelKey: 'nav.label.smart-insights',
@@ -1181,7 +1224,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'money-banking',
     frequency: 'secondary',
-    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools
+    surfaces: ['sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools
     keywords: 'cash in hand drawer galla today collections',
     sortOrder: 2,
     labelKey: 'nav.label.cash-in-hand',
@@ -1202,6 +1245,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     // 🔒 V26 FIX N5: Sidebar Tools + Ctrl+K — desktop had only the dashboard
     // hero button, with no named "Day-End" entry anywhere.
     surfaces: ['more', 'sidebar-tools', 'global-search'],
+    shortLabelKey: 'short.day_end',
+    moreGroup: 'tools',
+    moreOrder: 5,
     keywords: 'day end summary close drawer daily cash hisab',
     sortOrder: 3,
     labelKey: 'nav.label.day-end-summary',
@@ -1262,7 +1308,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'account-info',
     accountGroup: 'business',
     frequency: 'tertiary',
-    surfaces: ['account'],
+    surfaces: ['more', 'global-search'],
+    moreGroup: 'grow',
+    moreOrder: 1,
     sortOrder: 2,
     labelKey: 'nav.label.business-card',
     descKey: 'nav.desc.business-card',
@@ -1313,7 +1361,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'business',
     accountGroup: 'business',
     frequency: 'secondary',
-    surfaces: ['more', 'global-search', 'account'],
+    surfaces: ['global-search', 'account'],
     keywords: 'multi shop manage shops branch add new shop',
     sortOrder: 4,
     labelKey: 'nav.label.multi-shop-management',
@@ -1333,7 +1381,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'business',
     accountGroup: 'business',
     frequency: 'secondary',
-    surfaces: ['more', 'account'],
+    surfaces: ['account'],
     sortOrder: 5,
     labelKey: 'nav.label.staff-access',
     descKey: 'nav.desc.staff-access',
@@ -1374,7 +1422,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'business',
     accountGroup: 'plan',
     frequency: 'tertiary',
-    surfaces: ['account'],
+    surfaces: ['more', 'global-search'],
+    moreGroup: 'grow',
+    moreOrder: 2,
     sortOrder: 2,
     labelKey: 'nav.label.refer-earn',
     descKey: 'nav.desc.refer-earn',
@@ -1619,7 +1669,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['global-search', 'new-sheet'],
     sheetRow: 'grid',
     sheetOrder: 7,
-    sheetLabelKey: 'new.item',
+    shortLabelKey: 'new.item',
     keywords: 'add new product create inventory item',
     labelKey: 'nav.label.add-product',
     descKey: 'nav.desc.add-product',
@@ -1641,7 +1691,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['global-search', 'new-sheet'],
     sheetRow: 'grid',
     sheetOrder: 8,
-    sheetLabelKey: 'new.customer',
+    shortLabelKey: 'new.customer',
     keywords: 'add new customer supplier party create',
     labelKey: 'nav.label.add-party',
     descKey: 'nav.desc.add-party',
@@ -1662,7 +1712,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['new-sheet', 'global-search'],
     sheetRow: 'grid',
     sheetOrder: 2,
-    sheetLabelKey: 'new.got_payment',
+    shortLabelKey: 'new.got_payment',
     keywords: 'got payment received money customer paid udhaar wapas mila',
     moduleKey: 'parties',
   },
@@ -1681,7 +1731,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['new-sheet', 'global-search'],
     sheetRow: 'grid',
     sheetOrder: 3,
-    sheetLabelKey: 'new.gave_payment',
+    shortLabelKey: 'new.gave_payment',
     keywords: 'gave payment paid supplier money out',
     moduleKey: 'parties',
   },
@@ -1698,7 +1748,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['new-sheet', 'global-search'],
     sheetRow: 'grid',
     sheetOrder: 4,
-    sheetLabelKey: 'new.income_expense',
+    shortLabelKey: 'new.income_expense',
     keywords: 'expense income kharcha money out rent salary electricity',
     moduleKey: 'incomeExpense',
   },

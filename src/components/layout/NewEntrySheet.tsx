@@ -46,7 +46,7 @@ export function NewEntrySheet() {
     { canAccess, isFlagEnabled: () => true, isOwner: true, isFounder: true, platform: 'mobile' },
   )), [canAccess])
 
-  const name = (d: NavDestination) => (d.sheetLabelKey ? t(d.sheetLabelKey) : '') || d.label
+  const name = (d: NavDestination) => t(d.shortLabelKey ?? d.labelKey ?? '') || d.label
   const open = (d: NavDestination) => {
     haptic.click()
     setNewSheetOpen(false)

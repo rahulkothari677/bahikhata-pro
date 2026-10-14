@@ -97,12 +97,13 @@ describe('V26 nav-registry lint (parity guardrail)', () => {
     expect(missing).toEqual([])
   })
 
-  test('🔒 V26 N12: every entry with "more" in surfaces has a subcategory', () => {
-    // MoreScreen groups destinations by subcategory (SECTION_ORDER + SECTION_META).
-    // An entry that declares 'more' but lacks a subcategory is silently dropped
-    // at render time — the exact mechanism that hid the Reports Hub from mobile.
+  test('🔒 V26 N12 (5a-4): every entry with "more" in surfaces has a moreGroup', () => {
+    // MoreScreen renders by moreGroup since Phase 5a-4 (it used subcategory
+    // before). An entry that declares 'more' but lacks the field the screen
+    // reads is silently dropped — the mechanism that once hid the Reports Hub
+    // from mobile. The rule follows whatever the screen reads.
     const dropped = NAV_REGISTRY
-      .filter(d => (d.surfaces || []).includes('more') && !d.subcategory)
+      .filter(d => (d.surfaces || []).includes('more') && !d.moreGroup)
       .map(d => d.id)
     expect(dropped).toEqual([])
   })

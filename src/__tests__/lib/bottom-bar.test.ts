@@ -19,14 +19,14 @@ function barTabs(registry: NavDestination[]) {
   return registry
     .filter((d) => d.surfaces?.includes('bottom-nav'))
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-    .map((d) => ({ id: d.id, nameKey: d.barLabelKey ?? d.labelKey, lit: d.barActiveViews ?? [d.view] }))
+    .map((d) => ({ id: d.id, nameKey: d.shortLabelKey ?? d.labelKey, lit: d.barActiveViews ?? [d.view] }))
 }
 
 describe('the rule reads the bar the way the bar does (good and bad input)', () => {
   const base = { label: 'x', icon: (() => null) as never, actionKind: 'navigate', category: 'core', frequency: 'primary' } as const
   test('order follows sortOrder and only bottom-nav entries count', () => {
     const fake = [
-      { ...base, id: 'b', view: 'sales', surfaces: ['bottom-nav'], sortOrder: 3, barLabelKey: 'nav.bills' },
+      { ...base, id: 'b', view: 'sales', surfaces: ['bottom-nav'], sortOrder: 3, shortLabelKey: 'nav.bills' },
       { ...base, id: 'a', view: 'dashboard', surfaces: ['bottom-nav'], sortOrder: 1 },
       { ...base, id: 'z', view: 'purchases', surfaces: ['sidebar-main'], sortOrder: 2 },
     ] as unknown as NavDestination[]

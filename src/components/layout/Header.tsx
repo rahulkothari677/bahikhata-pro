@@ -19,11 +19,11 @@ import { NotificationCenter } from '@/components/common/NotificationCenter'
 
 const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
   dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
-  inventory: { titleKey: 'nav.inventory', subtitleKey: 'nav.inventory' },
+  inventory: { titleKey: 'short.items', subtitleKey: 'short.items' },  // 5a-4: the name More uses
   // Phase 5a-2: Sales and Purchases are one tab, Bills, with a switch on the screen.
   sales: { titleKey: 'nav.bills', subtitleKey: 'nav.bills' },
   purchases: { titleKey: 'nav.bills', subtitleKey: 'nav.bills' },
-  'income-expense': { titleKey: 'nav.income', subtitleKey: 'nav.income' },
+  'income-expense': { titleKey: 'short.cashbook', subtitleKey: 'short.cashbook' },  // 5a-4
   parties: { titleKey: 'nav.khata', subtitleKey: 'nav.khata' },
   scanner: { titleKey: 'nav.scanner', subtitleKey: 'nav.scanner' },
   reports: { titleKey: 'nav.reports', subtitleKey: 'nav.reports' },
