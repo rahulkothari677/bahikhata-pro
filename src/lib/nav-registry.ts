@@ -35,7 +35,7 @@ import {
   Database, UserCog, Gift, HelpCircle, Star, LogOut, Info,
   Palette, Bell, Crown, Search, MessageCircleQuestion,
   TrendingUp, Clock, Scale, Receipt, Hash, Wallet as WalletIcon,
-  Plus, UserPlus,
+  Plus, UserPlus, House, ReceiptText,
   type LucideIcon,
 } from 'lucide-react'
 import type { ViewType, FeatureKey } from '@/store/app-store'
@@ -135,6 +135,14 @@ export interface NavDestination {
   keywords?: string
   /** i18n key for the label. If set, surfaces use t(labelKey) instead of label. */
   labelKey?: string
+  /**
+   * Bottom bar only (Phase 5a-2, ledger model): the tab's own name and icon,
+   * and the other views that light the tab. Bills is the Sales ledger and is
+   * also lit on Purchases; Khata is Parties and stays lit on a party's pages.
+   */
+  barLabelKey?: string
+  barIcon?: LucideIcon
+  barActiveViews?: ViewType[]
   /** i18n key for the description. If set, surfaces use t(descKey) instead of description. */
   descKey?: string
   /** Tailwind text color class for the icon */
@@ -250,6 +258,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 1,
+    barLabelKey: 'nav.home',
+    barIcon: House,
     keywords: 'dashboard home overview charts stats kpi',
     labelKey: 'nav.label.dashboard',
     descKey: 'nav.desc.dashboard',
@@ -270,7 +280,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 3,
-    keywords: 'sales ledger transactions history sell',
+    barLabelKey: 'nav.bills',
+    barIcon: ReceiptText,
+    barActiveViews: ['sales', 'purchases'],
+    keywords: 'sales ledger transactions history sell bills',
     labelKey: 'nav.label.sales',
     descKey: 'nav.desc.sales',
     moduleKey: 'sales',
@@ -286,9 +299,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'transactions',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
+    surfaces: ['sidebar-main', 'global-search'],
     sortOrder: 4,
-    keywords: 'purchases ledger transactions buy stock',
+    keywords: 'purchases ledger transactions buy stock bills',
     labelKey: 'nav.label.purchases',
     descKey: 'nav.desc.purchases',
     moduleKey: 'purchases',
@@ -500,9 +513,11 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'parties',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'more', 'global-search'],
+    surfaces: ['sidebar-main', 'bottom-nav', 'more', 'global-search'],
     sortOrder: 7,
-    keywords: 'parties customers suppliers dues balance',
+    barLabelKey: 'nav.khata',
+    barActiveViews: ['parties', 'party-profile', 'party-bills', 'party-settle'],
+    keywords: 'parties customers suppliers dues balance khata udhaar',
     labelKey: 'nav.label.parties',
     descKey: 'nav.desc.parties',
     moduleKey: 'parties',

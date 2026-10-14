@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
@@ -39,7 +40,8 @@ export function Parties() {
   const triggerBulkReminders = useAppStore((s) => s.triggerBulkReminders)
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<'all' | 'customer' | 'supplier'>('all')
+  // Phase 5a-2: Khata shows one side at a time (Customers | Suppliers), like Bills.
+  const [filter, setFilter] = useState<'all' | 'customer' | 'supplier'>('customer')
   const [dialogOpen, setDialogOpen] = useState(false)
   /** #31: the party being corrected, or null when adding a new one. */
   const [editingParty, setEditingParty] = useState<any | null>(null)
@@ -108,6 +110,13 @@ export function Parties() {
 
   return (
     <div className="space-y-4">
+      <SegmentedSwitch
+        ariaLabel={t('nav.khata')}
+        options={[{ value: 'customer', label: t('stat.customers') }, { value: 'supplier', label: t('parties.suppliers_only') }]}
+        value={filter === 'supplier' ? 'supplier' : 'customer'}
+        onChange={(v) => setFilter(v)}
+        className="lg:max-w-md"
+      />
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="shadow-card border-border/60">
@@ -161,16 +170,6 @@ export function Parties() {
                 className="pl-9"
               />
             </div>
-            <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('parties.all_parties')}</SelectItem>
-                <SelectItem value="customer">{t('stat.customers')}</SelectItem>
-                <SelectItem value="supplier">Suppliers</SelectItem>
-              </SelectContent>
-            </Select>
             <ViewModeToggle mode={partiesViewMode} onChange={setPartiesViewMode} />
             {/* 🔒 V22-13 (Batch C, Phase 7f): Bulk WhatsApp Reminders button */}
             <Button

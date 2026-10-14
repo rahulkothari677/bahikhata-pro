@@ -89,10 +89,14 @@ export function MobileBottomNav() {
   //
   // Without the §6.1 registry (deferred), we can't know which tab "owns"
   // each view — previousView is the best proxy.
-  const isMoreActive =
+  // Phase 5a-2: a tab is lit for its own view and for the views it hosts
+  // (Bills for Sales and Purchases; Khata for a party's pages).
+  const tabIsActive = (tab: NavDestination) => (tab.barActiveViews ?? [tab.view || 'dashboard']).includes(currentView)
+  const anyTabActive = visibleTabs.some(tabIsActive)
+  const isMoreActive = !anyTabActive && (
     currentView === 'more' ||
     currentView === 'account' ||
-    previousView === 'more'
+    previousView === 'more')
 
   // 🔒 V17 Audit Phase 10: Long-press handlers for the + button
   const handlePlusTouchStart = () => {
@@ -137,9 +141,10 @@ export function MobileBottomNav() {
         <div className="flex items-center justify-around h-16 px-2 relative">
           {/* Left side: Dashboard + Sales */}
           {visibleTabs.slice(0, 2).map((tab: NavDestination) => {
-            const Icon = tab.icon
+            const Icon = tab.barIcon ?? tab.icon
+            const name = t(tab.barLabelKey ?? tab.labelKey ?? '') || tab.label
             const tabView = tab.view || 'dashboard'
-            const isActive = currentView === tabView
+            const isActive = tabIsActive(tab)
             return (
               <button
                 key={tab.id}
@@ -149,10 +154,10 @@ export function MobileBottomNav() {
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
                 )}
-                aria-label={tab.labelKey ? t(tab.labelKey) : tab.label}
+                aria-label={name}
               >
                 <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-xs font-medium">{tab.labelKey ? t(tab.labelKey) : tab.label}</span>
+                <span className="text-xs font-medium">{name}</span>
               </button>
             )
           })}
@@ -212,9 +217,10 @@ export function MobileBottomNav() {
 
           {/* Right side: Purchases + More */}
           {visibleTabs.slice(2).map((tab: NavDestination) => {
-            const Icon = tab.icon
+            const Icon = tab.barIcon ?? tab.icon
+            const name = t(tab.barLabelKey ?? tab.labelKey ?? '') || tab.label
             const tabView = tab.view || 'dashboard'
-            const isActive = currentView === tabView
+            const isActive = tabIsActive(tab)
             return (
               <button
                 key={tab.id}
@@ -224,10 +230,10 @@ export function MobileBottomNav() {
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
                 )}
-                aria-label={tab.labelKey ? t(tab.labelKey) : tab.label}
+                aria-label={name}
               >
                 <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-xs font-medium">{tab.labelKey ? t(tab.labelKey) : tab.label}</span>
+                <span className="text-xs font-medium">{name}</span>
               </button>
             )
           })}

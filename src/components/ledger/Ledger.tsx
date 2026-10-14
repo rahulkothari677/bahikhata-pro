@@ -20,6 +20,7 @@ import { roundMoney } from '@/lib/money'
 // that made a bill invite being collected a second time.
 import { computeInvoiceDue } from '@/lib/invoice-due'
 import { useTranslation } from '@/hooks/use-translation'
+import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { useSubscription } from '@/hooks/use-subscription'
 // ViewModeToggle, DateRangePicker and getPresetRange moved into
 // LedgerFilterSheet with the controls themselves; only the label helper and
@@ -468,6 +469,14 @@ export function Ledger({ type }: { type: LedgerType }) {
 
   return (
     <div className="space-y-4">
+      {/* Phase 5a-2: Bills is one tab — Sales and Purchases share this switch. */}
+      <SegmentedSwitch
+        ariaLabel={t('nav.bills')}
+        options={[{ value: 'sale', label: t('nav.label.sales') }, { value: 'purchase', label: t('nav.label.purchases') }]}
+        value={type}
+        onChange={(v) => setView(v === 'sale' ? 'sales' : 'purchases')}
+        className="lg:max-w-md"
+      />
       {/* 🔒 Feature Phase 6: Guided returns — banner shown when the user
           tapped "Sale Return" or "Purchase Return" in MoreScreen. Tells
           them to pick a transaction, then tap "Credit Note" / "Debit Note"

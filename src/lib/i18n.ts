@@ -34,6 +34,9 @@ export const translations = {
     'nav.label.invoice-settings': 'Invoices & Bills',
     // Navigation
     'nav.dashboard': 'Dashboard',
+    'nav.home': 'Home',
+    'nav.bills': 'Bills',
+    'nav.khata': 'Khata',
     'nav.scanner': 'AI Bill Scanner',
     'nav.sales': 'Sales Ledger',
     'nav.purchases': 'Purchase Ledger',
@@ -471,6 +474,9 @@ export const translations = {
     'nav.label.invoice-settings': 'बिल और चालान',
     // Navigation - simple, common Hindi words
     'nav.dashboard': 'डैशबोर्ड',
+    'nav.home': 'होम',
+    'nav.bills': 'बिल',
+    'nav.khata': 'खाता',
     'nav.scanner': 'AI बिल स्कैनर',
     'nav.sales': 'बिक्री',
     'nav.purchases': 'खरीद',
