@@ -112,7 +112,9 @@ export async function GET(req: NextRequest) {
     // week ago (shared with the proof sheet). The KPI scan must reach back to
     // it even when the chosen period is short.
     const lastWeek = sameTimeLastWeek(now)
-    const scanFrom = lastWeek.from < prevRangeFrom ? lastWeek.from : prevRangeFrom
+    // Phase 5b-4: the monthly goal compares against THIS month whatever the
+    // period chip shows, so the scan also reaches the month's start.
+    const scanFrom = new Date(Math.min(lastWeek.from.getTime(), prevRangeFrom.getTime(), startOfMonth.getTime()))
 
     // === BATCH 1: Static data (4 small queries — wakes the DB if cold) ===
     // 🔒 V8.1: Wrapped in withConnectionRetry — if the DB is cold (Neon
@@ -254,6 +256,7 @@ export async function GET(req: NextRequest) {
         today_count: bigint;
         today_credit_note_count: bigint;
         lastweek_revenue_paise: string; lastweek_count: bigint;
+        month_revenue_paise: string; month_expenses_paise: string;
         range_revenue_paise: string; range_profit_paise: string;
         range_expenses_paise: string; range_purchases_paise: string;
         range_income_paise: string; range_sale_count: bigint;
@@ -277,6 +280,9 @@ export async function GET(req: NextRequest) {
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${lastWeek.from} AND "date" <= ${lastWeek.to} THEN "totalAmount" ELSE 0 END), 0)::numeric
             - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${lastWeek.from} AND "date" <= ${lastWeek.to} THEN "totalAmount" ELSE 0 END), 0)::numeric AS lastweek_revenue,
             COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${lastWeek.from} AND "date" <= ${lastWeek.to} THEN 1 END) AS lastweek_count,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfMonth} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfMonth} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS month_revenue,
+            COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${startOfMonth} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS month_expenses,
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
             - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric
@@ -319,6 +325,8 @@ export async function GET(req: NextRequest) {
           today_credit_note_count,
           lastweek_revenue AS lastweek_revenue_paise,
           lastweek_count,
+          month_revenue AS month_revenue_paise,
+          month_expenses AS month_expenses_paise,
           range_revenue AS range_revenue_paise,
           range_profit AS range_profit_paise,
           range_expenses AS range_expenses_paise,
@@ -459,6 +467,8 @@ export async function GET(req: NextRequest) {
     const todayCreditNoteCount = Number(kpi.today_credit_note_count)
     const todayLastWeekRevenue = fromPaise(Number(kpi.lastweek_revenue_paise))
     const todayLastWeekCount = Number(kpi.lastweek_count)
+    const monthRevenue = fromPaise(Number(kpi.month_revenue_paise))
+    const monthExpenses = fromPaise(Number(kpi.month_expenses_paise))
     const rangeRevenue = fromPaise(Number(kpi.range_revenue_paise))
     const rangeProfit = fromPaise(Number(kpi.range_profit_paise))
     const rangeExpenses = fromPaise(Number(kpi.range_expenses_paise))
@@ -686,6 +696,8 @@ export async function GET(req: NextRequest) {
         todayCreditNoteCount,  // 🔒 V17 Audit Phase 1 P0.3: for "net of returns" UI
         todayLastWeekRevenue,  // Phase 5b-2: same hours last week (sameTimeLastWeek)
         todayLastWeekCount,
+        monthRevenue,   // Phase 5b-4: IST month to date, for the monthly goal (not the chip's period)
+        monthExpenses,
         rangeRevenue,
         rangeProfit,
         rangeExpenses,

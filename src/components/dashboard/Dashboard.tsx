@@ -58,6 +58,7 @@ import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { ProofSheet, proofCountLine, type ProofSpec, type ProofAction } from '@/components/dashboard/ProofSheet'
 import { TodayCard, QuickTiles, CollectPayCard } from '@/components/dashboard/TodayCard'
 import { useDaySummary } from '@/hooks/use-day-summary'
+import { GoalCard } from '@/components/dashboard/GoalCard'
 import { useArrivalRequest } from '@/hooks/use-new-entry-request'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
@@ -608,6 +609,14 @@ export function Dashboard() {
       />
       <QuickTiles gstStatus={gstStatus(setting)} />
       <CollectPayCard kpis={kpis} />
+      {/* Phase 5b-4: this month's goal (Business Goals), whatever the period chip shows. */}
+      <GoalCard
+        monthRevenue={kpis.monthRevenue ?? 0}
+        monthExpenses={kpis.monthExpenses ?? 0}
+        revenueTarget={revenueTarget}
+        expenseBudget={expenseBudget}
+        onProof={setProof}
+      />
 
       {/* Phase 5b-3 (ledger model §7): the Business overview — five figures under
           one period chip, each opening how it is worked out. Gone: the two Today
@@ -955,74 +964,9 @@ export function Dashboard() {
 
       {/* 🔒 AUDIT V25 BATCH 3b REVERT: Removed right-rail wrapper. Single column again. */}
 
-      {/* Business Goals — monthly revenue/expense targets with progress */}
-      {(revenueTarget || expenseBudget) && kpis && (
-        <div className="rounded-2xl bg-card border border-border/60 border-t-2 border-t-primary/10 shadow-card overflow-hidden">
-          <div className="bg-gradient-to-r from-violet-500 to-purple-600 p-3 text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10 pointer-events-none" />
-            <div className="relative flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Target className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-sm font-bold font-heading">Monthly Goals</p>
-                <p className="text-xs text-white/80">Track your progress this month</p>
-              </div>
-            </div>
-          </div>
-          <div className="p-3 space-y-3">
-            {revenueTarget && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold">Revenue Target <span className="text-muted-foreground font-normal">(selected range)</span></span>
-                  <span className="text-xs font-bold tabular-nums">
-                    {formatINRCompact(kpis.rangeRevenue)} / {formatINRCompact(revenueTarget)}
-                  </span>
-                </div>
-                <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={cn('h-full rounded-full transition-all duration-500', kpis.rangeRevenue >= revenueTarget ? 'bg-emerald-500' : 'bg-primary')}
-                    style={{ width: `${Math.min(100, (kpis.rangeRevenue / revenueTarget) * 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
-                  {kpis.rangeRevenue >= revenueTarget
-                    ? '🎉 Target achieved!'
-                    : `${((kpis.rangeRevenue / revenueTarget) * 100).toFixed(0)}% — ${formatINRCompact(revenueTarget - kpis.rangeRevenue)} to go`}
-                </p>
-              </div>
-            )}
-            {expenseBudget && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold">Expense Budget</span>
-                  <span className="text-xs font-bold tabular-nums">
-                    {formatINRCompact(kpis.rangeExpenses || 0)} / {formatINRCompact(expenseBudget)}
-                  </span>
-                </div>
-                <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={cn('h-full rounded-full transition-all duration-500',
-                      (kpis.rangeExpenses || 0) > expenseBudget ? 'bg-rose-500' : 'bg-amber-500'
-                    )}
-                    style={{ width: `${Math.min(100, ((kpis.rangeExpenses || 0) / expenseBudget) * 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
-                  {(kpis.rangeExpenses || 0) > expenseBudget
-                    ? `⚠️ Over budget by ${formatINRCompact((kpis.rangeExpenses || 0) - expenseBudget)}`
-                    : `${formatINRCompact(expenseBudget - (kpis.rangeExpenses || 0))} remaining`}
-                </p>
-              </div>
-            )}
-            {(!revenueTarget && !expenseBudget) && (
-              <p className="text-xs text-muted-foreground text-center py-2">
-                No goals set. Go to Settings → Business Goals to set targets.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Phase 5b-4: the Monthly Goals card moved up as the goal ring (GoalCard).
+          It compared the monthly target with the period chip's sales, so "This
+          Year" read "Target achieved!"; the ring reads this month only. */}
 
       {/* 🔒 Feature Phase 4: Daily Digest card — shows after 9 PM IST with
           today's business summary. Opt-in via Settings → Notifications. */}
