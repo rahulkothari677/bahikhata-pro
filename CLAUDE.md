@@ -174,6 +174,10 @@ save.
   `main`, which deploys. **Then verify on the live demo account — compulsory,
   before reporting.** One phase = its own commits, so a bad deploy is undone by
   Vercel's instant rollback or `git revert`.
+- **The local Postgres stops between sessions.** Sign-in on the local copy
+  fails until it is running again: start `node start.mjs` in `../local-db`
+  (in the background) before blaming the app, then `ekbook-local` (needs a
+  current `npm run verify:build`).
 - **Local migrations: the Prisma CLI does not read `.env.local`.** Run
   `set -a; . ./.env.local; set +a` in the same shell first, then
   `npx prisma migrate deploy && npx prisma generate` (2 Oct: validation failed

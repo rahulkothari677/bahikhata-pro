@@ -1189,7 +1189,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     // address, UPI — not the person's. The old name is why unrelated personal
     // preferences kept getting filed under it.
     label: 'Shop Profile',
-    description: 'Name, GST registration, address, logo, UPI',
+    description: 'Name, address, GST, logo, UPI',
     icon: Store,
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-100',
@@ -1209,7 +1209,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     id: 'business-card',
     label: 'Business Card',
     keywords: 'business card visiting card share card',
-    description: 'Shareable digital visiting card with QR',
+    description: 'Digital visiting card with QR',
     icon: CreditCard,
     iconColor: VIOLET,
     iconBg: VIOLET_BG,
@@ -1231,7 +1231,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     // share link, round-off, e-invoicing. A shopkeeper looking for "how my
     // bill looks" had no reason to open a page called App Settings.
     label: 'Invoices & Bills',
-    description: 'Bill design, how bills are sent, round off, e-invoice',
+    description: 'Bill design, sending, round off',
     icon: Receipt,
     iconColor: EMERALD,
     iconBg: EMERALD_BG,
@@ -1256,7 +1256,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     // coming soon'. A menu row must not advertise a capability the page
     // then apologises for; that is the same false promise the placebo App
     // Lock made. Honest label + a Soon badge until the real thing ships.
-    description: 'View your shop and GSTIN · switching coming soon',
+    description: 'Your shop and GSTIN',
     badge: 'Soon',
     badgeColor: 'bg-muted text-muted-foreground',
     icon: Store,
@@ -1344,7 +1344,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     // including the two AI language pickers that used to sit inside My Profile
     // for no reason anyone could explain.
     label: 'Appearance & Language',
-    description: 'Theme, dark mode, app and AI languages',
+    description: 'Theme, dark mode, languages',
     icon: Palette,
     iconColor: VIOLET,
     iconBg: VIOLET_BG,
@@ -1363,7 +1363,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'preferences',
     label: 'Preferences',
-    description: 'Landing page, hide profit, goals, stock rules',
+    description: 'Start screen, hide profit, goals',
     icon: SettingsIcon,
     iconColor: SLATE,
     iconBg: SLATE_BG,
@@ -1442,7 +1442,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     id: 'accounting-controls',
     label: 'Accounting Controls',
     keywords: 'accounting controls voucher settings rules',
-    description: 'Period lock and reconciliation health check',
+    description: 'Period lock and health check',
     icon: ShieldCheck,
     iconColor: AMBER,
     iconBg: AMBER_BG,
@@ -1462,7 +1462,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     id: 'data-backup',
     label: 'Data & Backup',
     keywords: 'backup restore export data download save',
-    description: 'Backup, restore, offline cache, delete account',
+    description: 'Backup, restore, delete account',
     icon: Database,
     iconColor: BLUE,
     iconBg: BLUE_BG,

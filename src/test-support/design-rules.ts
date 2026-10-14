@@ -156,3 +156,28 @@ export function themeTextBelowFloor(css: string): string[] {
   }
   return out
 }
+
+/**
+ * Account-row descriptions (Phase 4 close, 14 Oct 2026). The Account screen shows
+ * each setting's description on one truncated line. Measured at 375 px the line
+ * holds 39 characters and cut 42; a 360 px phone holds about 36. Two places hold
+ * the same English sentence (the registry's fallback and i18n's `en`), so they
+ * must also agree — otherwise one gets shortened and the other does not.
+ */
+export const MAX_ROW_DESC_CHARS = 36
+export function accountDescriptionProblems(
+  rows: { id: string; description?: string; descKey?: string }[],
+  en: Record<string, string>,
+  max = MAX_ROW_DESC_CHARS,
+): string[] {
+  const out: string[] = []
+  for (const r of rows) {
+    const fromI18n = r.descKey !== undefined ? en[r.descKey] : undefined
+    const shown = fromI18n ?? r.description
+    if (shown && shown.length > max) out.push(`${r.id}: "${shown}" is ${shown.length} characters (max ${max})`)
+    if (fromI18n !== undefined && r.description !== undefined && r.description !== fromI18n) {
+      out.push(`${r.id}: registry says "${r.description}" but i18n says "${fromI18n}"`)
+    }
+  }
+  return out
+}

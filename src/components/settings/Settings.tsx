@@ -1554,7 +1554,7 @@ export function Settings({
             <Database className="w-5 h-5 text-primary" /> Data & Backup
           </CardTitle>
           )}
-          <p className="text-xs text-muted-foreground">Backup, restore, offline cache, delete account</p>
+          <p className="text-xs text-muted-foreground">Backup, restore, delete account</p>
         </CardHeader>
         <CardContent className="space-y-3">
           {/* Offline cache management */}
