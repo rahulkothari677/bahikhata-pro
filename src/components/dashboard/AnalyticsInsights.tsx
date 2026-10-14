@@ -15,10 +15,9 @@
  * Defensive: all hooks before early return, optional chaining everywhere.
  */
 
-import { useQuery } from '@tanstack/react-query'
+import { useAnalytics } from '@/hooks/use-analytics'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
-import { offlineFetch } from '@/lib/offline-fetch'
 import { useAppStore } from '@/store/app-store'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
@@ -27,27 +26,14 @@ import {
   TrendingUp, Package, Users, ChevronDown,
 } from 'lucide-react'
 
-interface AnalyticsData {
-  bestSellers: Array<{ name: string; quantity: number; revenue: number }>
-  deadStock: Array<{ name: string; currentStock: number; unit: string; tiedUpValue: number }>
-  topCustomers: Array<{ name: string; profit: number; totalSales: number }>
-  reorderSuggestions: Array<{ name: string; avgGapDays: number; daysSinceLastPurchase: number; shouldReorder: boolean }>
-}
 
 export function AnalyticsInsights() {
   const { setView, setPreviousView } = useAppStore()
   const [expanded, setExpanded] = useState(true)
 
   // 🔒 Hooks first — Rules of Hooks
-  const { data, isLoading, dataUpdatedAt } = useQuery<AnalyticsData>({
-    queryKey: ['analytics'],
-    queryFn: async () => {
-      const r = await offlineFetch('/api/analytics')
-      if (!r.ok) return { bestSellers: [], deadStock: [], topCustomers: [], reorderSuggestions: [] }
-      return r.json()
-    },
-    staleTime: 5 * 60 * 1000,
-  })
+  // Phase 5b-5: the same query as Home's Top lists (useAnalytics).
+  const { data, isLoading, dataUpdatedAt } = useAnalytics()
 
   if (isLoading || !data) return null
 

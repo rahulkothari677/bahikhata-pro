@@ -11,6 +11,7 @@ import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { apiError } from '@/lib/api-error'
 import { describeEditConflict } from '@/lib/edit-conflict'
 import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
+import { istLocal } from '@/lib/ist-sql'
 
 // GET /api/parties/[id] - get party with paginated transactions + SQL aggregates
 // ⚡ PERFORMANCE (Audit fix H4): Was loading ALL transactions with items into
@@ -182,13 +183,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       `,
 
       // Monthly chart via raw SQL (last 6 months) — REAL data, not hardcoded zeros.
-      // 🔒 V10 FIX: Group by IST month (AT TIME ZONE 'Asia/Kolkata'), not UTC.
+      // Grouped by IST month through istLocal (lib/ist-sql.ts). Phase 5b-5: the
+      // V10 form "t.date AT TIME ZONE 'Asia/Kolkata'" moved the stored UTC the
+      // wrong way, so a sale on the 1st before ~11:00 IST counted in the month
+      // before (and on an IST-session database no month matched at all).
       // 🔒 V17 PAISE MIGRATION Phase 2E: SQL returns paise for the total.
       // totalAmount is always >= 0, so positive nudge is fine.
       // Sign-aware nudge not needed because sales/purchases are always positive.
       db.$queryRaw<Array<{ monthStart: Date; type: string; totalPaise: number }>>`
         SELECT
-          DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata') AS "monthStart",
+          DATE_TRUNC('month', ${istLocal('t.date')}) AS "monthStart",
           t.type,
           SUM(t."totalAmount"::numeric) AS "totalPaise"
         FROM "Transaction" t
@@ -196,7 +200,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           AND t."partyId" = ${id}
           AND t."deletedAt" IS NULL
           AND t.date >= ${sixMonthsAgo}
-        GROUP BY DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata'), t.type
+        GROUP BY DATE_TRUNC('month', ${istLocal('t.date')}), t.type
         ORDER BY "monthStart" ASC
       `,
 
@@ -283,7 +287,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // 🔒 AUDIT V23 FIX §13.4: Fix timezone key mismatch.
     // Was: istMonthStartOffset(now, -i).toISOString().slice(0,7) → "2026-06" for July
     //   (because istMonthStartOffset subtracts IST_OFFSET_MS, shifting to June 30 UTC)
-    // SQL key: DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata') → "2026-07"
+    // SQL key: DATE_TRUNC('month', istLocal(t.date)) → "2026-07"
     //   (naive timestamp read as UTC by JS → "2026-07-01T00:00:00Z" → "2026-07")
     // Mismatch → current month's activity was absent from the chart.
     // Fix: use Date.UTC(istYear, istMonth - i, 1) (no IST_OFFSET_MS subtraction)

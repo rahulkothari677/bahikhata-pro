@@ -120,10 +120,10 @@ describe('V26 Phase 5 Batch 6 — Polish + CI guards', () => {
     expect(src).toMatch(/from 'recharts'/)
     // Exports the DashboardCharts component.
     expect(src).toMatch(/export function DashboardCharts/)
-    // Has the chart types (AreaChart, PieChart, BarChart).
+    // Has the chart types (AreaChart, PieChart). Phase 5b-5: the top-products
+    // BarChart became the Top lists' ranked rows (ledger model v4 §7).
     expect(src).toMatch(/AreaChart/)
     expect(src).toMatch(/PieChart/)
-    expect(src).toMatch(/BarChart/)
   })
 
   // ─── R18: Sentry polish ──────────────────────────────────────────────────

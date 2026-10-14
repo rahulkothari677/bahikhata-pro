@@ -698,11 +698,12 @@ export function Dashboard() {
       <DashboardCharts
         salesTrend={salesTrend}
         kpis={kpis}
-        hideProfit={hideProfit}
+        hideProfit={!!hideProfit}
         topProducts={topProducts}
         paymentModeSplit={paymentModeSplit}
+        periodLabel={rangeLabel}
         t={t}
-        setView={setView}
+        onSeeAnalytics={() => setScrollTarget('business-analytics')}
       />
 
       {/* Category breakdown & low stock */}
@@ -1074,7 +1075,8 @@ export function Dashboard() {
       </div>
 
       {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
-      {features?.businessAnalytics && <AnalyticsInsights />}
+      {/* id: Top lists' "More in Business Analytics" scrolls here (5b-5, until 5c). */}
+      {features?.businessAnalytics && <div id="business-analytics"><AnalyticsInsights /></div>}
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
       <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />

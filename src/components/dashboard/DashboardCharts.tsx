@@ -1,323 +1,237 @@
 'use client'
 
 /**
- * 🔒 V26 R17 (Phase 5): Lazy-loaded dashboard charts.
+ * 🔒 V26 R17 (Phase 5): Lazy-loaded dashboard charts — every recharts use on
+ * Home lives here, loaded with next/dynamic (ssr: false), so the charting
+ * library is never in the first-paint bundle.
  *
- * Phase 5 audit (R17 🔵): recharts was statically imported by Dashboard.tsx
- * → the charting library was in the first-paint bundle of every load,
- * including login. Open since V21; DayEndSummary/AnalyticsInsights were split,
- * the main dashboard charts were not.
- *
- * This file contains ALL recharts usage for the Dashboard. It's loaded via
- * `next/dynamic` with `ssr: false` in Dashboard.tsx, so recharts only loads
- * when the Dashboard actually renders (not on the login page).
- *
- * The component receives all chart data as props from the parent Dashboard.
+ * Phase 5b-5 (ledger model v4 §7): two cards.
+ * - Trends: one card, one switch — Sales · Profit · vs Purchases · Payments.
+ *   Slide a finger along the chart to read a day (the pinned tooltip). It was
+ *   four separate cards (sparkline, donut, trend chart, payment pie).
+ * - Top lists: Top items · Customers · Buy again, ranked rows (rank, name,
+ *   one line, value on the right), the Business Analytics style extended.
+ *   Top items follow the period chip; Customers are the last 90 days by
+ *   profit and Buy again comes from purchase patterns (both /api/analytics,
+ *   the same query as the Business Analytics card, which stays until 5c).
  */
-
+import { useState } from 'react'
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
-  Pie, PieChart, ResponsiveContainer, Tooltip,
-  XAxis, YAxis,
+  Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { ArrowRight, TrendingUp, TrendingDown, IndianRupee } from 'lucide-react'
-import { EmptyState } from '@/components/common/EmptyState'
+import { ArrowRight } from 'lucide-react'
+import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { chartColors } from '@/lib/chart-theme'
 import { formatINR, formatINRCompact, cn } from '@/lib/utils'
 import { salesVsPurchases } from '@/lib/sales-vs-purchases'
+import { useAnalytics } from '@/hooks/use-analytics'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.62 0.16 250)', 'oklch(0.62 0.14 200)', 'oklch(0.62 0.22 15)']
+const SALES_COLOUR = 'oklch(0.55 0.19 42)'
+const PROFIT_COLOUR = 'oklch(0.55 0.16 155)'
 
 export interface DashboardChartsProps {
-  salesTrend: any[]
+  salesTrend: { label: string; revenue: number; profit: number }[]
   kpis: any
   hideProfit: boolean
-  topProducts: any[]
-  paymentModeSplit: any[]
+  topProducts: { name: string; quantity: number; revenue: number }[]
+  paymentModeSplit: { name: string; value: number }[]
+  periodLabel: string
   t: (key: string) => string
-  setView: (view: any) => void
+  onSeeAnalytics: () => void
 }
 
-export function DashboardCharts({
-  salesTrend,
-  kpis,
-  hideProfit,
-  topProducts,
-  paymentModeSplit,
-  t,
-  setView,
-}: DashboardChartsProps) {
-  // #237: one set of figures for the Sales vs Purchases card (line, difference, colour).
-  const svp = salesVsPurchases(kpis)
+type TrendView = 'sales' | 'profit' | 'svp' | 'modes'
+type TopView = 'items' | 'customers' | 'buy'
+
+/** Which Trends views a shop sees (profit hidden for staff who may not see it). Exported for the guard. */
+export function trendViews(hideProfit: boolean): TrendView[] {
+  return hideProfit ? ['sales', 'svp', 'modes'] : ['sales', 'profit', 'svp', 'modes']
+}
+
+export function DashboardCharts({ salesTrend, kpis, hideProfit, topProducts, paymentModeSplit, periodLabel, t, onSeeAnalytics }: DashboardChartsProps) {
   return (
     <>
-      {/* Mini-charts row — quick visual insights at a glance.
-          Sparkline: last 7 days sales trend (no axes, just the line)
-          Donut: sales vs purchases split for the selected range */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
-        {/* Sparkline card — 7-day sales trend */}
-        <Card className="shadow-card border-border/60 overflow-hidden">
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">Sales Trend</p>
-                <p className="text-lg font-bold tabular-nums mt-0.5">{formatINR(kpis.rangeRevenue)}</p>
-              </div>
-              {kpis.revenueGrowth !== 0 && (
-                <div className={cn(
-                  'flex items-center gap-1 text-xs font-semibold rounded-full px-2 py-0.5',
-                  kpis.revenueGrowth > 0 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40' : 'text-rose-600 bg-rose-100 dark:bg-rose-950/40'
-                )}>
-                  {kpis.revenueGrowth > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {Math.abs(kpis.revenueGrowth).toFixed(0)}%
-                </div>
-              )}
-            </div>
-            {/* Sparkline — no axes, just the line with gradient fill */}
-            {/* 🐛 UI/UX Phase 3 Fix 3a: Show empty state when no data (was: blank AreaChart) */}
-            {salesTrend.length === 0 ? (
-              <div className="h-14 flex items-center justify-center text-xs text-muted-foreground/60">
-                No sales data yet
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={56}>
-                <AreaChart data={salesTrend.slice(-14)} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+      <TrendsCard salesTrend={salesTrend} kpis={kpis} hideProfit={hideProfit} paymentModeSplit={paymentModeSplit} periodLabel={periodLabel} t={t} />
+      <TopListsCard topProducts={topProducts} hideProfit={hideProfit} periodLabel={periodLabel} t={t} onSeeAnalytics={onSeeAnalytics} />
+    </>
+  )
+}
+
+function TrendsCard({ salesTrend, kpis, hideProfit, paymentModeSplit, periodLabel, t }: Omit<DashboardChartsProps, 'topProducts' | 'onSeeAnalytics'>) {
+  const views = trendViews(hideProfit)
+  const [view, setView] = useState<TrendView>('sales')
+  const shown = views.includes(view) ? view : 'sales'
+  // #237: one set of figures for Sales vs purchases (line, difference, colour).
+  const svp = salesVsPurchases(kpis)
+  const label: Record<TrendView, string> = { sales: t('trend.sales'), profit: t('trend.profit'), svp: t('trend.svp'), modes: t('trend.modes') }
+  const series = shown === 'profit' ? 'profit' : 'revenue'
+  const colour = shown === 'profit' ? PROFIT_COLOUR : SALES_COLOUR
+
+  return (
+    <section className="rounded-2xl bg-card border border-border/60 shadow-card p-3 lg:p-4 space-y-3" aria-labelledby="trends-title">
+      <div className="flex items-center justify-between gap-2">
+        <h3 id="trends-title" className="text-base font-semibold">{t('trend.title')}</h3>
+        <span className="text-xs text-muted-foreground">{periodLabel}</span>
+      </div>
+      <SegmentedSwitch options={views.map((v) => ({ value: v, label: label[v] }))} value={shown} onChange={setView} ariaLabel={t('trend.title')} />
+
+      {(shown === 'sales' || shown === 'profit') && (
+        <div>
+          <p className="text-2xl font-bold tabular-nums">{formatINR(shown === 'profit' ? kpis.rangeProfit : kpis.rangeRevenue)}</p>
+          {salesTrend.length === 0 ? (
+            <p className="h-[180px] flex items-center justify-center text-sm text-muted-foreground">{t('trend.none')}</p>
+          ) : (
+            <div aria-label={t('trend.slide')} role="img">
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={salesTrend} margin={{ top: 40, right: 4, left: -12, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
+                    <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={colour} stopOpacity={0.35} />
+                      <stop offset="100%" stopColor={colour} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="oklch(0.62 0.18 42)"
-                    strokeWidth={2}
-                    fill="url(#sparklineGrad)"
-                    isAnimationActive={true}
-                    animationDuration={600}
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} minTickGap={24} />
+                  <YAxis tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} width={44} />
+                  {/* Slide to read: the tooltip is pinned to the top of the chart and follows the finger. */}
+                  <Tooltip
+                    position={{ y: 0 }}
+                    cursor={{ stroke: colour, strokeWidth: 1 }}
+                    contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
+                    formatter={(v: number) => [formatINR(v), label[shown]]}
                   />
+                  <Area type="monotone" dataKey={series} stroke={colour} strokeWidth={2} fill="url(#trendFill)" name={label[shown]} />
                 </AreaChart>
               </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Donut card — sales vs purchases split */}
-        <Card className="shadow-card border-border/60 overflow-hidden">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between gap-3">
-              {/* 🐛 UI/UX Phase 3 Fix 3b: Show empty state when no data (was: blank PieChart) */}
-              {svp.empty ? (
-                <div className="w-20 h-20 flex items-center justify-center text-center text-xs text-muted-foreground/60 leading-tight">
-                  No data<br />for range
-                </div>
-              ) : (
-                /* Donut chart */
-                <ResponsiveContainer width={80} height={80}>
-                  <PieChart>
-                    <Pie
-                      data={[
-                        { name: 'Sales', value: svp.sales, fill: 'oklch(0.62 0.15 155)' },
-                        { name: 'Purchases', value: svp.purchases, fill: 'oklch(0.62 0.18 42)' },
-                      ]}
-                      dataKey="value"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={26}
-                      outerRadius={38}
-                      paddingAngle={2}
-                      isAnimationActive={true}
-                      animationDuration={600}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-              {/* Legend + values */}
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: 'oklch(0.62 0.15 155)' }} />
-                  <span className="text-xs text-muted-foreground flex-1">Sales</span>
-                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(svp.sales)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: 'oklch(0.62 0.18 42)' }} />
-                  <span className="text-xs text-muted-foreground flex-1">Purchases</span>
-                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(svp.purchases)}</span>
-                </div>
-                <div className="flex items-center gap-2 pt-1 border-t border-border/40">
-                  <span className="text-xs text-muted-foreground flex-1" title="Not profit: stock bought and not yet sold is still yours">Sales − purchases</span>
-                  <span className={cn('text-sm font-bold tabular-nums', svp.differenceIsPositive ? 'text-good' : 'text-bad')}>
-                    {formatINRCompact(svp.difference)}
-                  </span>
-                </div>
-              </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Sales trend chart - full width */}
-      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base font-semibold">{t('dash.sales_trend')}</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">For selected date range</p>
-            </div>
-            <Badge variant="secondary" className="gap-1">
-              <TrendingUp className="w-3 h-3" />
-              {salesTrend.length} {salesTrend.length === 1 ? 'point' : 'points'}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* 🐛 UI/UX Phase 3 Fix 3c: Show empty state when no data (was: blank chart with axes + "0 points" badge) */}
-          {salesTrend.length === 0 ? (
-            <div className="h-[280px] flex items-center justify-center">
-              <EmptyState
-                icon={TrendingUp}
-                title="No sales in this range"
-                description="Record a sale or select a different date range to see your sales trend."
-                color="amber"
-                compact
-              />
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={salesTrend} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="oklch(0.55 0.19 42)" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="oklch(0.55 0.19 42)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="oklch(0.55 0.16 155)" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="oklch(0.55 0.16 155)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} minTickGap={20} />
-              <YAxis tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} width={45} />
-              <Tooltip
-                cursor={{ stroke: chartColors.grid, strokeWidth: 1, strokeDasharray: '3 3' }}
-                contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
-                formatter={(v: number) => formatINR(v)}
-              />
-              <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.19 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
-              {!hideProfit && (
-                <Area type="monotone" dataKey="profit" stroke="oklch(0.55 0.16 155)" strokeWidth={2} fill="url(#colorProfit)" name={t('common.profit')} />
-              )}
-            </AreaChart>
-          </ResponsiveContainer>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      )}
 
-      {/* 3-column row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Top products */}
-        <Card className="shadow-card border-border/60 lg:col-span-2">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-semibold">{t('dash.top_products')}</CardTitle>
-                <p className="text-xs text-muted-foreground">For selected date range</p>
-              </div>
-              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
-                {t('dash.view_all')} <ArrowRight className="w-3 h-3" />
-              </Button>
+      {shown === 'svp' && (
+        <div className="flex items-center gap-4">
+          {svp.empty ? (
+            <p className="w-24 h-24 flex items-center justify-center text-center text-xs text-muted-foreground">{t('trend.none')}</p>
+          ) : (
+            <ResponsiveContainer width={96} height={96}>
+              <PieChart>
+                <Pie
+                  data={[{ name: 'Sales', value: svp.sales, fill: PROFIT_COLOUR }, { name: 'Purchases', value: svp.purchases, fill: SALES_COLOUR }]}
+                  dataKey="value" cx="50%" cy="50%" innerRadius={30} outerRadius={46} paddingAngle={2}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+          <div className="flex-1 min-w-0 space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PROFIT_COLOUR }} />
+              <span className="text-muted-foreground flex-1">{t('trend.sales')}</span>
+              <span className="font-bold tabular-nums">{formatINR(svp.sales)}</span>
             </div>
-          </CardHeader>
-          <CardContent>
-            {topProducts.length === 0 ? (
-              <div className="text-center py-10 text-sm text-muted-foreground">No {t('dash.sales_word')} in selected range</div>
-            ) : (
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: chartColors.tick }} axisLine={false} tickLine={false} width={90}
-                    tickFormatter={(v) => v.length > 12 ? v.slice(0, 12) + '…' : v}
-                  />
-                  <Tooltip
-                    cursor={{ fill: 'oklch(0.55 0.19 42 / 0.05)' }}
-                    contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
-                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
-                  />
-                  <Bar dataKey="revenue" fill="oklch(0.55 0.19 42)" radius={[0, 6, 6, 0]} name="revenue"
-                    activeBar={{ fill: 'oklch(0.65 0.22 42)' }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: SALES_COLOUR }} />
+              <span className="text-muted-foreground flex-1">{t('proof.t_purchases')}</span>
+              <span className="font-bold tabular-nums">{formatINR(svp.purchases)}</span>
+            </div>
+            <div className="flex items-center gap-2 pt-1 border-t border-border/40">
+              <span className="text-muted-foreground flex-1" title="Not profit: stock bought and not yet sold is still yours">Sales − purchases</span>
+              <span className={cn('font-bold tabular-nums', svp.differenceIsPositive ? 'text-good' : 'text-bad')}>{formatINR(svp.difference)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
-        {/* Payment mode pie */}
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t('dash.payment_modes')}</CardTitle>
-            <p className="text-xs text-muted-foreground">For selected date range</p>
-          </CardHeader>
-          <CardContent>
-            {paymentModeSplit.length === 0 ? (
-              <EmptyState
-                icon={IndianRupee}
-                title="No payment data"
-                description="Sales will appear here once you record them."
-                color="amber"
-                compact
-              />
-            ) : (
-              <>
-                <ResponsiveContainer width="100%" height={180}>
-                  <PieChart>
-                    <Pie
-                      data={paymentModeSplit}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%" cy="50%"
-                      innerRadius={45} outerRadius={70}
-                      paddingAngle={2}
-                      isAnimationActive
-                      animationDuration={300}
-                    >
-                      {paymentModeSplit.map((_, i) => (
-                        <Cell
-                          key={i}
-                          fill={COLORS[i % COLORS.length]}
-                          stroke="var(--background)"
-                          strokeWidth={2}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      cursor={{ stroke: 'transparent', strokeWidth: 0 }}
-                      formatter={(v: number) => formatINR(v)}
-                      contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="grid grid-cols-2 gap-2 mt-3">
-                  {paymentModeSplit.map((p, i) => (
-                    <div key={p.name} className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                      <div className="text-xs">
-                        <span className="font-medium">{p.name}</span>
-                        <span className="text-muted-foreground ml-1">{formatINRCompact(p.value)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+      {shown === 'modes' && (
+        paymentModeSplit.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">{t('trend.none')}</p>
+        ) : (
+          <div className="flex items-center gap-4">
+            <ResponsiveContainer width={112} height={112}>
+              <PieChart>
+                <Pie data={paymentModeSplit} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={34} outerRadius={54} paddingAngle={2}>
+                  {paymentModeSplit.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="var(--background)" strokeWidth={2} />)}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <ul className="flex-1 min-w-0 space-y-1.5 text-sm">
+              {paymentModeSplit.map((p, i) => (
+                <li key={p.name} className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+                  <span className="flex-1 text-muted-foreground">{p.name}</span>
+                  <span className="font-semibold tabular-nums">{formatINR(p.value)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      )}
+    </section>
+  )
+}
+
+/** One ranked row: rank, name, one line, value on the right (ledger model consistency kit). */
+interface RankedRow { name: string; line: string; value: string; strong?: boolean }
+
+/** The rows each Top list shows. Exported for the guard. */
+export function topListRows(
+  view: TopView,
+  data: { topProducts: DashboardChartsProps['topProducts']; topCustomers: { name: string; profit: number; totalSales: number }[]; reorder: { name: string; avgGapDays: number; daysSinceLastPurchase: number; shouldReorder: boolean }[] },
+  t: (key: string) => string,
+): RankedRow[] {
+  if (view === 'items') {
+    return data.topProducts.map((p) => ({ name: p.name, line: t('top.sold').replace('{n}', String(Math.round(p.quantity * 100) / 100)), value: formatINR(p.revenue) }))
+  }
+  if (view === 'customers') {
+    return data.topCustomers.map((c) => ({ name: c.name, line: t('top.sales_line').replace('{amount}', formatINR(c.totalSales)), value: formatINR(c.profit) }))
+  }
+  // Buy again: what is due first (bought every N days, and N or more days have passed).
+  return [...data.reorder]
+    .sort((a, b) => Number(b.shouldReorder) - Number(a.shouldReorder) || (b.daysSinceLastPurchase - b.avgGapDays) - (a.daysSinceLastPurchase - a.avgGapDays))
+    .map((r) => ({
+      name: r.name,
+      line: t('top.every').replace('{n}', String(Math.round(r.avgGapDays))).replace('{m}', String(r.daysSinceLastPurchase)),
+      value: r.shouldReorder ? t('top.due') : t('top.in_days').replace('{n}', String(Math.max(0, Math.round(r.avgGapDays - r.daysSinceLastPurchase)))),
+      strong: r.shouldReorder,
+    }))
+}
+
+function TopListsCard({ topProducts, hideProfit, periodLabel, t, onSeeAnalytics }: Pick<DashboardChartsProps, 'topProducts' | 'hideProfit' | 'periodLabel' | 't' | 'onSeeAnalytics'>) {
+  const { data } = useAnalytics()
+  const views: TopView[] = hideProfit ? ['items', 'buy'] : ['items', 'customers', 'buy']
+  const [view, setView] = useState<TopView>('items')
+  const shown = views.includes(view) ? view : 'items'
+  const rows = topListRows(shown, { topProducts, topCustomers: data?.topCustomers ?? [], reorder: data?.reorderSuggestions ?? [] }, t)
+  const label: Record<TopView, string> = { items: t('top.items'), customers: t('top.customers'), buy: t('top.buy_again') }
+  const note: Record<TopView, string> = { items: periodLabel, customers: t('top.customers_note'), buy: t('top.buy_note') }
+  const empty: Record<TopView, string> = { items: t('top.none_items'), customers: t('top.none_customers'), buy: t('top.none_buy') }
+
+  return (
+    <section className="rounded-2xl bg-card border border-border/60 shadow-card p-3 lg:p-4 space-y-3" aria-labelledby="top-title">
+      <div className="flex items-center justify-between gap-2">
+        <h3 id="top-title" className="text-base font-semibold">{t('top.title')}</h3>
+        <span className="text-xs text-muted-foreground">{note[shown]}</span>
       </div>
-    </>
+      <SegmentedSwitch options={views.map((v) => ({ value: v, label: label[v] }))} value={shown} onChange={setView} ariaLabel={t('top.title')} />
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">{empty[shown]}</p>
+      ) : (
+        <ol className="divide-y divide-border/60">
+          {rows.slice(0, 5).map((r, i) => (
+            <li key={`${r.name}-${i}`} className="flex items-center gap-3 py-2.5">
+              <span className="w-7 h-7 rounded-full bg-muted text-xs font-bold flex items-center justify-center flex-shrink-0 tabular-nums">{i + 1}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold break-words">{r.name}</span>
+                <span className="block text-xs text-muted-foreground">{r.line}</span>
+              </span>
+              <span className={cn('text-sm font-bold tabular-nums whitespace-nowrap', r.strong && 'text-check')}>{r.value}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <button type="button" onClick={onSeeAnalytics} className="w-full min-h-12 rounded-xl text-sm font-semibold text-primary hover:bg-primary/5 inline-flex items-center justify-center gap-1">
+        {t('top.more')} <ArrowRight className="w-4 h-4" />
+      </button>
+    </section>
   )
 }
