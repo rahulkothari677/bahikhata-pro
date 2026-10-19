@@ -28,10 +28,12 @@ import { useTranslation } from '@/hooks/use-translation'
 import { gstStatus } from '@/lib/shop-tax'
 import { useSetting } from '@/hooks/use-setting'
 
-const GROUPS: { id: NonNullable<NavDestination['moreGroup']>; titleKey: string }[] = [
-  { id: 'books', titleKey: 'more.group.books' },
-  { id: 'tools', titleKey: 'more.group.tools' },
-  { id: 'grow', titleKey: 'more.group.grow' },
+// 19 Oct: each group keeps a colour of its own, as the old folders did
+// (Rahul liked them); colour roles only, no raw shades.
+const GROUPS: { id: NonNullable<NavDestination['moreGroup']>; titleKey: string; accent: string; band: string }[] = [
+  { id: 'books', titleKey: 'more.group.books', accent: 'text-primary', band: 'border-t-primary' },
+  { id: 'tools', titleKey: 'more.group.tools', accent: 'text-ai', band: 'border-t-ai' },
+  { id: 'grow', titleKey: 'more.group.grow', accent: 'text-good', band: 'border-t-good' },
 ]
 
 /** The page's groups, in order, from the registry. Exported for the guard. */
@@ -100,7 +102,7 @@ export function MoreScreen() {
       >
         {groups.map((g) => (
           <section key={g.id} aria-labelledby={`more-${g.id}`}>
-            <h3 id={`more-${g.id}`} className="text-xs font-bold text-muted-foreground mb-2 px-1">{t(g.titleKey)}</h3>
+            <h3 id={`more-${g.id}`} className={cn('text-sm font-bold mb-2 px-1', g.accent)}>{t(g.titleKey)}</h3>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
               {g.items.map((item) => {
                 const Icon = item.icon
@@ -109,7 +111,7 @@ export function MoreScreen() {
                     key={item.id}
                     type="button"
                     onClick={() => open(item)}
-                    className="min-h-12 rounded-2xl bg-card shadow-card border border-border/60 p-3 flex flex-col items-start gap-2 text-left active:scale-[0.98] transition-transform"
+                    className={cn('min-h-12 rounded-2xl bg-card shadow-card border border-border/60 border-t-2 p-3 flex flex-col items-start gap-2 text-left active:scale-[0.98] transition-transform', g.band)}
                   >
                     <span className={cn('w-10 h-10 rounded-xl flex items-center justify-center', item.iconBg || 'bg-muted')}>
                       <Icon className={cn('w-5 h-5', item.iconColor || 'text-muted-foreground')} />
