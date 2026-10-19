@@ -32,6 +32,12 @@ const SCAN_DIRS = [path.join(SRC, 'app', 'api'), path.join(SRC, 'lib')]
  * is safe. Keyed by "<relative path>:<model>".
  */
 const ACCEPTED: Record<string, string> = {
+  // — Khata (Phase 5e-1) ————————————————————————————————————————————————
+  'app/api/parties/list/route.ts:party':
+    'Khata counts every chip and totals the side over ALL parties (a cap would make "from 4 of 7 customers" '
+    + 'and the chip counts lie). Narrow select (no relations); getReceivablePayable already returns one row per '
+    + 'party for the whole shop; only 60 rows go back to the screen. Parties per shop are bounded by the business '
+    + '(thousands), not by time like transactions. Replaces the old 5,000-row fetch the screen summed itself.',
   // — Bounded by an explicit list of values, not by a row cap ——————————
   'app/api/gstr-1/route.ts:transaction':
     'Bounded by `invoiceNo: { in: nums }` — the invoice numbers already filed. '

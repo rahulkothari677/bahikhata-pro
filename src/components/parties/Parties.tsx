@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
+import { ChipRow } from '@/components/common/ChipRow'
+import { KHATA_SORTS, type KhataChip, type KhataSort } from '@/lib/khata-list'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
@@ -21,7 +23,7 @@ import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ListItemSkeleton } from '@/components/common/Skeletons'
 import {
-  Plus, Search, Users, Phone, User, ArrowDownRight, ArrowUpRight,
+  Plus, Search, Users, Phone,
   Building2, ChevronRight, Receipt, Send, Pencil,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
@@ -51,21 +53,43 @@ export function Parties() {
   // 🔒 V22-13 (Batch C, Phase 7f): Bulk reminders modal state
   const [bulkRemindersOpen, setBulkRemindersOpen] = useState(false)
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['parties'],
-    queryFn: async () => {
-      const r = await offlineFetch('/api/parties')
+  /*
+   * Phase 5e-1: the list comes from /api/parties/list — 60 parties at a time,
+   * with every chip's count and the side's totals worked out over ALL parties
+   * on the server (lib/khata-list.ts). It loaded up to 5,000 and added them up
+   * here. Search, sort and chips all go to the server.
+   */
+  const side: 'customer' | 'supplier' = filter === 'supplier' ? 'supplier' : 'customer'
+  const [chip, setChip] = useState<KhataChip>('all')
+  const [sort, setSort] = useState<KhataSort>('balance')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(id)
+  }, [search])
+  useEffect(() => { setChip('all') }, [side])
+  const { data: pages, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ['khata', side, chip, sort, debouncedSearch, refreshKey],
+    queryFn: async ({ pageParam }) => {
+      const qp = new URLSearchParams({ side, chip, sort, offset: String(pageParam) })
+      if (debouncedSearch) qp.set('search', debouncedSearch)
+      const r = await offlineFetch(`/api/parties/list?${qp}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     },
+    initialPageParam: 0,
+    getNextPageParam: (last: any) => (last.hasMore ? last.offset + last.rows.length : undefined),
+    placeholderData: (prev) => prev,
     retry: (count, err) => {
       if (err instanceof OfflineError) return false
       if (err instanceof TypeError) return false
       return count < 2
     },
   })
-
-  const parties: any[] = data?.parties || []
+  const data = pages?.pages?.[0]
+  const parties: any[] = pages?.pages?.flatMap((pg: any) => pg.rows) ?? []
+  const counts: Record<KhataChip, number> | undefined = data?.counts
+  const totals: { amount: number; owing: number; parties: number } | undefined = data?.totals
 
   // Phase 5a-3: "Add Customer/Supplier" / + sheet "New customer" from another screen.
   useNewEntryRequest('parties', () => setDialogOpen(true))
@@ -95,21 +119,9 @@ export function Parties() {
   // also works when Khata was not open yet (the counter above was missed).
   useArrivalRequest('parties', 'bulk-reminders', () => setBulkRemindersOpen(true))
 
-  const filtered = parties.filter(p => {
-    if (filter !== 'all' && p.type !== filter && p.type !== 'both') return false
-    if (search) {
-      const q = search.toLowerCase()
-      return p.name?.toLowerCase().includes(q) ||
-        p.phone?.toLowerCase().includes(q) ||
-        p.gstin?.toLowerCase().includes(q)
-    }
-    return true
-  })
-
-  const totalReceivable = parties.filter(p => p.balance > 0).reduce((s, p) => s + p.balance, 0)
-  const totalPayable = parties.filter(p => p.balance < 0).reduce((s, p) => s + Math.abs(p.balance), 0)
-  const customers = parties.filter(p => p.type === 'customer' || p.type === 'both').length
-  const suppliers = parties.filter(p => p.type === 'supplier' || p.type === 'both').length
+  // Already narrowed by side, chip and search on the server.
+  const filtered = parties
+  const n = (one: string, many: string, k: number) => t(k === 1 ? one : many).replace('{n}', String(k))
 
   const handleViewParty = (id: string) => {
     setSelectedPartyId(id)
@@ -126,45 +138,34 @@ export function Parties() {
         onChange={(v) => setFilter(v)}
         className="lg:max-w-md"
       />
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Users className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <p className="text-xs text-muted-foreground font-medium">{t('stat.total_parties')}</p>
-            </div>
-            <p className="text-xl font-bold">{parties.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-xs text-muted-foreground font-medium">{t('stat.customers')}</p>
-            </div>
-            <p className="text-xl font-bold">{customers}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <ArrowDownRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-xs text-muted-foreground font-medium">{t('dash.receivable')}</p>
-            </div>
-            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatINR(totalReceivable)}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <ArrowUpRight className="w-4 h-4 text-rose-600" />
-              <p className="text-xs text-muted-foreground font-medium">{t('dash.payable')}</p>
-            </div>
-            <p className="text-xl font-bold text-rose-600">{formatINR(totalPayable)}</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Phase 5e-1 (ledger model v4): what this side owes or is owed, over every party, then the groups. */}
+      <section className="rounded-2xl bg-card border border-border/60 shadow-card p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">{t(side === 'customer' ? 'khata.collect' : 'khata.pay')}</p>
+          <p className={cn('text-2xl font-bold tabular-nums', side === 'customer' ? 'text-good' : 'text-bad')}>{totals ? formatINR(totals.amount) : '…'}</p>
+          {totals && (
+            <p className="text-xs text-muted-foreground">
+              {side === 'customer'
+                ? t('khata.from_of').replace('{n}', String(totals.owing)).replace('{m}', String(totals.parties))
+                : n('khata.to_1', 'khata.to_n', totals.owing)}
+            </p>
+          )}
+        </div>
+        {side === 'customer' && (
+          <Button onClick={() => { haptic.click(); setBulkRemindersOpen(true) }} className="gap-1.5 min-h-12 bg-good text-white hover:bg-good/90">
+            <Send className="w-4 h-4" /> {t('ins.plan_reminders')}
+          </Button>
+        )}
+      </section>
+      <ChipRow
+        ariaLabel={t('khata.show')}
+        value={chip}
+        onChange={setChip}
+        chips={(side === 'customer'
+          ? (['all', 'due', 'old', 'settled', 'advance'] as KhataChip[])
+          : (['all', 'due', 'settled', 'advance'] as KhataChip[])
+        ).map((c) => ({ value: c, label: t(`khata.chip.${side}.${c}`), count: counts?.[c] }))}
+      />
 
       {/* Toolbar - removed duplicate Add Party button (it's in header now) */}
       <Card className="shadow-card border-border/60">
@@ -173,23 +174,25 @@ export function Parties() {
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, phone, GSTIN..."
+                placeholder={t('khata.search')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
               />
             </div>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="sr-only sm:not-sr-only">{t('khata.sort')}</span>
+              <select
+                aria-label={t('khata.sort')}
+                value={sort}
+                onChange={(e) => setSort(e.target.value as KhataSort)}
+                className="min-h-12 rounded-xl border border-border bg-card px-3 text-sm text-foreground"
+              >
+                {KHATA_SORTS.map((k) => <option key={k} value={k}>{t(`khata.sort.${k}`)}</option>)}
+              </select>
+            </label>
             <ViewModeToggle mode={partiesViewMode} onChange={setPartiesViewMode} />
-            {/* 🔒 V22-13 (Batch C, Phase 7f): Bulk WhatsApp Reminders button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { haptic.click(); setBulkRemindersOpen(true) }}
-              className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Bulk Reminders</span>
-            </Button>
+            {/* Bulk reminders: "Plan reminders" on the card above (customers), and More / search / the Home tile. */}
           </div>
         </CardContent>
       </Card>
@@ -214,7 +217,7 @@ export function Parties() {
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60">
           <CardContent className="p-0">
-            {parties.length === 0 ? (
+            {totals && totals.parties === 0 && !debouncedSearch ? (
               <EmptyState
                 icon={Users}
                 title="No customers or suppliers yet"
@@ -227,8 +230,7 @@ export function Parties() {
             ) : (
               <EmptyState
                 icon={Users}
-                title="No parties match your search"
-                description="Try a different name, phone number, or clear the search to see all customers and suppliers."
+                title={debouncedSearch ? t('khata.none_search') : t('khata.none_chip')}
                 size="compact"
               />
             )}
@@ -428,6 +430,17 @@ export function Parties() {
             </table>
           </div>
         </Card>
+      )}
+
+      {hasNextPage && (
+        <button
+          type="button"
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+          className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted disabled:opacity-60"
+        >
+          {t('khata.more').replace('{n}', String(Math.min(60, (data?.matched ?? 0) - parties.length))).replace('{m}', String(data?.matched ?? 0))}
+        </button>
       )}
 
       <PartyDialog
