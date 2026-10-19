@@ -11,6 +11,7 @@
  */
 import { Prisma } from '@prisma/client'
 import { escapeLikeWildcards } from './escape-like'
+import { DUE_SQL } from './invoice-due-sql'
 
 export interface BillFilters {
   types: string[]
@@ -19,6 +20,12 @@ export interface BillFilters {
   to: Date | null
   /** Already escaped for LIKE (escapeLikeWildcards); '' when no search. */
   search: string
+  /**
+   * Only bills still due after later settlements (the Bills "Unpaid" chip,
+   * 5d-2). SQL only — the rule compares a bill with its settlements (DUE_SQL),
+   * which Prisma's where cannot express; the list route selects ids in SQL.
+   */
+  unpaid: boolean
 }
 
 /** The fields a bill search looks in — both renderings use this list. */
@@ -38,6 +45,7 @@ export function parseBillFilters(sp: URLSearchParams): BillFilters {
     from: date(sp.get('from')),
     to: date(sp.get('to')),
     search: escapeLikeWildcards((sp.get('search') || '').trim()),
+    unpaid: sp.get('status') === 'unpaid',
   }
 }
 
@@ -64,8 +72,8 @@ export function billWhere(userId: string, f: BillFilters): Record<string, any> {
 }
 
 /**
- * The same selection as SQL, for `FROM "Transaction" t LEFT JOIN "Party" p ON p."id" = t."partyId"`.
- * Tenant first, always ANDed.
+ * The same selection as SQL, for `FROM "Transaction" t LEFT JOIN "Party" p ON p."id" = t."partyId"`
+ * (plus ALLOCATED_JOIN when `unpaid` is set). Tenant first, always ANDed.
  */
 export function billWhereSql(userId: string, f: BillFilters): Prisma.Sql {
   const parts: Prisma.Sql[] = [Prisma.sql`t."userId" = ${userId}`, f.voided ? Prisma.sql`t."deletedAt" IS NOT NULL` : Prisma.sql`t."deletedAt" IS NULL`]
@@ -82,5 +90,6 @@ export function billWhereSql(userId: string, f: BillFilters): Prisma.Sql {
     }
     parts.push(Prisma.sql`(${Prisma.join(SEARCH_FIELDS.map((k) => match[k]), ' OR ')})`)
   }
+  if (f.unpaid) parts.push(Prisma.sql`${DUE_SQL} > 0`)
   return Prisma.join(parts, ' AND ')
 }

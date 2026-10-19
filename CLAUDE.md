@@ -177,7 +177,11 @@ save.
 - **The local Postgres stops between sessions.** Sign-in on the local copy
   fails until it is running again: start `node start.mjs` in `../local-db`
   (in the background) before blaming the app, then `ekbook-local` (needs a
-  current `npm run verify:build`).
+  current `npm run verify:build`). **If port 3000 is taken** (19 Oct: another
+  project, "Kavita's Artistry", was serving there — not ours, left alone),
+  use the launch entry `ekbook-local-3002`; look at what answers on a port
+  before stopping anything. A new port is a new origin: sign in again and
+  decline the privacy dialog again.
 - **Local migrations: the Prisma CLI does not read `.env.local`.** Run
   `set -a; . ./.env.local; set +a` in the same shell first, then
   `npx prisma migrate deploy && npx prisma generate` (2 Oct: validation failed

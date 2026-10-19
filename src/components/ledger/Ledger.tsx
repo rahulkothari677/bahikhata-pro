@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { listCountLabel } from '@/lib/list-count-label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,12 +14,15 @@ import { useAppStore } from '@/store/app-store'
 // recorded one and the date alone when it did not, so a backdated entry cannot
 // be made to claim an hour nobody wrote down.
 import { formatINR, formatDate, formatDateMaybeTime, formatINRCompact, cn } from '@/lib/utils'
-import { roundMoney } from '@/lib/money'
 // 🔒 AUDIT C5: ONE definition of "still due on this bill". Computing it inline
 // as `total − paidAmount` ignores Settle payments, which is the stale figure
 // that made a bill invite being collected a second time.
 import { computeInvoiceDue } from '@/lib/invoice-due'
 import { useTranslation } from '@/hooks/use-translation'
+import { useBillTotals } from '@/hooks/use-bill-totals'
+import { billDayKey, billDayLabel } from '@/lib/bill-days'
+import { TotalsStrip } from '@/components/insights/InsightsKit'
+import { ChipRow } from '@/components/common/ChipRow'
 import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { useSubscription } from '@/hooks/use-subscription'
 // ViewModeToggle, DateRangePicker and getPresetRange moved into
@@ -31,8 +34,8 @@ import { WakingUpState } from '@/components/common/WakingUpState'
 import { SwipeToDelete } from '@/components/common/SwipeToDelete'
 import { ContextMenu, type ContextMenuItem } from '@/components/common/ContextMenu'
 import {
-  Search, ShoppingCart, Truck, Receipt, IndianRupee,
-  TrendingUp, Calendar, User, ChevronRight, Plus, X,
+  Search, ShoppingCart, Truck,
+  Calendar, User, ChevronRight, Plus, X,
   Edit2, Trash2, Eye, Printer, AlertCircle, RefreshCw, Undo2, Loader2,
   SlidersHorizontal, CheckSquare,
 } from 'lucide-react'
@@ -41,6 +44,7 @@ import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/of
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
 import { useSetting } from '@/hooks/use-setting'
+import { chargesGstOnSales, gstStatus } from '@/lib/shop-tax'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 
@@ -62,7 +66,9 @@ export function Ledger({ type }: { type: LedgerType }) {
   const [bulkMode, setBulkMode] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const { t } = useTranslation()
-  const { hideProfit } = useSetting()
+  const { hideProfit, setting } = useSetting()
+  // Say which basis the total is (it includes GST) — but only to a shop that charges GST.
+  const showsGst = chargesGstOnSales(gstStatus(setting))
 
   // Delete a transaction (used by SwipeToDelete)
   // 🔒 AUDIT FIX V6 UX + N4: Use the correct /transactions/[id] path (the old
@@ -122,6 +128,9 @@ export function Ledger({ type }: { type: LedgerType }) {
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   // 🔒 V8 U1: Voided trail filter — toggle to show soft-deleted transactions
   const [showVoided, setShowVoided] = useState(false)
+  // Phase 5d-2 (ledger model v4): which bills the list shows. The totals above it are always the whole period's.
+  const [chip, setChip] = useState<'all' | 'unpaid' | 'est' | 'ret'>('all')
+  useEffect(() => { setChip('all') }, [type])
 
   /* Drives the badge on the tune button and the chip row below it.
      Sorting counts only when it is NOT the default (newest first): a badge
@@ -173,8 +182,12 @@ export function Ledger({ type }: { type: LedgerType }) {
     // 🔒 V26 FIX N2: Sales ledger also includes estimates so they're visible
     // and the "Convert to Sale" button is reachable. Without this, estimates
     // were a black hole — createable but never viewable.
-    const types = isSale ? ['sale', 'credit-note', 'estimate'] : ['purchase', 'debit-note']
+    // Phase 5d-2: All = bills and returns (estimates have their own chip — quotes are not sales);
+    // Unpaid = bills still due after later settlements, picked by the server.
+    const bill = isSale ? 'sale' : 'purchase', note = isSale ? 'credit-note' : 'debit-note'
+    const types = chip === 'est' ? ['estimate'] : chip === 'ret' ? [note] : chip === 'unpaid' ? [bill] : [bill, note]
     const qp = new URLSearchParams({ type: types.join(','), limit: '50' })
+    if (chip === 'unpaid') qp.set('status', 'unpaid')
     if (showVoided) qp.set('voided', 'true')
     if (dateRange) {
       qp.set('from', dateRange.from.toISOString())
@@ -203,7 +216,7 @@ export function Ledger({ type }: { type: LedgerType }) {
     // `debouncedSearch` is part of the key: a different search is a different
     // result set, and paging must restart from page 1 rather than continue
     // from a cursor belonging to the previous query.
-    queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all', showVoided ? 'voided' : 'active', debouncedSearch],
+    queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all', showVoided ? 'voided' : 'active', debouncedSearch, chip],
     queryFn: async ({ pageParam }) => {
       const r = await offlineFetch(`/api/transactions?${buildQueryParams(pageParam)}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -323,7 +336,7 @@ export function Ledger({ type }: { type: LedgerType }) {
     const rows = selectedTxns.map(txn => [
       formatDateMaybeTime(txn.date),
       txn.invoiceNo || '',
-      txn.party?.name || 'Walk-in',
+      txn.party?.name || (isSale ? 'Walk-in' : 'Cash purchase'),
       txn.type,
       txn.totalAmount,
       txn.paidAmount,
@@ -346,73 +359,19 @@ export function Ledger({ type }: { type: LedgerType }) {
     exitBulkMode()
   }
 
-  // 🔒 V17 Audit Phase 0 FIX: Net of returns — credit notes/debit notes store
-  // POSITIVE totalAmount (the absolute invoice total), so we SUBTRACT them to
-  // get the net total. Was: `s + t.totalAmount` for all types → credit notes
-  // INFLATED the total (5 sales ₹5000 + 1 credit note ₹1000 = ₹6000 shown,
-  // but real net is ₹4000).
-  // Sales ledger: sales ADD, credit notes SUBTRACT.
-  // Purchase ledger: purchases ADD, debit notes SUBTRACT.
-  // 🔒 V26 FIX N2 follow-up: estimates are QUOTATIONS, not revenue — they must
-  // be visible in the list but excluded from every money summary. Without this
-  // exclusion, adding estimates to the ledger (FIX N2) silently inflated the
-  // "Total" and "Received" cards by the quoted amounts.
-  const totalAmount = filtered.reduce((s, t) => {
-    if (t.type === 'estimate') return s
-    if (isSale) {
-      return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
-    } else {
-      return t.type === 'debit-note' ? s - t.totalAmount : s + t.totalAmount
-    }
-  }, 0)
-  // 🔒 V17 Audit Phase 4 SIGN-CONVENTION FIX:
-  // Credit notes store NEGATIVE grossProfit (line-items.ts: grossProfit - itemProfit = 0 - 900 = -900).
-  // So we ADD grossProfit for both sales (+3000) and credit notes (-900) → net = 2100.
-  // BEFORE this fix: the code did `s - t.grossProfit` for credit notes → `3000 - (-900) = 3900`
-  // which INFLATED profit by the return amount (regression of §1 in the opposite direction).
-  // Sales: +grossProfit (positive). Credit notes: +grossProfit (negative). Others: 0.
-  const totalProfit = filtered.reduce((s, t) => {
-    if (t.type === 'credit-note') return s + (t.grossProfit || 0)  // ADD (grossProfit is negative)
-    if (t.type === 'sale') return s + (t.grossProfit || 0)
-    return s
-  }, 0)
-  // #134: the margin % is on sales BEFORE GST, net of returns — the same base
-  // as the bill screen and the reports. totalAmount includes GST.
-  const totalNetSales = filtered.reduce((s, t) => {
-    const net = (t.subtotal || 0) - (t.discountAmount || 0)
-    if (t.type === 'sale') return s + net
-    if (t.type === 'credit-note') return s - net
-    return s
-  }, 0)
-  // 🔒 V17 Audit Phase 0 FIX: Same net-of-returns pattern for paidAmount.
-  // Credit notes have paidAmount (the refund issued) — SUBTRACT for sales.
-  // Debit notes have paidAmount (the refund received) — SUBTRACT for purchases.
-  //
-  // 🔒 SETTLEMENTS COUNT TOO (2026-08-03). Found in the browser: INV-0043 —
-  // ₹600 sale, ₹200 at billing, ₹400 settled later, fully paid — showed
-  // PAID ₹200 / OUTSTANDING ₹400 in these cards, while the bill itself
-  // correctly read ₹0 due.
-  //
-  // The rule is stated at the top of this file and applied per row via
-  // computeInvoiceDue(), but this AGGREGATE still did `total − paidAmount`,
-  // so every Settle payment was invisible to it. That is the stale "Due" the
-  // C5 work existed to kill — an invoice that looks unpaid invites being
-  // collected a second time, and here it was doing so at the top of the
-  // ledger, where the shopkeeper looks first.
-  //
-  // `allocatedAmount` is summed from paymentAllocations by the list API, so
-  // it is already on every row. Notes carry no allocations (Settle only
-  // targets sale/purchase), so adding it is a no-op for them.
-  const totalPaid = filtered.reduce((s, t) => {
-    if (t.type === 'estimate') return s  // 🔒 V26 N2 follow-up: quotes collect nothing
-    const collected = roundMoney((t.paidAmount || 0) + (t.allocatedAmount || 0))
-    if (isSale) {
-      return t.type === 'credit-note' ? s - collected : s + collected
-    } else {
-      return t.type === 'debit-note' ? s - collected : s + collected
-    }
-  }, 0)
-  const totalDue = totalAmount - totalPaid
+  /*
+   * The totals: every bill in the period, summed by the database (#184,
+   * Phase 5d) — /api/transactions/summary with the same filters as the list.
+   * They were summed over the rows loaded (50 a page), so saving an estimate
+   * pushed a sale off the first page and "Total sales" fell by ₹948.08 with
+   * nothing sold. Same definitions as before: returns subtract, estimates are
+   * apart, "received" counts payments settled against a bill later (C5).
+   */
+  const totalsQuery = useBillTotals(isSale ? 'sale' : 'purchase', { range: dateRange, voided: showVoided, search: debouncedSearch })
+  const billTotals = totalsQuery.data?.totals
+  const dayTotals = new Map((totalsQuery.data?.days ?? []).map((d) => [d.day, d] as const))
+  // A day header's total is the server's (every bill that day) and shows under "All" only: under another
+  // chip, a sum of the rows loaded so far could stop at a page break and still look complete.
 
   // Listen for global "New Entry" trigger from Header (only if fired on this view)
   const lastTriggerRef = useRef(triggerNewEntry)
@@ -509,93 +468,32 @@ export function Ledger({ type }: { type: LedgerType }) {
         </div>
       )}
 
-      {/* Stats — with colored top accent bars like KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-600" />
-          <div className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Receipt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              </div>
-              {/*
-                * Say WHICH basis, because two screens report this month's sales
-                * as two different numbers and neither used to say why.
-                *
-                * Here it is the sum of bill totals — GST included, the money
-                * that came through the till. The P&L reports Rs 100 less for
-                * the same month, and is also right: tax you collect is not
-                * income, it is held for the government, so accounting revenue
-                * excludes it (that card already reads "Revenue (excl. GST)").
-                *
-                * The gap IS the GST. Without the labels a shopkeeper who spots
-                * it has no way to tell which figure to trust — and that doubt
-                * spreads to every other number we show, which is expensive for
-                * an app whose whole claim is that you can rely on it.
-                */}
-              <p className="text-xs text-muted-foreground font-medium">
-                {isSale ? 'Total Sales' : 'Total Purchases'} <span className="normal-case">({t('dash.incl_gst')})</span>
-              </p>
-            </div>
-            <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
-            {/*
-              * This total covers only the rows fetched so far, not all time —
-              * the warning is necessary and must stay.
-              *
-              * It used to read "50 transactions (loaded)". "Loaded" is a
-              * programmer's word for a programmer's concern: it describes what
-              * the app did, not what the shopkeeper is looking at. Someone
-              * reading it has no way to know whether ₹10,052 is their whole
-              * month or the first page of it — which is the one thing the line
-              * exists to tell them.
-              */}
-            <p className="text-xs text-muted-foreground">
-              {hasNextPage
-                ? `First ${filtered.length} · scroll for more`
-                : `${filtered.length} transactions`}
-            </p>
-          </div>
-        </div>
-        {isSale && !hideProfit && (
-          <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
-            <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-600" />
-            <div className="p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <p className="text-xs text-muted-foreground font-medium">{t('stat.gross_profit')}</p>
-              </div>
-              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatINR(totalProfit)}</p>
-              <p className="text-xs text-muted-foreground">{totalNetSales > 0 ? ((totalProfit / totalNetSales) * 100).toFixed(1) : 0}% margin</p>
-            </div>
-          </div>
-        )}
-        <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-600" />
-          <div className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                <IndianRupee className="w-3.5 h-3.5 text-violet-600" />
-              </div>
-              <p className="text-xs text-muted-foreground font-medium">{t('stat.paid')}</p>
-            </div>
-            <p className="text-xl font-bold tabular-nums">{formatINR(totalPaid)}</p>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-rose-500 to-red-600" />
-          <div className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-7 h-7 rounded-lg bg-rose-500/10 flex items-center justify-center">
-                <IndianRupee className="w-3.5 h-3.5 text-rose-600" />
-              </div>
-              <p className="text-xs text-muted-foreground font-medium">{isSale ? 'Outstanding' : 'Pending Payment'}</p>
-            </div>
-            <p className="text-xl font-bold text-rose-600 tabular-nums">{formatINR(totalDue)}</p>
-          </div>
-        </div>
-      </div>
+      {/* Phase 5d-2: the period's totals (every bill, from the database), then which bills to list. */}
+      <TotalsStrip cells={[
+        {
+          label: t(isSale ? 'bills.total_sales' : 'bills.total_purchases'),
+          value: billTotals ? formatINR(billTotals.total) : '…',
+          sub: billTotals
+            ? [t(billTotals.bills === 1 ? 'ins.bill_1' : 'ins.bills_n').replace('{n}', String(billTotals.bills)),
+                isSale && showsGst ? t('dash.incl_gst') : null,
+                isSale && billTotals.profit !== null ? t('bills.profit_amt').replace('{amount}', formatINR(billTotals.profit)) : null].filter(Boolean).join(' · ')
+            : undefined,
+        },
+        { label: t(isSale ? 'bills.received' : 'bills.paid'), value: billTotals ? formatINR(billTotals.received) : '…', tone: 'good' },
+        { label: t('bills.due'), value: billTotals ? formatINR(billTotals.due) : '…', tone: billTotals && billTotals.due > 0 ? 'bad' : undefined },
+      ]} />
+      {totalsQuery.isError && <p className="text-sm text-bad">{t('bills.totals_error')}</p>}
+      <ChipRow
+        ariaLabel={t('bills.show')}
+        value={chip}
+        onChange={setChip}
+        chips={[
+          { value: 'all' as const, label: t('bills.chip.all'), count: billTotals ? billTotals.bills + billTotals.returns.count : undefined },
+          { value: 'unpaid' as const, label: t('bills.chip.unpaid'), count: billTotals?.unpaid },
+          ...(isSale ? [{ value: 'est' as const, label: t('bills.chip.est'), count: billTotals?.estimates?.count }] : []),
+          { value: 'ret' as const, label: t('bills.chip.ret'), count: billTotals?.returns.count },
+        ]}
+      />
 
       {/* Toolbar */}
       <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
@@ -911,6 +809,11 @@ export function Ledger({ type }: { type: LedgerType }) {
             </div>
           </CardContent>
         </Card>
+      ) : filtered.length === 0 && chip !== 'all' ? (
+        // Phase 5d-2: an empty chip is "none of these", never "no sales yet" (the shop may have hundreds).
+        <p className="rounded-2xl bg-card border border-border/60 p-6 text-center text-sm text-muted-foreground">
+          {t(`bills.none.${chip}`)}
+        </p>
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-0">
@@ -936,8 +839,12 @@ export function Ledger({ type }: { type: LedgerType }) {
         </Card>
       ) : transactionsViewMode === 'list' ? (
         <div className="space-y-2">
-          {sorted.map((txn) => {
+          {sorted.map((txn, i) => {
             const due = computeInvoiceDue(txn)
+            // Phase 5d-2: a header where a new IST day starts (newest first only).
+            const dayKey = billDayKey(txn.date)
+            const dayHead = sortBy === 'date' && sortOrder === 'desc' && (i === 0 || billDayKey(sorted[i - 1].date) !== dayKey)
+            const serverDay = chip === 'all' ? dayTotals.get(dayKey) : undefined
             const contextMenuItems: ContextMenuItem[] = [
               { label: 'View Details', icon: Eye, onClick: () => handleViewTransaction(txn.id) },
               { label: 'Edit', icon: Edit2, onClick: () => {
@@ -956,6 +863,17 @@ export function Ledger({ type }: { type: LedgerType }) {
               { label: 'Delete', icon: Trash2, onClick: () => handleDeleteTransaction(txn.id), danger: true },
             ]
             return (
+              <Fragment key={txn.id}>
+              {dayHead && (
+                <div className="flex items-baseline justify-between gap-2 px-1 pt-3 pb-1 text-sm">
+                  <span className="font-semibold">{billDayLabel(dayKey, new Date(), { today: t('bills.today'), yesterday: t('bills.yesterday') })}</span>
+                  {serverDay && (
+                    <span className="text-muted-foreground tabular-nums">
+                      {formatINR(serverDay.total)} · {t(serverDay.bills === 1 ? 'ins.bill_1' : 'ins.bills_n').replace('{n}', String(serverDay.bills))}
+                    </span>
+                  )}
+                </div>
+              )}
               <SwipeToDelete
                 key={txn.id}
                 onDelete={() => handleDeleteTransaction(txn.id)}
@@ -998,7 +916,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="font-semibold text-sm truncate">
-                            {txn.party?.name || 'Walk-in Customer'}
+                            {txn.party?.name || (isSale ? 'Walk-in Customer' : t('bills.cash_purchase'))}
                           </p>
                           {/* Secondary info — smaller, muted */}
                           <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
@@ -1091,6 +1009,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               </Card>
               </ContextMenu>
               </SwipeToDelete>
+              </Fragment>
             )
           })}
         </div>
@@ -1153,7 +1072,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                         onChange={() => toggleSelect(txn.id)}
                         onClick={(e) => e.stopPropagation()}
                         className="w-5 h-5 rounded cursor-pointer flex-shrink-0"
-                        aria-label={`Select ${txn.party?.name || 'Walk-in'} ${txn.invoiceNo || ''}`.trim()}
+                        aria-label={`Select ${txn.party?.name || (isSale ? 'Walk-in' : t('bills.cash_purchase'))} ${txn.invoiceNo || ''}`.trim()}
                       />
                     ) : (
                       <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', accentBg)}>
@@ -1166,7 +1085,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                         mode a tap selects instead, so the promise is withdrawn. */}
                     {!bulkMode && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
                   </div>
-                  <p className="font-semibold text-sm truncate">{txn.party?.name || 'Walk-in'}</p>
+                  <p className="font-semibold text-sm truncate">{txn.party?.name || (isSale ? 'Walk-in' : t('bills.cash_purchase'))}</p>
                   {txn.invoiceNo && <p className="text-xs text-muted-foreground truncate">{txn.invoiceNo}</p>}
                   <p className="text-xs text-muted-foreground mt-1 truncate">{formatDateMaybeTime(txn.date)}</p>
                   <div className="mt-2 pt-2 border-t border-border flex items-center justify-between gap-1 flex-wrap">

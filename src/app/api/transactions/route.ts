@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { LIVE_ALLOCATIONS } from '@/lib/invoice-due'
-import { billWhere, parseBillFilters } from '@/lib/bill-filters'
+import { billWhere, billWhereSql, parseBillFilters } from '@/lib/bill-filters'
+import { ALLOCATED_JOIN } from '@/lib/invoice-due-sql'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
@@ -21,7 +23,7 @@ import { gstStatus, chargesGstOnSales, claimsInputCredit } from '@/lib/shop-tax'
 import { purchaseCostPerUnit } from '@/lib/unit-profit'
 import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
 import { tracksStock, stockAffectingLines } from '@/lib/inventory-tracking'
-import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
+import { encodeKeysetCursor, buildKeysetWhere, parseKeysetCursor } from '@/lib/pagination'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { resolveFinalPaid, isNoteType, owedByNobody, owedByNobodyMessage } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
@@ -89,9 +91,38 @@ export async function GET(req: NextRequest) {
      * Scoped by userId and ANDed, never ORed at the top level; composes with
      * the keyset cursor below through where.AND.
      */
-    const where: any = billWhere(userId, parseBillFilters(searchParams))
+    const filters = parseBillFilters(searchParams)
+    let where: any = billWhere(userId, filters)
+    const COUNT_CAP = 500
+    let unpaidCount: number | null = null
 
-    if (cursor) {
+    if (filters.unpaid) {
+      /*
+       * The Unpaid chip (Phase 5d-2): bills still due after later settlements.
+       * That compares each bill with its settlements (DUE_SQL), which Prisma's
+       * where cannot express, so the page's ids are chosen in SQL — same
+       * filters, same order, same keyset cursor — and the rows loaded as usual.
+       */
+      const cur = cursor ? parseKeysetCursor(cursor) : null
+      if (cursor && !cur) {
+        return NextResponse.json({ error: 'Invalid cursor format. Please refresh.' }, { status: 400 })
+      }
+      const sqlWhere = billWhereSql(userId, filters)
+      const after = cur ? Prisma.sql`AND (t."date" < ${cur.date} OR (t."date" = ${cur.date} AND t."id" < ${cur.id}))` : Prisma.empty
+      const [ids, counted] = await Promise.all([
+        db.$queryRaw<Array<{ id: string }>>`
+          SELECT t."id" FROM "Transaction" t LEFT JOIN "Party" p ON p."id" = t."partyId" ${ALLOCATED_JOIN}
+          WHERE ${sqlWhere} ${after}
+          ORDER BY t."date" DESC, t."id" DESC
+          LIMIT ${limit + 1}`,
+        db.$queryRaw<Array<{ n: bigint }>>`
+          SELECT COUNT(*)::bigint AS "n" FROM (
+            SELECT 1 FROM "Transaction" t LEFT JOIN "Party" p ON p."id" = t."partyId" ${ALLOCATED_JOIN}
+            WHERE ${sqlWhere} LIMIT ${COUNT_CAP + 1}) x`,
+      ])
+      where = { userId, id: { in: ids.map((r) => r.id) } }
+      unpaidCount = Number(counted[0]?.n ?? 0)
+    } else if (cursor) {
       const cursorCondition = buildKeysetWhere(cursor)
       if (!cursorCondition) {
         // Malformed/legacy cursor — return 400 so the client re-fetches page 1.
@@ -172,19 +203,18 @@ export async function GET(req: NextRequest) {
      * cap the number is exact, above it the client says "500+", which is
      * true, useful and cheap. Ids only, so the rows are never materialised.
      */
-    const COUNT_CAP = 500
-    const counted = await db.transaction.findMany({
+    const matchedN = unpaidCount ?? (await db.transaction.findMany({
       where,
       select: { id: true },
       take: COUNT_CAP + 1,
-    })
-    const matchedIsExact = counted.length <= COUNT_CAP
+    })).length
+    const matchedIsExact = matchedN <= COUNT_CAP
 
     return noStore({
       transactions: finalTransactions,
       hasMore,
       nextCursor,
-      matched: matchedIsExact ? counted.length : COUNT_CAP,
+      matched: matchedIsExact ? matchedN : COUNT_CAP,
       matchedIsExact,
     })
   } catch (error) {

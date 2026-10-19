@@ -53,8 +53,10 @@ describe('both routes use it', () => {
   test('the list and the totals read the same filters; neither builds its own', () => {
     const list = readCode('src/app/api/transactions/route.ts')
     const totals = readCode('src/app/api/transactions/summary/route.ts')
-    expect(list).toMatch(/billWhere\(userId, parseBillFilters\(searchParams\)\)/)
-    expect(totals).toMatch(/billWhereSql\(userId, f\)/)
+    expect(list).toMatch(/const filters = parseBillFilters\(searchParams\)/)
+    expect(list).toMatch(/billWhere\(userId, filters\)/)
+    expect(list).toMatch(/billWhereSql\(userId, filters\)/)
+    expect(totals).toMatch(/billWhereSql\(userId, \{ \.\.\.f, unpaid: false \}\)/)
     for (const code of [list, totals]) expect(code).not.toMatch(/searchParams\.get\('search'\)|searchParams\.get\('voided'\)/)
   })
 })

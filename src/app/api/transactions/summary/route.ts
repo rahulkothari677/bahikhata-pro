@@ -47,7 +47,8 @@ export async function GET(req: NextRequest) {
     }
     const bill = purchaseSide ? 'purchase' : 'sale'
     const note = purchaseSide ? 'debit-note' : 'credit-note'
-    const where = billWhereSql(userId, f)
+    // The totals are the whole period's; the Unpaid chip narrows the list, not these figures.
+    const where = billWhereSql(userId, { ...f, unpaid: false })
 
     const [byType, byDay, hideProfit] = await Promise.all([
       db.$queryRaw<Array<{ type: string; n: bigint; total: Num; paid: Num; profit: Num; taxable: Num; unpaid: bigint }>>`

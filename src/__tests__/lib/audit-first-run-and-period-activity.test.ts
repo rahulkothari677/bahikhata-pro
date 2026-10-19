@@ -95,7 +95,8 @@ describe('#13 — "nothing matched" is not "nothing exists"', () => {
   const filters = read('src/lib/bill-filters.ts')
 
   test('the API accepts a search param (through the shared filters)', () => {
-    expect(api).toMatch(/billWhere\(userId, parseBillFilters\(searchParams\)\)/)
+    expect(api).toMatch(/const filters = parseBillFilters\(searchParams\)/)
+    expect(api).toMatch(/billWhere\(userId, filters\)/)
     expect(filters).toMatch(/sp\.get\('search'\)/)
   })
 
@@ -116,7 +117,7 @@ describe('#13 — "nothing matched" is not "nothing exists"', () => {
     // Un-keyed, paging would continue from a cursor belonging to the previous
     // result set; un-debounced, every keystroke would hit the database.
     expect(ledger).toMatch(/setDebouncedSearch\(search\.trim\(\)\), 350\)/)
-    expect(ledger).toMatch(/showVoided \? 'voided' : 'active', debouncedSearch\]/)
+    expect(ledger).toMatch(/showVoided \? 'voided' : 'active', debouncedSearch, chip\]/)
     expect(ledger).toMatch(/qp\.set\('search', debouncedSearch\)/)
   })
 })
