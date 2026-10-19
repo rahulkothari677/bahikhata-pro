@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { findDuplicateParty, duplicatePartyMessage, duplicatePartyFieldError } from '@/lib/party-duplicate'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
@@ -159,7 +160,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         // this the party screen would show the party's correct outstanding at
         // the top and stale per-bill dues underneath — the same contradiction
         // that made the original defect invisible, just relocated.
-        include: { items: true, paymentAllocations: { select: { amount: true } } },
+        include: { items: true, paymentAllocations: { where: LIVE_ALLOCATIONS, select: { amount: true } } },
         orderBy: [{ date: 'desc' }, { id: 'desc' }],
         take: PAGE_SIZE + 1, // fetch one extra to check if there's a next page
       }),
@@ -219,7 +220,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           // running balance. Without allocations that Due is stale, and it
           // rendered right beneath the corrected Bills card — two different
           // dues for the same invoice, on one screen.
-          paymentAllocations: { select: { amount: true } },
+          paymentAllocations: { where: LIVE_ALLOCATIONS, select: { amount: true } },
         },
         orderBy: { date: 'desc' },
         take: 500,

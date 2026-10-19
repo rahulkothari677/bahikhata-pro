@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContextForWrite } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
-import { computeInvoiceDue } from '@/lib/invoice-due'
+import { computeInvoiceDue, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 
 // POST /api/whatsapp-invoice - generate WhatsApp share link for an invoice
 export async function POST(req: NextRequest) {
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     // Verify transaction belongs to this user + not soft-deleted (🔒 V7 L2)
     const transaction = await db.transaction.findFirst({
       where: { id: transactionId, userId, deletedAt: null },
-      include: { items: true, party: true, paymentAllocations: { select: { amount: true } } },
+      include: { items: true, party: true, paymentAllocations: { where: LIVE_ALLOCATIONS, select: { amount: true } } },
     })
 
     if (!transaction) {

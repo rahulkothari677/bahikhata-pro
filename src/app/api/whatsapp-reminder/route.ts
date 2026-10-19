@@ -4,7 +4,7 @@ import { getAuthContextForWrite } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { computePartyBalance } from '@/lib/party-balance'
-import { computeInvoiceDue } from '@/lib/invoice-due'
+import { computeInvoiceDue, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { generateUpiLink } from '@/lib/upi-link'
 
 // POST /api/whatsapp-reminder - generate WhatsApp reminder link for outstanding dues
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
           // headline total is correct (computePartyBalance includes payments),
           // which makes it worse, not better: the listed invoices would not
           // add up to the total the same message is asking for.
-          include: { paymentAllocations: { select: { amount: true } } },
+          include: { paymentAllocations: { where: LIVE_ALLOCATIONS, select: { amount: true } } },
         },
       },
     })

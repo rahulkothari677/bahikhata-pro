@@ -36,6 +36,9 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
   // Endpoints that legitimately need to see soft-deleted rows.
   // Each entry: [fileRelativePath, reasonForException]
   const ALLOWED_EXCEPTIONS: Array<[string, string]> = [
+    // Phase 5d-1: the WHERE is billWhereSql (lib/bill-filters.ts), which always ANDs the soft-delete
+    // filter — IS NULL, or IS NOT NULL for the voided view the list itself shows. bill-filters.test.ts checks it.
+    ['app/api/transactions/summary/route.ts', 'WHERE built by billWhereSql, which carries the deletedAt filter'],
     /*
      * MUST count soft-deleted rows, and this one is deliberate too.
      *

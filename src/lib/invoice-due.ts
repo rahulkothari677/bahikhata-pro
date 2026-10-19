@@ -21,6 +21,20 @@
 
 import { roundMoney } from './money'
 
+/**
+ * The settlements that still count: allocations of payments that are not
+ * deleted. Use as `paymentAllocations: { where: LIVE_ALLOCATIONS, … }`.
+ *
+ * #266 (19 Oct, Phase 5d-1): deleting a payment only marks the payment; its
+ * allocation rows stay. Eight reads summed every allocation, so a bill
+ * settled by a payment that was later deleted still read as paid — in the
+ * Bills list, a party's bills, the bill screen, the WhatsApp invoice and
+ * reminder, Ask and Settle — while the khata balance (which skips deleted
+ * payments) said it was owed. Found when the Bills totals, summed in SQL with
+ * the same rule as DUE_SQL, came out ₹600 below the list.
+ */
+export const LIVE_ALLOCATIONS = { payment: { deletedAt: null } } as const
+
 export interface DueInput {
   /** Invoice total, after discount and round-off. */
   totalAmount: number

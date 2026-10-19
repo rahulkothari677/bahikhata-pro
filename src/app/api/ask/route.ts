@@ -7,7 +7,7 @@ import { roundMoney, fromPaise } from '@/lib/money'
 import { parseAsk, mustRefuse, ASK_EXAMPLES, type AskPeriod } from '@/lib/ask-patterns'
 import { escapeLikeWildcards } from '@/lib/escape-like'
 import { computePartyBalance, getReceivablePayable } from '@/lib/party-balance'
-import { computeInvoiceDue } from '@/lib/invoice-due'
+import { computeInvoiceDue, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { shouldHideProfit } from '@/lib/profit-visibility'
 import { buildBalanceActions } from '@/lib/ask-actions'
 import { describeParties } from '@/lib/describe-parties'
@@ -621,7 +621,7 @@ export async function POST(req: NextRequest) {
           where: { userId, deletedAt: null, partyId: p.id, type: { in: ['sale', 'purchase'] } },
           select: {
             id: true, invoiceNo: true, date: true, totalAmount: true, paidAmount: true, type: true,
-            paymentAllocations: { select: { amount: true } },
+            paymentAllocations: { where: LIVE_ALLOCATIONS, select: { amount: true } },
           },
           orderBy: { date: 'desc' },
           take: 20,

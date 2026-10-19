@@ -49,19 +49,21 @@ describe('escapeLikeWildcards', () => {
 })
 
 describe('the transactions API escapes before querying', () => {
+  // Phase 5d-1: the bill filters (search included) are read once in lib/bill-filters.ts,
+  // shared by the list and its period totals; the list route uses them.
   const src = fs
-    .readFileSync(path.join(process.cwd(), 'src/app/api/transactions/route.ts'), 'utf8')
+    .readFileSync(path.join(process.cwd(), 'src/lib/bill-filters.ts'), 'utf8')
     .replace(/\r\n/g, '\n')
 
   test('the search param is passed through the escaper', () => {
-    expect(src).toMatch(/const search = escapeLikeWildcards\(/)
+    expect(src).toMatch(/search: escapeLikeWildcards\(\(sp\.get\('search'\)/)
   })
 
-  test('nothing else feeds a raw search term into contains', () => {
+  test('nothing else feeds a raw search term into contains or LIKE', () => {
     // Guards against a future arm being added from the unescaped value.
-    const block = src.slice(src.indexOf('const search = '), src.indexOf('const search = ') + 900)
-    const containsArms = block.match(/contains: (\w+)/g) || []
-    expect(containsArms.length).toBeGreaterThanOrEqual(4)
-    for (const arm of containsArms) expect(arm).toBe('contains: search')
+    const containsArms = src.match(/contains: ([\w.]+)/g) || []
+    expect(containsArms.length).toBe(4)
+    for (const arm of containsArms) expect(arm).toBe('contains: f.search')
+    expect(src).toMatch(/const like = `%\$\{f\.search\}%`/)
   })
 })

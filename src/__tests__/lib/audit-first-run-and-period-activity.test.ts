@@ -91,21 +91,25 @@ describe('#13 — "nothing matched" is not "nothing exists"', () => {
    * after pressing "Load more" twice (50 → 100 rows). On a real shop it is
    * unfindable. Search now runs on the server.
    */
-  test('the API accepts a search param', () => {
-    expect(api).toMatch(/searchParams\.get\('search'\)/)
+  // Phase 5d-1: the filters moved to lib/bill-filters.ts, shared by the list and its period totals.
+  const filters = read('src/lib/bill-filters.ts')
+
+  test('the API accepts a search param (through the shared filters)', () => {
+    expect(api).toMatch(/billWhere\(userId, parseBillFilters\(searchParams\)\)/)
+    expect(filters).toMatch(/sp\.get\('search'\)/)
   })
 
   test('search matches invoice, party name, phone and notes', () => {
-    const block = api.slice(api.indexOf("const search = "), api.indexOf("const search = ") + 900)
-    expect(block).toMatch(/invoiceNo: \{ contains: search/)
-    expect(block).toMatch(/notes: \{ contains: search/)
-    expect(block).toMatch(/party: \{ name: \{ contains: search/)
+    expect(filters).toMatch(/invoiceNo: \{ invoiceNo: \{ contains: f\.search/)
+    expect(filters).toMatch(/notes: \{ notes: \{ contains: f\.search/)
+    expect(filters).toMatch(/partyName: \{ party: \{ name: \{ contains: f\.search/)
+    expect(filters).toMatch(/partyPhone: \{ party: \{ phone: \{ contains: f\.search/)
   })
 
   test('the search clause is ANDed inside the tenant scope, never ORed at top level', () => {
     // A top-level OR beside `userId` would leak other shops' transactions.
-    const block = api.slice(api.indexOf("const search = "), api.indexOf("const search = ") + 900)
-    expect(block).toMatch(/where\.AND\.push\(\{\s*OR:/)
+    expect(filters).toMatch(/where\.AND = \[\{ OR: SEARCH_FIELDS\.map/)
+    expect(filters).not.toMatch(/where\.OR\s*=/)
   })
 
   test('the client debounces and keys the query on the search term', () => {

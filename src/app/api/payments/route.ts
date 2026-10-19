@@ -11,7 +11,7 @@ import { validateBody, createPaymentSchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 // 🔒 AUDIT C5: oldest-first allocation + the guard that stops a payment being
 // applied to an already-settled bill.
-import { planAllocationOldestFirst, validateAllocations } from '@/lib/invoice-due'
+import { planAllocationOldestFirst, validateAllocations, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { billKey } from '@/lib/backup-keys'
 
 /**
@@ -373,7 +373,7 @@ export async function POST(req: NextRequest) {
           date: true,
           totalAmount: true,
           paidAmount: true,
-          paymentAllocations: { select: { amount: true } },
+          paymentAllocations: { where: LIVE_ALLOCATIONS, select: { amount: true } },
         },
         orderBy: [{ date: 'asc' }, { id: 'asc' }],
         take: 500,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { escapeLikeWildcards } from '@/lib/escape-like'
+import { LIVE_ALLOCATIONS } from '@/lib/invoice-due'
+import { billWhere, parseBillFilters } from '@/lib/bill-filters'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
@@ -74,87 +75,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden', message: `You don't have permission to access ${moduleKey}.` }, { status: 403 })
     }
 
-    const voided = searchParams.get('voided') === 'true'
-    // 🔒 SECURITY (Audit fix Phase 1.5): Cap limit at 200 to prevent OOM.
-    // 🔒 FIX M4: Default reduced from 100 to 50 for cursor pagination.
     const requestedLimit = parseInt(searchParams.get('limit') || '50')
     const limit = Math.min(Math.max(1, isNaN(requestedLimit) ? 50 : requestedLimit), 200)
-    const from = searchParams.get('from')
-    const to = searchParams.get('to')
-    // 🔒 FIX M4: Cursor for infinite scroll — the ID of the last transaction
-    // from the previous page. The client sends cursor=<id> to get the next page.
     const cursor = searchParams.get('cursor')
 
-    // 🔒 V8 U1: Support fetching voided (soft-deleted) transactions for the
-    // "Voided" trail filter. Was: always filtered deletedAt: null. Now: if
-    // voided=true, fetch ONLY deleted transactions (deletedAt: { not: null }).
-    const where: any = voided
-      ? { userId, deletedAt: { not: null } }
-      : { userId, deletedAt: null }
-    if (type && type !== 'all') {
-      // V17-Ext Tier 3: Support comma-separated types (e.g. "sale,credit-note")
-      const types = type.split(',').map(t => t.trim()).filter(Boolean)
-      if (types.length === 1) {
-        where.type = types[0]
-      } else if (types.length > 1) {
-        where.type = { in: types }
-      }
-    }
-
-    // 🔒 V17-Ext §1 FIX: Proper keyset pagination with a composite cursor.
-    //
-    // WAS: `where.id = { lt: cursor }` with `orderBy: [{ date: 'desc' }, { id: 'desc' }]`.
-    // This is broken — the cursor keys on `id` (roughly creation-time-ordered)
-    // but the sort keys on `date` (user-settable). A backdated transaction
-    // (entered today = high id, dated last week = low date) is silently
-    // SKIPPED by `id < cursor` even though it should appear in the list.
-    // Worked example: rows A(Jan10,c500), B(Jan09,c400), C(Jan08,c300),
-    // D(Jan07,c900 backdated). Page 1 returns A,B → nextCursor=c400. Page 2
-    // query `WHERE id < 'c400'` → C qualifies, D does NOT (c900 < c400 is
-    // false). D never appears on any page. It's in the DB, in the balance,
-    // in the GST report — but the shopkeeper scrolling the ledger never sees it.
-    //
-    // FIX: Use the shared keyset helpers from src/lib/pagination.ts. The
-    // cursor is now "date|id" (opaque to the client), and the WHERE condition
-    // is (date < cursorDate) OR (date == cursorDate AND id < cursorId) — which
-    // correctly selects all rows AFTER the cursor in the sort order.
-    //
-    // The helpers are extracted so they can be tested behaviorally in
-    // pagination-reconciliation.test.ts without a DB.
-    if (from || to) {
-      where.date = {}
-      if (from) where.date.gte = new Date(from)
-      if (to) where.date.lte = new Date(to)
-    }
-
     /*
-     * 🔒 SERVER-SIDE SEARCH (2026-08-03, found in browser testing).
+     * Which bills: the ONE reading of type / voided / from / to / search
+     * (lib/bill-filters.ts, Phase 5d-1), shared with /api/transactions/summary
+     * so the Bills list and its period totals always select the same bills.
      *
-     * Search was client-only, over the rows already loaded — 50 per page. So
-     * looking up an invoice from three months ago meant pressing "Load more"
-     * until it happened to arrive. On the test account the invoice was still
-     * not found after 100 rows; on a shop with thousands it is simply not
-     * findable, and looking up an old bill is a daily task, not an edge case.
-     *
-     * Scoped by `userId` on the same `where` (tenant isolation is not weakened
-     * — the search clause is ANDed with it, never ORed at the top level, which
-     * would have exposed other users' rows).
-     *
-     * Composes with the keyset cursor below: both go into `where.AND`, so
-     * paging THROUGH a filtered result set stays correct.
+     * Search runs on the server (2026-08-03): it used to filter only the rows
+     * already loaded, so an invoice from three months ago could not be found.
+     * Scoped by userId and ANDed, never ORed at the top level; composes with
+     * the keyset cursor below through where.AND.
      */
-    const search = escapeLikeWildcards((searchParams.get('search') || '').trim())
-    if (search) {
-      if (!where.AND) where.AND = []
-      where.AND.push({
-        OR: [
-          { invoiceNo: { contains: search, mode: 'insensitive' } },
-          { notes: { contains: search, mode: 'insensitive' } },
-          { party: { name: { contains: search, mode: 'insensitive' } } },
-          { party: { phone: { contains: search } } },
-        ],
-      })
-    }
+    const where: any = billWhere(userId, parseBillFilters(searchParams))
 
     if (cursor) {
       const cursorCondition = buildKeysetWhere(cursor)
@@ -183,7 +118,7 @@ export async function GET(req: NextRequest) {
         // 🔒 AUDIT C5: payments settled against this bill. Without this the
         // list shows `total − paidAmount`, which ignores every Settle payment —
         // the exact stale "Due" that made a bill invite being collected twice.
-        paymentAllocations: { select: { amount: true } },
+        paymentAllocations: { where: LIVE_ALLOCATIONS, select: { amount: true } },
       },
       // 🔒 FIX M4: Order by date desc, then id desc for stable cursor pagination.
       orderBy: [{ date: 'desc' }, { id: 'desc' }],

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
@@ -83,6 +84,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         // original defect was money moving with no trace on the bill, and a
         // number that shrinks without explanation only half-fixes that.
         paymentAllocations: {
+          where: LIVE_ALLOCATIONS,  // #266: a deleted payment settles nothing
           select: {
             amount: true,
             createdAt: true,
