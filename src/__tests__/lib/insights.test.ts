@@ -178,3 +178,37 @@ describe('rows that must add up to a figure shown elsewhere', () => {
     expect(profit).toContain('TYPED_IN')
   })
 })
+
+/*
+ * 19 Oct (5c-3): "not sold this period" tested only that an item's LAST sale
+ * came before the period, so viewing September in October counted an item
+ * sold only in October as sold in September. A period has two ends: every
+ * date filter on the period's start must carry its end on the same line.
+ */
+/** Lines where a SQL/Prisma filter uses the period's start without its end. */
+function openEndedPeriodLines(code: string): number[] {
+  const out: number[] = []
+  code.split(/\r?\n/).forEach((line, i) => {
+    // A span from the period before's start to this period's end (both periods at once) is closed too.
+    for (const [start, end] of [['from', 'to'], ['prevFrom', '(?:prevTo|to)']]) {
+      const usesStart = new RegExp(String.raw`\$\{[^}]*\bw\.${start}\b[^}]*\}|gte:\s*w\.${start}\b`).test(line)
+      if (usesStart && !new RegExp(String.raw`\bw\.${end}\b`).test(line)) out.push(i + 1)
+    }
+  })
+  return out
+}
+
+describe('period filters have both ends', () => {
+  test('the rule works on good and bad input', () => {
+    expect(openEndedPeriodLines('AND t."date" >= ${w.from} AND t."date" <= ${w.to}\nwhere: { date: { gte: w.from, lte: w.to } }')).toEqual([])
+    expect(openEndedPeriodLines('AND t."date" >= ${since90 < w.from ? since90 : w.from}')).toEqual([1])
+    expect(openEndedPeriodLines('ok\nwhere: { date: { gte: w.prevFrom } }')).toEqual([2])
+    expect(openEndedPeriodLines('const g = customerGroups(rows, w.from)')).toEqual([])
+    expect(openEndedPeriodLines('AND t."date" >= ${w.prevFrom} AND t."date" <= ${w.to}')).toEqual([])
+  })
+  test('the insights engine', () => {
+    const code = readCode('src/app/api/insights/route.ts')
+    expect(code.split(/\r?\n/).filter((l) => /\bw\.from\b/.test(l)).length).toBeGreaterThan(8)
+    expect(openEndedPeriodLines(code)).toEqual([])
+  })
+})

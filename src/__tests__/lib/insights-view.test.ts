@@ -56,6 +56,6 @@ describe('hours and age', () => {
     expect(daysOld('not a date', now)).toBeNull()
   })
   test('sections built so far', () => {
-    expect([...LIVE_SECTIONS]).toEqual(['sales', 'udhaar'])
+    expect([...LIVE_SECTIONS]).toEqual(['sales', 'items', 'customers', 'udhaar'])
   })
 })

@@ -206,7 +206,14 @@ save.
   the Edit tool matches what is there. **Broken again in Phase 4a** (a `\n`
   inside a regex became a real line break in a new guard); caught only
   because I read the file back. A line holding a backslash goes through the
-  Edit tool, every time, however small the change.
+  Edit tool, every time, however small the change. **Broken twice more on
+  19 Oct (5c):** `cat >> file <<'EOF'` — even a QUOTED heredoc, through this
+  tool — dropped the doubled backslashes of a TypeScript regex, so `\b`
+  became a backspace and the guard could never fire; caught both times only
+  by the guard's own bad-input case (no-control-characters.test.ts now
+  sweeps src). **Appending a test that holds a regex is still "a line with
+  a backslash": Write tool or Edit tool, never a heredoc.** In a template
+  literal use `String.raw`.
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck

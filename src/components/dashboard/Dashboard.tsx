@@ -610,7 +610,7 @@ export function Dashboard() {
     return (
       <div className="space-y-3 lg:space-y-5">
         {viewSwitch}
-        <InsightsView range={dateRange} preset={datePreset} onChange={handleDateChange} onPresetChange={setDatePreset} t={t} />
+        <InsightsView range={dateRange} preset={datePreset} onChange={handleDateChange} onPresetChange={setDatePreset} hideProfit={!!hideProfit} t={t} />
       </div>
     )
   }

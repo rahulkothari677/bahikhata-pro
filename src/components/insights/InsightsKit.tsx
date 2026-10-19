@@ -46,7 +46,13 @@ export function TotalsStrip({ cells, className }: { cells: TotalCell[]; classNam
   )
 }
 
-export interface GroupRow { id: string; label: string; sub?: string; amount: number; share: number; dot: string; value?: string }
+export interface GroupRow {
+  id: string; label: string; sub?: string; amount: number; share: number; dot: string; value?: string
+  /** What the bar slice is sized by, when not the amount (customers: how many are in the group). */
+  weight?: number
+  /** What sits under the value, when not the share (e.g. "in stock"). */
+  small?: string
+}
 
 /**
  * A bar split into groups, then one row per group. Bar widths are the exact
@@ -54,12 +60,13 @@ export interface GroupRow { id: string; label: string; sub?: string; amount: num
  * add to 100). A group of ₹0 has a row but no slice.
  */
 export function GroupBar({ rows, ariaLabel }: { rows: GroupRow[]; ariaLabel: string }) {
-  const total = rows.reduce((s, r) => s + Math.max(0, r.amount), 0)
+  const size = (r: GroupRow) => Math.max(0, r.weight ?? r.amount)
+  const total = rows.reduce((s, r) => s + size(r), 0)
   return (
     <div className="space-y-1">
       <div role="img" aria-label={ariaLabel} className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
-        {total > 0 && rows.filter((r) => r.amount > 0).map((r) => (
-          <span key={r.id} className={cn('h-full', r.dot)} style={{ width: `${(r.amount / total) * 100}%` }} />
+        {total > 0 && rows.filter((r) => size(r) > 0).map((r) => (
+          <span key={r.id} className={cn('h-full', r.dot)} style={{ width: `${(size(r) / total) * 100}%` }} />
         ))}
       </div>
       <ul className="divide-y divide-border/60">
@@ -72,7 +79,7 @@ export function GroupBar({ rows, ariaLabel }: { rows: GroupRow[]; ariaLabel: str
             </span>
             <span className="text-right">
               <span className="block text-sm font-bold tabular-nums whitespace-nowrap">{r.value ?? formatINR(r.amount)}</span>
-              <span className="block text-xs text-muted-foreground tabular-nums">{r.share}%</span>
+              <span className="block text-xs text-muted-foreground tabular-nums">{r.small ?? `${r.share}%`}</span>
             </span>
           </li>
         ))}
@@ -82,6 +89,29 @@ export function GroupBar({ rows, ariaLabel }: { rows: GroupRow[]; ariaLabel: str
 }
 
 export interface RankRow { key: string; name: string; line?: string; value: string; tone?: 'good' | 'bad'; onClick?: () => void }
+
+export interface StatRow { id: string; label: string; sub?: string; value: string; small?: string; dot: string }
+
+/** Rows that are counts, not parts of one whole (stock: out, low, not sold) — no bar, no share. */
+export function StatRows({ rows }: { rows: StatRow[] }) {
+  return (
+    <ul className="divide-y divide-border/60">
+      {rows.map((r) => (
+        <li key={r.id} className="flex items-center gap-3 py-2.5">
+          <span aria-hidden className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', r.dot)} />
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold break-words">{r.label}</span>
+            {r.sub && <span className="block text-xs text-muted-foreground">{r.sub}</span>}
+          </span>
+          <span className="text-right">
+            <span className="block text-sm font-bold tabular-nums whitespace-nowrap">{r.value}</span>
+            {r.small && <span className="block text-xs text-muted-foreground">{r.small}</span>}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 /** Ranked rows: number, name, one line, value. A row that opens something is a 48px button. */
 export function RankList({ rows }: { rows: RankRow[] }) {

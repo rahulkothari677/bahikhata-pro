@@ -16,14 +16,17 @@ import { translations } from '@/lib/i18n'
 import { udhaarAge } from '@/lib/insights'
 import { formatINR } from '@/lib/utils'
 
-const mockState: { sales: any; udhaar: any } = { sales: null, udhaar: null }
-jest.mock('@/hooks/use-insights', () => ({ useInsights: (section: 'sales' | 'udhaar') => mockState[section] }))
+const mockState: Record<string, any> = { sales: null, udhaar: null, items: null, customers: null }
+jest.mock('@/hooks/use-insights', () => ({ useInsights: (section: string) => mockState[section] }))
 jest.mock('@/lib/haptic', () => ({ haptic: { click: jest.fn() } }))
 const mockNav = jest.fn()
 jest.mock('@/lib/handle-nav-action', () => ({ handleNavAction: (...a: unknown[]) => mockNav(...a) }))
 
 import { SalesSection, MODE_DOT, categoryLabel } from '@/components/insights/SalesSection'
 import { UdhaarSection, AGE_DOT } from '@/components/insights/UdhaarSection'
+import { ItemsSection, ABC_DOT } from '@/components/insights/ItemsSection'
+import { CustomersSection, SEG_DOT } from '@/components/insights/CustomersSection'
+import { abcGroups, customerGroups } from '@/lib/insights'
 import { useAppStore } from '@/store/app-store'
 
 const en = translations.en as unknown as Record<string, string>
@@ -111,10 +114,63 @@ describe('Udhaar', () => {
   })
 })
 
+const ITEMS = {
+  totals: { sold: 15, items: 16, stockValue: 7969.5, outOfStock: 1 },
+  abc: [{ id: 'a', count: 6, amount: 43181.26, share: 80 }, { id: 'b', count: 5, amount: 8024.25, share: 15 }, { id: 'c', count: 4, amount: 2651.49, share: 5 }, { id: 'none', count: 1, amount: 0, share: 0 }],
+  stock: { out: 1, low: 2, notSoldPeriod: { count: 1, stockValue: 1200 }, notSold90: { count: 0, stockValue: 0 } },
+  top: {
+    sales: [{ id: 'i1', name: 'Tata Tea Gold 500g', sales: 10254.36, qty: 36, profit: 1614.36 }],
+    qty: [{ id: 'i2', name: 'Parle-G Biscuit 100g', sales: 459.23, qty: 47, profit: 91.23 }],
+    profit: [{ id: 'i1', name: 'Tata Tea Gold 500g', sales: 10254.36, qty: 36, profit: 1614.36 }],
+  },
+}
+const CUSTOMERS = {
+  totals: { bought: 4, customers: 7, newCount: 1, walkInShare: 28 },
+  groups: [{ id: 'new', count: 1, amount: 4525.05, share: 9 }, { id: 'regular', count: 3, amount: 45000, share: 91 }, { id: 'occasional', count: 0, amount: 0, share: 0 }, { id: 'quiet', count: 1, amount: 900, share: 0 }, { id: 'inactive', count: 2, amount: 0, share: 0 }],
+  namedVsWalkIn: [{ id: 'named', count: 0, amount: 49525.05, share: 72 }, { id: 'walkin', count: 0, amount: 19000, share: 28 }],
+  top: { sales: [{ id: 'c1', name: 'Ramesh Verma', sales: 20000, bills: 9, profit: 3000 }], bills: [{ id: 'c1', name: 'Ramesh Verma', sales: 20000, bills: 9, profit: 3000 }], profit: [] },
+}
+
+describe('Items', () => {
+  test('A/B/C groups and stock rows are the engine’s; switching to Quantity ranks by quantity', () => {
+    mockState.items = ok(ITEMS)
+    render(<ItemsSection range={range} hideProfit={false} t={t} />)
+    expect(screen.getByText('A items · 6')).toBeTruthy()
+    expect(screen.getByText('No sale · 1')).toBeTruthy()
+    expect(screen.getByText(formatINR(43181.26))).toBeTruthy()
+    expect(screen.getByText('Not sold this period · 1')).toBeTruthy()
+    expect(screen.getByText('36 sold · 16% margin')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Quantity' }))
+    expect(screen.getByText('Parle-G Biscuit 100g')).toBeTruthy()
+    expect(screen.getByText('See all 16 in Items')).toBeTruthy()
+  })
+  test('hide profit: no Profit sort and no margin', () => {
+    mockState.items = ok({ ...ITEMS, top: { sales: ITEMS.top.sales.map((x) => ({ ...x, profit: null })), qty: [], profit: [] } })
+    render(<ItemsSection range={range} hideProfit t={t} />)
+    expect(screen.queryByRole('button', { name: 'Profit' })).toBeNull()
+    expect(screen.queryByText(/margin/)).toBeNull()
+  })
+})
+
+describe('Customers', () => {
+  test('groups, walk-in share and the top list; a customer opens their khata', () => {
+    mockState.customers = ok(CUSTOMERS)
+    render(<CustomersSection range={range} hideProfit={false} t={t} />)
+    expect(screen.getByText('Regular · 3')).toBeTruthy()
+    expect(screen.getByText('Gone quiet · 1')).toBeTruthy()
+    expect(screen.getByText('period before')).toBeTruthy()
+    expect(screen.getAllByText('28%').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: /Ramesh Verma/ }))
+    expect(useAppStore.getState().selectedPartyId).toBe('c1')
+  })
+})
+
 describe('words and colours', () => {
   test('every group id the engine can send has a label and a colour', () => {
     for (const id of ['cash', 'upi', 'card', 'bank', 'other', 'udhaar', 'nobody']) expect({ id, label: !!en[`ins.mode.${id}`], dot: !!MODE_DOT[id] }).toEqual({ id, label: true, dot: true })
     for (const g of udhaarAge([], new Date())) expect({ id: g.id, label: !!en[`ins.age.${g.id}`], dot: !!AGE_DOT[g.id] }).toEqual({ id: g.id, label: true, dot: true })
+    for (const g of abcGroups([], 0).groups) expect({ id: g.id, label: !!en[`ins.abc.${g.id}`], dot: !!ABC_DOT[g.id] }).toEqual({ id: g.id, label: true, dot: true })
+    for (const g of customerGroups([], new Date())) expect({ id: g.id, label: !!en[`ins.seg.${g.id}`], sub: !!en[`ins.seg_d.${g.id}`], dot: !!SEG_DOT[g.id] }).toEqual({ id: g.id, label: true, sub: true, dot: true })
     expect(['__unmatched', '__typed', ''].map((id) => categoryLabel(id, t)).some((l) => l.startsWith('MISSING'))).toBe(false)
   })
   test('every word used on these screens exists in English and Hindi (runs after the renders above)', () => {

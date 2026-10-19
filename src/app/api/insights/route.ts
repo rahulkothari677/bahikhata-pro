@@ -16,6 +16,7 @@ import { rangeWindow } from '@/lib/period'
 import { trendBuckets } from '@/lib/trend-buckets'
 import { abcGroups, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMATCHED } from '@/lib/insights'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
+import { WALK_IN_PARTY_NAME } from '@/lib/walk-in-party'
 
 /**
  * GET /api/insights?section=sales|items|customers|udhaar|profit[&from&to]
@@ -199,21 +200,27 @@ async function itemsSection({ userId, w, now, hideProfit }: Ctx) {
         COUNT(*) FILTER (WHERE "tracksInventory" = true AND "currentStock" > 0 AND "currentStock" <= "lowStockThreshold")::bigint AS "lowCount",
         COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric)) FILTER (WHERE "tracksInventory" = true), 0)::numeric AS "stockPaise"
       FROM "Product" WHERE "userId" = ${userId}`,
-    // Goods in stock with no sale in the period, and with none in 90 days, with the stock they hold.
+    // Goods in stock today with no sale inside the period, and with none in the last 90 days, with the stock they hold.
+    // Inside the period, not "last sale before it": viewing September in October, an item sold only in
+    // October was not sold in September (5c-3 fix — the old test looked only at the last sale).
     db.$queryRaw<Array<{ periodCount: bigint; periodPaise: Num; d90Count: bigint; d90Paise: Num }>>`
-      WITH sold AS (
-        SELECT ti."productId" AS pid, MAX(t."date") AS last
+      WITH sp AS (
+        SELECT DISTINCT ti."productId" AS pid
         FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"
-        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale' AND t."date" >= ${since90 < w.from ? since90 : w.from}
-          AND ti."productId" IS NOT NULL
-        GROUP BY ti."productId"
+        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale'
+          AND t."date" >= ${w.from} AND t."date" <= ${w.to} AND ti."productId" IS NOT NULL
+      ), s90 AS (
+        SELECT DISTINCT ti."productId" AS pid
+        FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"
+        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale'
+          AND t."date" >= ${since90} AND ti."productId" IS NOT NULL
       )
       SELECT
-        COUNT(*) FILTER (WHERE s.last IS NULL OR s.last < ${w.from})::bigint AS "periodCount",
-        COALESCE(SUM(ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric)) FILTER (WHERE s.last IS NULL OR s.last < ${w.from}), 0)::numeric AS "periodPaise",
-        COUNT(*) FILTER (WHERE s.last IS NULL OR s.last < ${since90})::bigint AS "d90Count",
-        COALESCE(SUM(ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric)) FILTER (WHERE s.last IS NULL OR s.last < ${since90}), 0)::numeric AS "d90Paise"
-      FROM "Product" p LEFT JOIN sold s ON s.pid = p."id"
+        COUNT(*) FILTER (WHERE sp.pid IS NULL)::bigint AS "periodCount",
+        COALESCE(SUM(ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric)) FILTER (WHERE sp.pid IS NULL), 0)::numeric AS "periodPaise",
+        COUNT(*) FILTER (WHERE s90.pid IS NULL)::bigint AS "d90Count",
+        COALESCE(SUM(ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric)) FILTER (WHERE s90.pid IS NULL), 0)::numeric AS "d90Paise"
+      FROM "Product" p LEFT JOIN sp ON sp.pid = p."id" LEFT JOIN s90 ON s90.pid = p."id"
       WHERE p."userId" = ${userId} AND p."tracksInventory" = true AND p."currentStock" > 0`,
     db.product.count({ where: { userId } }),
   ])
@@ -255,12 +262,12 @@ async function customersSection({ userId, w, hideProfit }: Ctx) {
       )
       SELECT a.pid AS "id", p."name" AS "name", a."billsNow", a."salesNow", a."profitNow", a."billsPrev", a."salesPrev",
         (SELECT MIN(t2."date") FROM "Transaction" t2 WHERE t2."userId" = ${userId} AND t2."partyId" = a.pid AND t2."deletedAt" IS NULL AND t2."type" = 'sale') AS "firstBill"
-      FROM a JOIN "Party" p ON p."id" = a.pid AND p."deletedAt" IS NULL`,
-    db.party.count({ where: { userId, deletedAt: null, type: { in: ['customer', 'both'] } } }),
+      FROM a JOIN "Party" p ON p."id" = a.pid AND p."deletedAt" IS NULL AND LOWER(p."name") <> LOWER(${WALK_IN_PARTY_NAME})`,
+    db.party.count({ where: { userId, deletedAt: null, type: { in: ['customer', 'both'] }, NOT: { name: { equals: WALK_IN_PARTY_NAME, mode: 'insensitive' } } } }),
     sumsByType(userId, w.from, w.to, ['sale', 'credit-note']).then(async (all) => {
       const named = await db.transaction.groupBy({
         by: ['type'],
-        where: activeTransactionWhere(userId, { type: { in: ['sale', 'credit-note'] }, partyId: { not: null }, date: { gte: w.from, lte: w.to } }),
+        where: activeTransactionWhere(userId, { type: { in: ['sale', 'credit-note'] }, partyId: { not: null }, party: { NOT: { name: { equals: WALK_IN_PARTY_NAME, mode: 'insensitive' } } }, date: { gte: w.from, lte: w.to } }),
         _sum: { totalAmount: true },
       })
       const n = (t: string) => ({ totalAmount: named.find((x) => x.type === t)?._sum.totalAmount ?? 0 })
@@ -281,10 +288,11 @@ async function customersSection({ userId, w, hideProfit }: Ctx) {
   const top = (key: 'salesNow' | 'profitNow' | 'billsNow') => rows.filter((r) => r[key] > 0)
     .sort((a, b) => b[key] - a[key] || a.name.localeCompare(b.name)).slice(0, TOP)
     .map((r) => ({ id: r.id, name: r.name, sales: r.salesNow, bills: r.billsNow, profit: hideProfit ? null : r.profitNow }))
+  const namedVsWalkIn = split([{ id: 'named', amount: walkIn.named }, { id: 'walkin', amount: walkInSales }])
   return {
-    totals: { bought, customers: Math.max(customerCount, counted), newCount: groups.find((g) => g.id === 'new')!.count, walkInShare: walkIn.total > 0 ? Math.round((walkInSales / walkIn.total) * 100) : 0 },
+    totals: { bought, customers: Math.max(customerCount, counted), newCount: groups.find((g) => g.id === 'new')!.count, walkInShare: namedVsWalkIn.find((g) => g.id === 'walkin')?.share ?? 0 },
     groups,
-    namedVsWalkIn: split([{ id: 'named', amount: walkIn.named }, { id: 'walkin', amount: walkInSales }]),
+    namedVsWalkIn,
     top: { sales: top('salesNow'), bills: top('billsNow'), profit: hideProfit ? [] : top('profitNow') },
   }
 }

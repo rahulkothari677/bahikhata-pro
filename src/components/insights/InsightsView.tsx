@@ -11,9 +11,12 @@ import { DateRangePicker, type DatePreset, type DateRange } from '@/components/c
 import { LIVE_SECTIONS, type InsightSection } from '@/lib/insights-view'
 import { SalesSection } from '@/components/insights/SalesSection'
 import { UdhaarSection } from '@/components/insights/UdhaarSection'
+import { ItemsSection } from '@/components/insights/ItemsSection'
+import { CustomersSection } from '@/components/insights/CustomersSection'
 
-export function InsightsView({ range, preset, onChange, onPresetChange, t }: {
+export function InsightsView({ range, preset, onChange, onPresetChange, hideProfit, t }: {
   range: DateRange
+  hideProfit: boolean
   preset: DatePreset
   onChange: (range: DateRange, preset: DatePreset) => void
   onPresetChange: (preset: DatePreset) => void
@@ -34,6 +37,8 @@ export function InsightsView({ range, preset, onChange, onPresetChange, t }: {
         <DateRangePicker value={range} onChange={onChange} preset={preset} onPresetChange={onPresetChange} />
       </div>
       {section === 'sales' && <SalesSection range={range} t={t} />}
+      {section === 'items' && <ItemsSection range={range} hideProfit={hideProfit} t={t} />}
+      {section === 'customers' && <CustomersSection range={range} hideProfit={hideProfit} t={t} />}
       {section === 'udhaar' && <UdhaarSection range={range} t={t} />}
     </div>
   )

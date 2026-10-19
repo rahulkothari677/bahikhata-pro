@@ -32,7 +32,23 @@ export interface UdhaarInsights {
   toPay: { total: number; suppliers: number; biggest: { id: string; name: string; balance: number }[] }
 }
 
-export interface InsightsBySection { sales: SalesInsights; udhaar: UdhaarInsights }
+export interface TopItem { id: string; name: string; sales: number; qty: number; profit: number | null }
+export interface ItemsInsights {
+  totals: { sold: number; items: number; stockValue: number; outOfStock: number }
+  abc: Group[]
+  stock: { out: number; low: number; notSoldPeriod: { count: number; stockValue: number }; notSold90: { count: number; stockValue: number } }
+  top: { sales: TopItem[]; qty: TopItem[]; profit: TopItem[] }
+}
+
+export interface TopCustomer { id: string; name: string; sales: number; bills: number; profit: number | null }
+export interface CustomersInsights {
+  totals: { bought: number; customers: number; newCount: number; walkInShare: number }
+  groups: Group[]
+  namedVsWalkIn: Group[]
+  top: { sales: TopCustomer[]; bills: TopCustomer[]; profit: TopCustomer[] }
+}
+
+export interface InsightsBySection { sales: SalesInsights; items: ItemsInsights; customers: CustomersInsights; udhaar: UdhaarInsights }
 
 export function useInsights<S extends InsightSection>(section: S, range: DateRange) {
   const refreshKey = useAppStore((s) => s.refreshKey)

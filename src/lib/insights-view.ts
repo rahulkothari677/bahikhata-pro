@@ -8,8 +8,8 @@
  */
 import { istDaysBetween } from './insights'
 
-/** The sections built so far, in chip order. 5c-3 adds items and customers, 5c-4 profit. */
-export const LIVE_SECTIONS = ['sales', 'udhaar'] as const
+/** The sections built so far, in chip order. 5c-4 adds profit. */
+export const LIVE_SECTIONS = ['sales', 'items', 'customers', 'udhaar'] as const
 export type InsightSection = (typeof LIVE_SECTIONS)[number]
 
 /** Change on the period before, in whole percent. Null when there is nothing to compare with. */
