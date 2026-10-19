@@ -112,6 +112,13 @@ type ItemRow = {
   priceIncludesGst?: boolean
 }
 
+/**
+ * The entry forms. After a save, "back where you came from" never means back
+ * into a fresh copy of a form — estimates included (5d-3: a New Estimate opened
+ * from New Estimate returned to a blank estimate after saving).
+ */
+const ENTRY_FORMS: string[] = ['new-sale', 'new-purchase', 'new-estimate']
+
 export function TransactionEntry({ type, estimateMode = false }: { type: LedgerType; estimateMode?: boolean }) {
   const isSale = type === 'sale'
   // 🔒 Feature Phase 3: estimateMode — when true, the form saves with type='estimate'
@@ -1037,6 +1044,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const hasStockBlock = stockPolicy === 'block' && liveStockWarnings.length > 0
 
   const handleSave = async () => {
+    // Set when an estimate is saved; shown once the screen has moved on.
+    let estimateToast: (() => void) | null = null
     if (items.length === 0) {
       sonnerToast.error('Add at least one item')
       return
@@ -1201,7 +1210,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         const amount = roundMoney(data.totalAmount || totalAmount || 0)
         const partyName = selectedParty?.name || (data as any)?.partyName || ''
         const toastDesc = partyName ? `₹${amount.toLocaleString('en-IN')} · ${partyName}` : `₹${amount.toLocaleString('en-IN')}`
-        sonnerToast.success(`${txLabel} recorded`, { description: toastDesc })
+        // An estimate's message comes after the screen has moved on (below), so its button cannot be overtaken.
+        if (!estimateMode) sonnerToast.success(`${txLabel} recorded`, { description: toastDesc })
+        else estimateToast = () => sonnerToast.success(`${txLabel} recorded`, {
+          description: toastDesc,
+          // #185: an estimate used to vanish after saving; say where it is and offer the way there.
+          // Long enough to read and tap (a message with a button gone in 4 s was missed on the first try).
+          duration: 8000,
+          action: { label: 'See estimates', onClick: () => { useAppStore.getState().requestOnArrival('sales', 'show-estimates'); useAppStore.getState().setView('sales') } },
+        })
 
         // 🔒 V20-025: Track transaction creation event
         const txType = isNote ? (isCreditNote ? 'credit-note' : 'debit-note') : (isSale ? 'sale' : 'purchase')
@@ -1235,7 +1252,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           // Delay navigation so the banner is visible
           setTimeout(() => {
             triggerRefresh()
-            if (previousView && previousView !== 'new-sale' && previousView !== 'new-purchase') {
+            if (previousView && !ENTRY_FORMS.includes(previousView)) {
               setView(previousView)
             } else {
               setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
@@ -1273,11 +1290,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       // return there instead of landing on the ledger (a root view with no back).
       // Was: always setView('sales'/'purchases') → dead end after purchase from party.
       triggerRefresh()
-      if (previousView && previousView !== 'new-sale' && previousView !== 'new-purchase') {
+      if (previousView && !ENTRY_FORMS.includes(previousView)) {
         setView(previousView)
       } else {
         setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
       }
+      estimateToast?.()
     } catch (e: any) {
       haptic.error()
       sonnerToast.error(e?.message || "Couldn\'t save transaction")

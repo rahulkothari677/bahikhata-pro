@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { rememberScroll, restoreScroll, scrollToTop } from '@/lib/scroll-memory'
 
 /** What a screen should do when it arrives (pendingArrival / useArrivalRequest). */
-export type ArrivalAction = 'new-entry' | 'day-end' | 'bulk-reminders' | 'voice' | 'barcode'
+export type ArrivalAction = 'new-entry' | 'day-end' | 'bulk-reminders' | 'voice' | 'barcode' | 'show-estimates'
 
 export type ViewType =
   | 'dashboard'

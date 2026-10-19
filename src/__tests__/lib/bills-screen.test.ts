@@ -57,6 +57,19 @@ describe('the screen', () => {
     expect(ledger).not.toMatch(/\.reduce\(/)
     expect(ledger).not.toMatch(/First \$\{filtered\.length\} · scroll for more/)
   })
+  test('a saved estimate says where it went: "See estimates" opens Bills on the Estimates chip (#185)', () => {
+    const entry = readCode('src/components/ledger/TransactionEntry.tsx')
+    expect(entry).toMatch(/action: \{ label: 'See estimates', onClick: \(\) => \{ useAppStore\.getState\(\)\.requestOnArrival\('sales', 'show-estimates'\)/)
+    // Shown once the screen has moved on, so the save's own navigation cannot overtake a tap.
+    const moved = entry.lastIndexOf('if (previousView && !ENTRY_FORMS.includes(previousView))')
+    const shown = entry.indexOf('estimateToast?.()')
+    expect({ afterMove: shown > moved, insideSave: shown < entry.indexOf('const handleCancel = ()') }).toEqual({ afterMove: true, insideSave: true })
+    expect(entry).toMatch(/const ENTRY_FORMS: string\[\] = \['new-sale', 'new-purchase', 'new-estimate'\]/)
+    expect(ledger).toMatch(/useArrivalRequest\('sales', 'show-estimates', \(\) => setChip\('est'\)\)/)
+  })
+  test('the totals strip names its period ("All time" when none is chosen)', () => {
+    expect(ledger).toMatch(/dateRange \? getPresetLabel\(datePreset\) : t\('bills\.all_time'\)/)
+  })
   test('an empty chip says "none of these", before the first-run "no sales yet" state', () => {
     const chipEmpty = ledger.indexOf("filtered.length === 0 && chip !== 'all'")
     const firstRun = ledger.indexOf(') : filtered.length === 0 ? (')

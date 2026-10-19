@@ -20,6 +20,7 @@ import { formatINR, formatDate, formatDateMaybeTime, formatINRCompact, cn } from
 import { computeInvoiceDue } from '@/lib/invoice-due'
 import { useTranslation } from '@/hooks/use-translation'
 import { useBillTotals } from '@/hooks/use-bill-totals'
+import { useArrivalRequest } from '@/hooks/use-new-entry-request'
 import { billDayKey, billDayLabel } from '@/lib/bill-days'
 import { TotalsStrip } from '@/components/insights/InsightsKit'
 import { ChipRow } from '@/components/common/ChipRow'
@@ -131,6 +132,8 @@ export function Ledger({ type }: { type: LedgerType }) {
   // Phase 5d-2 (ledger model v4): which bills the list shows. The totals above it are always the whole period's.
   const [chip, setChip] = useState<'all' | 'unpaid' | 'est' | 'ret'>('all')
   useEffect(() => { setChip('all') }, [type])
+  // #185: "See estimates" on the saved-estimate message lands here, on the Estimates chip.
+  useArrivalRequest('sales', 'show-estimates', () => setChip('est'))
 
   /* Drives the badge on the tune button and the chip row below it.
      Sorting counts only when it is NOT the default (newest first): a badge
@@ -474,7 +477,8 @@ export function Ledger({ type }: { type: LedgerType }) {
           label: t(isSale ? 'bills.total_sales' : 'bills.total_purchases'),
           value: billTotals ? formatINR(billTotals.total) : '…',
           sub: billTotals
-            ? [t(billTotals.bills === 1 ? 'ins.bill_1' : 'ins.bills_n').replace('{n}', String(billTotals.bills)),
+            ? [dateRange ? getPresetLabel(datePreset) : t('bills.all_time'),
+                t(billTotals.bills === 1 ? 'ins.bill_1' : 'ins.bills_n').replace('{n}', String(billTotals.bills)),
                 isSale && showsGst ? t('dash.incl_gst') : null,
                 isSale && billTotals.profit !== null ? t('bills.profit_amt').replace('{amount}', formatINR(billTotals.profit)) : null].filter(Boolean).join(' · ')
             : undefined,
