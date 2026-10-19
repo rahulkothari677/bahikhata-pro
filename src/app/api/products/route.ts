@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withStockView } from '@/lib/product-stock'
 import { suggestGstTreatment } from '@/lib/gst-treatment'
 import { defaultTracksInventory, tracksStock } from '@/lib/inventory-tracking'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
@@ -41,39 +42,12 @@ export async function GET() {
       take: 5000,
     }))
 
-    const productsWithStock = products.map(p => {
-      /*
-       * A service has no stock, so every stock-derived flag must be OFF.
-       *
-       * Derived HERE rather than in each screen on purpose. currentStock for a
-       * service is a permanent 0, and 0 <= lowStockThreshold is true — so
-       * without this, the moment a salon adds "Haircut" it is reported as low
-       * stock forever, and the dashboard, the low-stock filter, SmartInsights,
-       * the notification bell and the CSV export ALL inherit that from these
-       * three fields. One correction at the source fixes every one of them,
-       * and no future screen can miss it.
-       *
-       * stockValue is 0 rather than absent: a service genuinely contributes
-       * nothing to what the shop's stock is worth, and the totals that sum
-       * this field must keep summing a number.
-       */
-      const counts = tracksStock(p)
-      const base: any = {
-        ...p,
-        currentStock: p.currentStock,
-        stockValue: counts ? roundMoney(Math.max(0, p.currentStock) * p.purchasePrice) : 0,
-        isLowStock: counts && p.currentStock <= p.lowStockThreshold,
-        isOversold: counts && p.currentStock < 0,
-      }
-      // 🔒 R15 v2 (Verification Ledger): Strip purchasePrice + stockValue for
-      // staff+hideProfit. purchasePrice is the cost price — combined with
-      // salePrice (which staff need for billing), it reveals the margin.
-      if (hideProfit) {
-        base.purchasePrice = undefined
-        base.stockValue = undefined
-      }
-      return base
-    })
+    /*
+     * Services carry no stock flags and staff who may not see profit get no
+     * cost: one derivation, lib/product-stock.ts, shared with the Items list
+     * (Phase 5e-2). The reasons are written there.
+     */
+    const productsWithStock = products.map((p) => withStockView(p, hideProfit))
 
     // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 60, swr: 300 }).
     // Money-bearing endpoint — stock counts + sale prices must always be fresh.

@@ -1,18 +1,15 @@
 'use client'
 
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-product-by-code'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSetting } from '@/hooks/use-setting'
-import { unitProfit, stockPotentialProfit, purchaseRateFromCost } from '@/lib/unit-profit'
+import { unitProfit, purchaseRateFromCost } from '@/lib/unit-profit'
 import { gstStatus, chargesGstOnSales, claimsInputCredit } from '@/lib/shop-tax'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { useNewEntryRequest } from '@/hooks/use-new-entry-request'
@@ -22,11 +19,13 @@ import { isService } from '@/lib/inventory-tracking'
 import { ProductDialog } from './ProductDialog'
 import { ExemptReclassifyReview } from './ExemptReclassifyReview'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
+import { ChipRow } from '@/components/common/ChipRow'
+import { ITEM_SORTS, NO_CATEGORY, type ItemChip, type ItemSort } from '@/lib/items-list'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { EmptyState } from '@/components/common/EmptyState'
 import { WakingUpState } from '@/components/common/WakingUpState'
 import {
-  Plus, Search, Package, AlertTriangle, Edit2, TrendingUp, IndianRupee,
-  ChevronRight, Folder, FolderOpen, LayoutGrid, List, X, ScanLine,
+  Search, Package, AlertTriangle, Edit2, FolderOpen, X, ScanLine,
   AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
@@ -50,29 +49,48 @@ export function Inventory() {
   // keeps the whole price — same rule as line-items (lib/shop-tax.ts).
   const profitOpts = { chargesGst: chargesGstOnSales(gstStatus(setting)) }
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all')
+  // Phase 5e-2: the group and the order are asked of the server, over every item.
+  const [chip, setChip] = useState<ItemChip>('all')
+  const [sort, setSort] = useState<ItemSort>('sales')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(id)
+  }, [search])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [subCategory, setSubCategory] = useState<string | null>(null)
   const [barcodeOpen, setBarcodeOpen] = useState(false)
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['products', refreshKey],
-    queryFn: async () => {
-      const r = await offlineFetch('/api/products')
+  /*
+   * Phase 5e-2: the list comes from /api/products/list — 60 items at a time,
+   * with every chip's count, the categories and the totals worked out over ALL
+   * items on the server (lib/items-list.ts). It loaded up to 5,000 products and
+   * worked these out here.
+   */
+  const { data: pages, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ['items', chip, sort, debouncedSearch, inventoryCategory, refreshKey],
+    queryFn: async ({ pageParam }) => {
+      const qp = new URLSearchParams({ chip, sort, offset: String(pageParam) })
+      if (debouncedSearch) qp.set('search', debouncedSearch)
+      if (inventoryCategory) qp.set('category', inventoryCategory)
+      const r = await offlineFetch(`/api/products/list?${qp}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     },
+    initialPageParam: 0,
+    getNextPageParam: (last: any) => (last.hasMore ? last.offset + last.rows.length : undefined),
+    placeholderData: (prev) => prev,
     retry: (count, err) => {
       if (err instanceof OfflineError) return false
       if (err instanceof TypeError) return false
       return count < 2
     },
-    // 🔒 FIX M12: Keep previous data while refetching.
-    placeholderData: keepPreviousData,
   })
-
-  const products: any[] = data?.products || []
+  const data = pages?.pages?.[0]
+  const products: any[] = pages?.pages?.flatMap((pg: any) => pg.rows) ?? []
+  const counts: Record<ItemChip, number> | undefined = data?.counts
+  const totals: { items: number; stockValue: number | null; out: number; low: number; potentialProfit: number | null } | undefined = data?.totals
 
   // Phase 5a-3: "Add Product" / + sheet "New item" from another screen.
   useNewEntryRequest('inventory', () => { setEditingProduct(null); setDialogOpen(true) })
@@ -91,170 +109,70 @@ export function Inventory() {
     }
   }, [triggerNewEntry, triggerNewEntryView])
 
-  // Build category tree
-  const categoryTree = new Map<string, Set<string>>()
-  products.forEach(p => {
-    const cat = p.category || 'Uncategorized'
-    if (!categoryTree.has(cat)) categoryTree.set(cat, new Set())
-    // Sub-category: derive from name pattern or use empty
-    // For now, we use category as primary grouping
-  })
-
-  const categories = Array.from(categoryTree.keys()).sort()
-  const categoryCounts = new Map<string, number>()
-  const categoryValues = new Map<string, number>()
-  products.forEach(p => {
-    const cat = p.category || 'Uncategorized'
-    categoryCounts.set(cat, (categoryCounts.get(cat) || 0) + 1)
-    categoryValues.set(cat, (categoryValues.get(cat) || 0) + (p.stockValue || 0))
-  })
-
-  const filtered = products.filter(p => {
-    if (inventoryCategory && (p.category || 'Uncategorized') !== inventoryCategory) return false
-    if (search) {
-      const q = search.toLowerCase()
-      // Identifiers (name/sku/barcode/hsn) are shared with every other
-      // product search; category is Inventory's alone, so it stays here.
-      const matchSearch = matchesProductSearch(p, search) || p.category?.toLowerCase().includes(q)
-      if (!matchSearch) return false
-    }
-    if (filter === 'low' && !p.isLowStock) return false
-    // "Out of stock" means a good you have run out of. A service is never in
-    // that list — its currentStock is a permanent 0 that means nothing.
-    if (filter === 'out' && (p.currentStock > 0 || isService(p))) return false
-    return true
-  })
-
-  const lowStockCount = products.filter(p => p.isLowStock).length
-  const outOfStockCount = products.filter(p => !isService(p) && p.currentStock <= 0).length
-  const totalStockValue = products.reduce((s, p) => s + (p.stockValue || 0), 0)
-  // 🔒 R15-4 (Round 15): Clamp negative stock at 0 for profit calculation.
-  // Was: `(p.currentStock || 0) * margin` — an oversold product (stock -50,
-  // margin ₹10) contributed -₹500, dragging the total down. The dashboard
-  // already clamps at 0 for stock value; Inventory should match.
-  //
-  // #134: per product on the price BEFORE GST (stockPotentialProfit) — the
-  // GST inside an MRP price was being counted as profit.
-  const totalPotentialProfit = products.reduce((s, p) => s + stockPotentialProfit(p, profitOpts), 0)
+  // The shop's categories, counts and figures — from the server, over every item.
+  // A value is null for staff who may not see profit (stock value is at cost): shown as nothing, never ₹0.
+  const serverCats: { name: string; count: number; value: number | null }[] = data?.categories ?? []
+  const categories = serverCats.map((c) => c.name)
+  const categoryCounts = new Map(serverCats.map((c) => [c.name, c.count] as const))
+  const categoryValues = new Map(serverCats.map((c) => [c.name, c.value] as const))
+  const filtered = products
+  const lowStockCount = totals?.low ?? 0
+  const outOfStockCount = totals?.out ?? 0
+  const totalStockValue = totals?.stockValue ?? null
+  const totalPotentialProfit = totals?.potentialProfit ?? null
+  const itemCount = totals?.items ?? 0
+  const n = (one: string, many: string, k: number) => t(k === 1 ? one : many).replace('{n}', String(k))
+  const catLabel = (c: string) => (c === NO_CATEGORY ? t('items.no_category') : c)
+  // A phone always gets the compact rows; the table is a wide-screen choice.
+  const isMobile = useIsMobile()
+  const viewMode = isMobile ? 'grid' : inventoryViewMode
 
   return (
     <div className="space-y-4">
-      {/* Stats — show skeletons during loading */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Phase 5e-2 (ledger model v4): what the stock is worth, over every item — then the groups. */}
+      <section className="rounded-2xl bg-card border border-border/60 shadow-card p-4">
         {isLoading ? (
-          [...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)
-        ) : (
+          <Skeleton className="h-16 rounded-xl" />
+        ) : totalStockValue !== null ? (
           <>
-        <Card className="shadow-card border-border/60 border-t-4 border-t-amber-500">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Package className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <p className="text-xs text-muted-foreground font-medium">{t('stat.total_products')}</p>
-            </div>
-            <p className="text-xl font-bold">{products.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-border/60 border-t-4 border-t-emerald-500">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <IndianRupee className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-xs text-muted-foreground font-medium">{t('dash.stock_value')}</p>
-            </div>
-            <p className="text-xl font-bold">{formatINR(totalStockValue)}</p>
-          </CardContent>
-        </Card>
-        {/* 🔒 R15-1 (Round 15): Gate the Potential Profit card behind !hideProfit.
-            Staff with hideProfit enabled must not see the shop's total margin. */}
-        {!hideProfit && (
-          <Card className="shadow-card border-border/60 border-t-4 border-t-violet-500">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-4 h-4 text-violet-600" />
-                <p className="text-xs text-muted-foreground font-medium">{t('stat.potential_profit')}</p>
-              </div>
-              {/* Same rule as the per-product figure: a negative total is a
-                  LOSS and must not be printed in the same neutral weight as a
-                  gain. A shop whose stock is worth less than it paid needs
-                  that to be the loudest number on the screen. */}
-              <p className={cn('text-xl font-bold', totalPotentialProfit < 0 && 'text-rose-600')}>
-                {formatINR(totalPotentialProfit)}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-        <Card className="shadow-card border-border/60 border-t-4 border-t-rose-500">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <AlertTriangle className="w-4 h-4 text-rose-600" />
-              <p className="text-xs text-muted-foreground font-medium">{t('stat.low_out_stock')}</p>
-            </div>
-            <p className="text-xl font-bold">{lowStockCount} <span className="text-sm text-muted-foreground">/ {outOfStockCount}</span></p>
-          </CardContent>
-        </Card>
+            <p className="text-xs text-muted-foreground">{t('dash.stock_value')}</p>
+            <p className="text-2xl font-bold tabular-nums">{formatINR(totalStockValue)}</p>
+            <p className="text-xs text-muted-foreground">
+              {n('items.count_1', 'items.count_n', itemCount)}
+              {/* 🔒 R15-1: never for staff who may not see profit (the server sends null). A loss is said as a loss. */}
+              {totalPotentialProfit !== null && (
+                <> · <span className={cn(totalPotentialProfit < 0 && 'text-bad font-semibold')}>
+                  {t(totalPotentialProfit < 0 ? 'items.could_lose' : 'items.could_earn').replace('{v}', formatINR(Math.abs(totalPotentialProfit)))}
+                </span></>
+              )}
+            </p>
           </>
+        ) : (
+          // Staff who may not see profit: stock value is at cost, so the count only — never a ₹0.
+          <p className="text-2xl font-bold tabular-nums">{n('items.count_1', 'items.count_n', itemCount)}</p>
         )}
-      </div>
+      </section>
 
       {/*
         * #94 — items classified under the cancelled exemption notification.
-        * Above the catalogue because it is a thing to DO, not a thing to
-        * browse; below the summary cards because it is not an emergency. The
-        * component renders nothing when there is nothing to review, so a
-        * healthy shop never sees it.
+        * A thing to DO, so above the list; renders nothing when there is
+        * nothing to review. Phase 1c-2: a shop that is not registered files
+        * no GST, so its items need no GST-rules review.
         */}
-      {/* Phase 1c-2: a shop that is not registered files no GST, so its
-          items need no GST-rules review. */}
       {gstStatus(setting) !== 'unregistered' && <ExemptReclassifyReview />}
 
-      {/* Category navigation */}
-      <Card className="shadow-card border-border/60">
-        <CardContent className="p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Folder className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <p className="text-xs font-semibold text-muted-foreground">{t('inv.categories')}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setInventoryCategory(null)}
-              className={cn(
-                'hit-48 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border',
-                !inventoryCategory
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background border-border hover:bg-muted'
-              )}
-            >
-              All Products
-              <span className={cn('text-xs', !inventoryCategory ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
-                {products.length}
-              </span>
-            </button>
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setInventoryCategory(inventoryCategory === cat ? null : cat)}
-                className={cn(
-                  'hit-48 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border',
-                  inventoryCategory === cat
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-border hover:bg-muted'
-                )}
-              >
-                {inventoryCategory === cat ? <FolderOpen className="w-3 h-3" /> : <Folder className="w-3 h-3" />}
-                {cat}
-                <span className={cn('text-xs', inventoryCategory === cat ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
-                  {categoryCounts.get(cat) || 0}
-                </span>
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <ChipRow
+        ariaLabel={t('items.show')}
+        value={chip}
+        onChange={setChip}
+        chips={(['all', 'low', 'out', 'dead'] as ItemChip[]).map((c) => ({ value: c, label: t(`items.chip.${c}`), count: counts?.[c] }))}
+      />
 
-      {/* Toolbar - removed duplicate Add Product button (it's in header now) */}
+      {/* Search, category, order. A category is a picker, not a wall of buttons: a shop with 80 categories still fits. */}
       <Card className="shadow-card border-border/60">
-        <CardContent className="p-3 lg:p-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-            <div className="relative flex-1 w-full">
+        <CardContent className="p-3 lg:p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+            <div className="relative flex-1 w-full min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder={t('inv.search_placeholder')}
@@ -273,29 +191,40 @@ export function Inventory() {
                 </button>
               )}
             </div>
-            <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('inv.all_products')}</SelectItem>
-                <SelectItem value="low">{t('inv.low_stock')}</SelectItem>
-                <SelectItem value="out">{t('inv.out_stock')}</SelectItem>
-              </SelectContent>
-            </Select>
-            <ViewModeToggle mode={inventoryViewMode} onChange={setInventoryViewMode} />
+            <div className="flex gap-3 items-center">
+              <select
+                aria-label={t('items.category')}
+                value={inventoryCategory ?? ''}
+                onChange={(e) => setInventoryCategory(e.target.value || null)}
+                className="min-h-12 min-w-0 flex-1 sm:flex-none sm:w-44 rounded-xl border border-border bg-card px-3 text-sm text-foreground"
+              >
+                <option value="">{t('items.all_categories')} · {itemCount}</option>
+                {serverCats.map((c) => <option key={c.name} value={c.name}>{catLabel(c.name)} · {c.count}</option>)}
+                {/* A category remembered from before that no longer has items still shows as chosen. */}
+                {inventoryCategory && !categoryCounts.has(inventoryCategory) && <option value={inventoryCategory}>{catLabel(inventoryCategory)} · 0</option>}
+              </select>
+              <select
+                aria-label={t('items.sort')}
+                value={sort}
+                onChange={(e) => setSort(e.target.value as ItemSort)}
+                className="min-h-12 min-w-0 flex-1 sm:flex-none sm:w-44 rounded-xl border border-border bg-card px-3 text-sm text-foreground"
+              >
+                {ITEM_SORTS.filter((k) => !(hideProfit && k === 'value')).map((k) => <option key={k} value={k}>{t(`items.sort.${k}`)}</option>)}
+              </select>
+              {!isMobile && <ViewModeToggle mode={inventoryViewMode} onChange={setInventoryViewMode} />}
+            </div>
           </div>
 
-          {/* Breadcrumb for active category */}
+          {/* The chosen category: its count and what its stock is worth (never for staff who may not see it). */}
           {inventoryCategory && (
-            <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
-              <button onClick={() => setInventoryCategory(null)} className="hover:text-foreground">
-                All Products
-              </button>
-              <ChevronRight className="w-3 h-3" />
-              <span className="text-foreground font-medium">{inventoryCategory}</span>
-              <span>• {categoryCounts.get(inventoryCategory)} products • {formatINR(categoryValues.get(inventoryCategory) || 0)} value</span>
-              <button onClick={() => setInventoryCategory(null)} aria-label="Clear category filter" className="w-12 h-12 -my-3 -mr-3 inline-flex items-center justify-center hover:text-foreground">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <FolderOpen className="w-3.5 h-3.5 shrink-0" aria-hidden />
+              <span className="text-foreground font-medium truncate">{catLabel(inventoryCategory)}</span>
+              <span className="shrink-0">
+                · {n('items.count_1', 'items.count_n', categoryCounts.get(inventoryCategory) ?? 0)}
+                {categoryValues.get(inventoryCategory) != null && <> · {t('items.worth').replace('{v}', formatINR(categoryValues.get(inventoryCategory) ?? 0))}</>}
+              </span>
+              <button onClick={() => setInventoryCategory(null)} aria-label={t('items.clear_category')} className="w-12 h-12 -my-3 ml-auto -mr-3 inline-flex items-center justify-center hover:text-foreground">
                 <X className="w-4 h-4" aria-hidden />
               </button>
             </div>
@@ -335,11 +264,11 @@ export function Inventory() {
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60">
           <CardContent className="p-0">
-            {products.length === 0 ? (
+            {itemCount === 0 && !debouncedSearch && !inventoryCategory ? (
               <EmptyState
                 icon={Package}
-                title="No products yet"
-                description="Add your first product to start tracking inventory, stock levels, and profit margins. Use barcode or manual entry — your choice."
+                title={t('items.none')}
+                description={t('items.none_hint')}
                 action={{
                   label: 'Add Product',
                   onClick: () => { setEditingProduct(null); setDialogOpen(true) },
@@ -348,17 +277,17 @@ export function Inventory() {
             ) : (
               <EmptyState
                 icon={Package}
-                title="No products match your search"
-                description="Try a different search term, category, or clear the filters to see all products."
+                title={t('items.none_match')}
+                description={t('items.none_match_hint')}
                 size="compact"
               />
             )}
           </CardContent>
         </Card>
-      ) : inventoryViewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+      ) : viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {filtered.map((p) => (
-            <ProductGridCard key={p.id} product={p} onEdit={() => { setEditingProduct(p); setDialogOpen(true) }} />
+            <ProductRow key={p.id} product={p} sort={sort} onEdit={() => { setEditingProduct(p); setDialogOpen(true) }} />
           ))}
         </div>
       ) : (
@@ -368,10 +297,11 @@ export function Inventory() {
               <thead className="bg-muted/50">
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="py-3 px-4 font-medium">Product</th>
-                  <th className="py-3 px-2 font-medium text-right">{t('inv.buy_price')}</th>
+                  {/* Cost and stock value at cost would reveal the margin: hidden like profit (they showed ₹0). */}
+                  {!hideProfit && <th className="py-3 px-2 font-medium text-right">{t('inv.buy_price')}</th>}
                   <th className="py-3 px-2 font-medium text-right">{t('inv.sale_price')}</th>
                   <th className="py-3 px-2 font-medium text-right">Stock</th>
-                  <th className="py-3 px-2 font-medium text-right">Value</th>
+                  {!hideProfit && <th className="py-3 px-2 font-medium text-right">Value</th>}
                   {/* 🔒 R15-2 (Round 15): Hide Profit/unit column for hideProfit. */}
                   {!hideProfit && <th className="py-3 px-2 font-medium text-right">Profit/unit</th>}
                   <th className="py-3 px-2 font-medium text-center">Status</th>
@@ -391,7 +321,7 @@ export function Inventory() {
                           <Badge variant="outline" className="text-xs py-0">GST {p.gstRate}%</Badge>
                         </div>
                       </td>
-                      <td className="py-3 px-2 text-right">{formatINR(p.purchasePrice)}</td>
+                      {!hideProfit && <td className="py-3 px-2 text-right">{formatINR(p.purchasePrice)}</td>}
                       <td className="py-3 px-2 text-right">{formatINR(p.salePrice)}</td>
                       {/* A service has no stock number. Printing "0" in red
                           would be a fabricated fact — the same rule the money
@@ -405,7 +335,7 @@ export function Inventory() {
                           ? <span title="Service — no stock is counted">—</span>
                           : <>{p.currentStock} <span className="text-xs text-muted-foreground">{p.unit}</span></>}
                       </td>
-                      <td className="py-3 px-2 text-right">{isService(p) ? '—' : formatINR(p.stockValue)}</td>
+                      {!hideProfit && <td className="py-3 px-2 text-right">{isService(p) ? '—' : formatINR(p.stockValue)}</td>}
                       {/* 🔒 R15-2 (Round 15): Hide profit cell for hideProfit. */}
                       {!hideProfit && (
                         <td className={cn('py-3 px-2 text-right font-medium',
@@ -452,6 +382,17 @@ export function Inventory() {
         onSuccess={() => triggerRefresh()}
       />
 
+      {hasNextPage && (
+        <button
+          type="button"
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+          className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted disabled:opacity-60"
+        >
+          {t('khata.more').replace('{n}', String(Math.min(60, (data?.matched ?? 0) - products.length))).replace('{m}', String(data?.matched ?? 0))}
+        </button>
+      )}
+
       {/* Barcode scanner — scan to search products by SKU/barcode */}
       {barcodeOpen && (
         <BarcodeScanner
@@ -460,12 +401,11 @@ export function Inventory() {
             setSearch(code)
             setBarcodeOpen(false)
             // Check if any product matches
-            const match = findProductByScannedCode(products as any[], code)
-            if (match) {
-              sonnerToast.success(`Found: ${match.name}`)
-            } else {
-              sonnerToast.info(`No product matches barcode ${code}. You can add it as a new product.`)
-            }
+            // Ask the server (every item, not just the rows loaded): the same search rule, barcode first.
+            offlineFetch(`/api/products/list?${new URLSearchParams({ search: code })}`).then((r) => r.json()).then((j) => {
+              if (j.matched > 0) sonnerToast.success(`Found: ${j.rows[0].name}`)
+              else sonnerToast.info(`No product matches barcode ${code}. You can add it as a new product.`)
+            }).catch(() => {})
           }}
           onClose={() => setBarcodeOpen(false)}
         />
@@ -474,24 +414,27 @@ export function Inventory() {
   )
 }
 
-function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => void }) {
+/**
+ * One item, one compact row (#200, Phase 5e-2): name and stock on top, price
+ * and this month's sales below, with profit per unit — or the stock value when
+ * the list is ordered by it, so the figure the list is sorted by is on the row.
+ * The tall card it replaces showed three items on a phone screen.
+ */
+function ProductRow({ product: p, sort, onEdit }: { product: any; sort: ItemSort; onEdit: () => void }) {
   const { setView, setPreviousView } = useAppStore()
-  // 🔒 R15-3 (Round 15): Read hideProfit inside the grid card (it's a separate
-  // component, not a child of Inventory's render scope). Was: profit shown
-  // unconditionally on every product card → staff-with-hideProfit saw margins.
+  const { t } = useTranslation()
+  // 🔒 R15-3 (Round 15): profit never shows for staff who may not see it.
   const { hideProfit, setting } = useSetting()
   // #134: on the price BEFORE GST, same rule as the table and the bill screen.
   const { profit, margin } = unitProfit(p, { chargesGst: chargesGstOnSales(gstStatus(setting)) })
-  const stockPct = p.lowStockThreshold > 0
-    ? Math.min(100, Math.max(0, (p.currentStock / (p.lowStockThreshold * 2)) * 100))
-    : p.currentStock > 0 ? 100 : 0
+  // A service has no stock: no number, no low/out — a "0" would be a fabricated fact.
+  const state = isService(p) ? 'service' : p.currentStock < 0 ? 'oversold' : p.currentStock <= 0 ? 'out' : p.isLowStock ? 'low' : 'ok'
+  const tone = { service: 'text-muted-foreground', oversold: 'text-bad', out: 'text-bad', low: 'text-check', ok: 'text-foreground' }[state]
+  const badge = { service: 'bg-muted text-muted-foreground', oversold: 'bg-bad-soft text-bad', out: 'bg-bad-soft text-bad', low: 'bg-check-soft text-check', ok: 'bg-primary/10 text-primary' }[state]
 
-  // 🔒 DI-2 (auditor spec): tap the OVERSOLD badge → opens New Purchase
-  // pre-filled with this product + the shortfall quantity. Reduces the
-  // friction of fixing negative stock (was: just a label, user had to
-  // navigate manually).
-  const handleOversoldTap = (e: React.MouseEvent) => {
-    e.stopPropagation()
+  // 🔒 DI-2 (auditor spec): oversold → New Purchase pre-filled with this
+  // product and the shortfall quantity.
+  const handleOversoldTap = () => {
     const shortfall = Math.abs(p.currentStock)
     ;(window as any).__ledgerPreset = {
       type: 'purchase',
@@ -514,119 +457,45 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
     setView('new-purchase')
   }
 
+  const right = sort === 'value' && p.stockValue !== undefined && state !== 'service'
+    ? <span className="tabular-nums shrink-0">{t('items.worth').replace('{v}', formatINR(p.stockValue))}</span>
+    : !hideProfit
+      ? <span className={cn('tabular-nums shrink-0 font-semibold', profit < 0 ? 'text-bad' : 'text-good')}>{profit >= 0 ? '+' : ''}{formatINR(profit)} · {margin.toFixed(0)}%</span>
+      : null
+
   return (
-    <Card className="shadow-card border-border/60 hover:shadow-md transition group cursor-pointer" onClick={onEdit}>
-      <CardContent className="p-3">
-        {/* Top row: Product icon + name + edit */}
-        <div className="flex items-start gap-2.5 mb-3">
-          {/* Product icon — colored circle with first letter */}
-          <div className={cn(
-            'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm text-white',
-            isService(p) ? 'bg-gradient-to-br from-violet-500 to-purple-600' :
-            p.currentStock <= 0 ? 'bg-gradient-to-br from-rose-500 to-red-600' :
-            p.isLowStock ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
-            'bg-gradient-to-br from-blue-500 to-indigo-600'
-          )}>
-            {p.name?.charAt(0).toUpperCase() || <Package className="w-5 h-5" />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-sm truncate">{p.name}</h3>
-            <div className="flex flex-wrap items-center gap-1 mt-0.5">
-              {p.category && <Badge variant="secondary" className="text-xs py-0">{p.category}</Badge>}
-              {p.sku && <span className="text-xs text-muted-foreground font-mono">{p.sku}</span>}
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="iconTouch"
-            className="lg:size-8 lg:p-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 flex-shrink-0"
-            onClick={(e) => { e.stopPropagation(); onEdit() }}
-            aria-label="Edit product"
-          >
-            <Edit2 className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
-          </Button>
-        </div>
-
-        {/* Price row — sale price prominent, buy price secondary.
-            🔒 R15-3 (Round 15): Profit block hidden for hideProfit. */}
-        <div className="flex items-baseline justify-between mb-2">
-          <div>
-            <p className="text-xs text-muted-foreground">Sale Price</p>
-            <p className="text-lg font-bold tabular-nums">{formatINR(p.salePrice)}</p>
-          </div>
-          {!hideProfit && (
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">{profit < 0 ? 'Loss' : 'Profit'}</p>
-              {/* The "+" used to be hardcoded, so a product sold below cost
-                  read "+-₹180" in green — a loss painted as a gain, with a
-                  stray double sign. The sign, the colour and the word now all
-                  follow the number. */}
-              <p className={cn('text-sm font-semibold tabular-nums',
-                profit < 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400')}>
-                {profit >= 0 ? '+' : ''}{formatINR(profit)}
-                <span className="text-xs text-muted-foreground ml-0.5">({margin.toFixed(0)}%)</span>
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Stock indicator — visual bar.
-            A service gets a plain label instead. An empty bar and a bold red
-            "0 pcs" would be a statement about a quantity that does not exist,
-            and it is the exact thing that made services look broken. */}
-        {isService(p) ? (
-          <div className="mt-2 pt-2 border-t border-border flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Type</span>
-            <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">Service — no stock</span>
-          </div>
-        ) : (
-          <div className="mt-2 pt-2 border-t border-border">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-muted-foreground">Stock</span>
-              <span className={cn(
-                'text-xs font-bold tabular-nums',
-                p.currentStock <= 0 ? 'text-rose-600' :
-                p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
-              )}>
-                {p.currentStock} {p.unit}
-              </span>
-            </div>
-            {/* Stock level bar — visual indicator */}
-            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all',
-                  p.currentStock <= 0 ? 'bg-rose-500' :
-                  p.isLowStock ? 'bg-amber-500' : 'bg-emerald-500'
-                )}
-                style={{ width: `${stockPct}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Low stock alert / Oversold alert — neither can apply to a service */}
-        {isService(p) ? null : p.currentStock < 0 ? (
-          // 🔒 V11: Distinct OVERSOLD badge for negative stock (separate from "Out").
-          // 🔒 DI-2 (auditor spec): badge is now a BUTTON — tap to open New
-          // Purchase pre-filled with this product + the shortfall quantity.
-          // Was: a non-interactive <div> that just displayed the warning.
-          <button
-            type="button"
-            onClick={handleOversoldTap}
-            className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs text-white bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 active:scale-[0.98] transition rounded-md px-2 py-1.5 font-semibold min-h-12"
-            aria-label={`Record a purchase to fix oversold ${p.name}`}
-          >
-            <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate">OVERSOLD — tap to record purchase (+{Math.abs(p.currentStock)} {p.unit || 'pcs'})</span>
-          </button>
-        ) : p.isLowStock ? (
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded-md px-2 py-1">
-            <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate">{p.currentStock <= 0 ? 'Out of stock!' : `Low stock (threshold: ${p.lowStockThreshold} ${p.unit})`}</span>
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
+    <div className="rounded-xl bg-card border border-border/60 shadow-card">
+      <button type="button" onClick={onEdit} className="w-full min-h-16 px-3 py-2.5 flex items-center gap-3 text-left rounded-xl hover:bg-muted/40 transition-colors">
+        <span className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-bold text-sm', badge)} aria-hidden>
+          {p.name?.charAt(0).toUpperCase() || <Package className="w-5 h-5" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="font-semibold text-sm truncate">{p.name}</span>
+            <span className={cn('text-sm font-bold tabular-nums shrink-0', tone)}>
+              {state === 'service' ? t('items.service') : <>{p.currentStock} {p.unit}{(state === 'low' || state === 'out') && <> · {t(`items.${state}`)}</>}</>}
+            </span>
+          </span>
+          <span className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground mt-0.5">
+            <span className="truncate tabular-nums">
+              {formatINR(p.salePrice)}
+              {p.qtyNow > 0 && <> · {t('items.sold_month').replace('{n}', `${p.qtyNow} ${p.unit}`)}</>}
+            </span>
+            {right}
+          </span>
+        </span>
+      </button>
+      {state === 'oversold' && (
+        <button
+          type="button"
+          onClick={handleOversoldTap}
+          className="w-full min-h-12 border-t border-border/60 flex items-center justify-center gap-1.5 text-xs font-semibold text-bad hover:bg-bad-soft rounded-b-xl"
+          aria-label={`Record a purchase to fix oversold ${p.name}`}
+        >
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{t('items.oversold').replace('{n}', `${Math.abs(p.currentStock)} ${p.unit || 'pcs'}`)}</span>
+        </button>
+      )}
+    </div>
   )
 }

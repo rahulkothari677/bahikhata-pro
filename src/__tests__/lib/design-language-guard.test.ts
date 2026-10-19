@@ -40,7 +40,7 @@ const SRC = path.resolve(process.cwd(), 'src')
 const CSS = fs.readFileSync(path.join(SRC, 'app/globals.css'), 'utf8')
 
 /** Ceiling for raw meaning-colour shades in src/. Lower it; never raise it. */
-const RAW_COLOUR_CEILING = 2523  // 5c-4: Smart Insights + Business Analytics retired, Inventory Aging on the roles (was 2647)
+const RAW_COLOUR_CEILING = 2449  // 5e-2: Items screen rebuilt on the roles — compact rows, one summary card (was 2523)
 
 function sourceFiles(): { rel: string; code: string }[] {
   const out: { rel: string; code: string }[] = []

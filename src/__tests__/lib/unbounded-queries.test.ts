@@ -38,6 +38,10 @@ const ACCEPTED: Record<string, string> = {
     + 'and the chip counts lie). Narrow select (no relations); getReceivablePayable already returns one row per '
     + 'party for the whole shop; only 60 rows go back to the screen. Parties per shop are bounded by the business '
     + '(thousands), not by time like transactions. Replaces the old 5,000-row fetch the screen summed itself.',
+  'app/api/products/list/route.ts:product':
+    'Items (Phase 5e-2) counts every chip, totals the stock value and lists the categories over ALL items — a cap '
+    + 'would make those lie. One row per product (bounded by the catalogue, not by time); only 60 go back to the '
+    + 'screen. Replaces the 5,000-row fetch the screen summed itself.',
   // — Bounded by an explicit list of values, not by a row cap ——————————
   'app/api/gstr-1/route.ts:transaction':
     'Bounded by `invoiceNo: { in: nums }` — the invoice numbers already filed. '
