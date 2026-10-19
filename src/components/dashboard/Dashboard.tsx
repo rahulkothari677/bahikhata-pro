@@ -59,6 +59,7 @@ import { ProofSheet, proofCountLine, type ProofSpec, type ProofAction } from '@/
 import { TodayCard, QuickTiles, CollectPayCard } from '@/components/dashboard/TodayCard'
 import { useDaySummary } from '@/hooks/use-day-summary'
 import { GoalCard } from '@/components/dashboard/GoalCard'
+import { CustomiseHome, useHomeSections } from '@/components/dashboard/CustomiseHome'
 import { useArrivalRequest } from '@/hooks/use-new-entry-request'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
@@ -81,6 +82,8 @@ export function Dashboard() {
   const [showDayEnd, setShowDayEnd] = useState(false)
   // Phase 5b-1: the "how is this worked out?" sheet for a tapped number.
   const [proof, setProof] = useState<ProofSpec | null>(null)
+  // Phase 5b-6: which Home sections show (this device).
+  const home = useHomeSections()
   // Phase 5b-2: "Close day" from More, search or a Home tile opens the dialog
   // even when Home was not open yet.
   useArrivalRequest('dashboard', 'day-end', () => setShowDayEnd(true))
@@ -607,22 +610,23 @@ export function Dashboard() {
         onScan={() => setView('scanner')}
         onProof={setProof}
       />
-      <QuickTiles gstStatus={gstStatus(setting)} />
-      <CollectPayCard kpis={kpis} />
+      {home.shown('tiles') && <QuickTiles gstStatus={gstStatus(setting)} />}
+      {home.shown('collect') && <CollectPayCard kpis={kpis} />}
       {/* Phase 5b-4: this month's goal (Business Goals), whatever the period chip shows. */}
-      <GoalCard
+      {home.shown('goal') && <GoalCard
         monthRevenue={kpis.monthRevenue ?? 0}
         monthExpenses={kpis.monthExpenses ?? 0}
         revenueTarget={revenueTarget}
         expenseBudget={expenseBudget}
         onProof={setProof}
-      />
+      />}
 
       {/* Phase 5b-3 (ledger model §7): the Business overview — five figures under
           one period chip, each opening how it is worked out. Gone: the two Today
           cards that ignored the chip (the Today card above has them) and the thin
           strip (approved choice 4) — stock value is a card here, the GST figure is
           in the GST summary below. Sticky on desktop so the chip stays in reach. */}
+      {home.shown('overview') && (<>
       <div className="flex items-center justify-between gap-3 flex-wrap lg:sticky lg:top-3 lg:z-20 lg:bg-background/80 lg:backdrop-blur-md lg:py-2 lg:-mx-2 lg:px-2 lg:rounded-lg">
         <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
         <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} />
@@ -682,6 +686,8 @@ export function Dashboard() {
         </div>
       </div>
 
+      </>)}
+
       {/* 🔒 AUDIT V25 FIX §3 row 9 (Batch 3): Removed duplicate Revenue Target
           Progress Card (was lines 597-671). The "Business Goals" card at the
           bottom of the dashboard shows BOTH revenue target AND expense budget
@@ -704,8 +710,11 @@ export function Dashboard() {
         periodLabel={rangeLabel}
         t={t}
         onSeeAnalytics={() => setScrollTarget('business-analytics')}
+        showTrends={home.shown('trends')}
+        showTop={home.shown('top')}
       />
 
+      {home.shown('stock') && (<>
       {/* Category breakdown & low stock */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Category breakdown */}
@@ -787,6 +796,9 @@ export function Dashboard() {
         </Card>
       </div>
 
+      </>)}
+
+      {home.shown('recent') && (<>
       {/* Recent transactions & {t('dash.gst_summary')} summary */}
       <div className={cn('grid grid-cols-1 gap-4', showsGst && 'lg:grid-cols-2')}>
         {/* Recent transactions */}
@@ -922,6 +934,8 @@ export function Dashboard() {
         </Card>
         )}
       </div>
+
+      </>)}
 
       {/* Day-end summary card — shows after 6 PM with today's business summary */}
       {kpis && kpis.todayTxnCount > 0 && new Date().getHours() >= 18 && (
@@ -1060,7 +1074,7 @@ export function Dashboard() {
           🔒 AUDIT V25 BATCH 4b REVERT: Restored to standalone full-width card
           below Business Goals (was moved below GST summary in Batch 4 §4.2,
           but user feedback said the earlier version looked better). */}
-      {kpis && kpis.rangeTxnCount > 0 && <BusinessHealthScore kpis={kpis} />}
+      {home.shown('health') && kpis && kpis.rangeTxnCount > 0 && <BusinessHealthScore kpis={kpis} />}
 
       {/* 🔒 AUDIT V25 BATCH 4c (user request): Smart Insights + Business Analytics
           reverted to standalone full-width (was 2-col grid in Batch 4). User
@@ -1070,15 +1084,16 @@ export function Dashboard() {
 
       {/* {t('dash.smart_insights')} - AI-powered alerts */}
       {/* 🔒 AUDIT V25 FIX BUG-032 (Batch 6): id='smart-insights' for scroll-target deep-link. */}
-      <div id="smart-insights">
+      <div id="smart-insights" hidden={!home.shown('insights')}>
         {kpis && <SmartInsights />}
       </div>
 
       {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
       {/* id: Top lists' "More in Business Analytics" scrolls here (5b-5, until 5c). */}
-      {features?.businessAnalytics && <div id="business-analytics"><AnalyticsInsights /></div>}
+      {features?.businessAnalytics && home.shown('analytics') && <div id="business-analytics"><AnalyticsInsights /></div>}
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
+      <CustomiseHome home={home} />
       <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />
       <ProofSheet spec={proof} onClose={() => setProof(null)} actions={proofActions(proof)} showsGst={showsGst} />
     </div>

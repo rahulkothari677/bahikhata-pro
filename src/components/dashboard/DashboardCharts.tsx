@@ -39,6 +39,9 @@ export interface DashboardChartsProps {
   periodLabel: string
   t: (key: string) => string
   onSeeAnalytics: () => void
+  /** Customise Home (5b-6): either card can be switched off. */
+  showTrends?: boolean
+  showTop?: boolean
 }
 
 type TrendView = 'sales' | 'profit' | 'svp' | 'modes'
@@ -49,11 +52,11 @@ export function trendViews(hideProfit: boolean): TrendView[] {
   return hideProfit ? ['sales', 'svp', 'modes'] : ['sales', 'profit', 'svp', 'modes']
 }
 
-export function DashboardCharts({ salesTrend, kpis, hideProfit, topProducts, paymentModeSplit, periodLabel, t, onSeeAnalytics }: DashboardChartsProps) {
+export function DashboardCharts({ salesTrend, kpis, hideProfit, topProducts, paymentModeSplit, periodLabel, t, onSeeAnalytics, showTrends = true, showTop = true }: DashboardChartsProps) {
   return (
     <>
-      <TrendsCard salesTrend={salesTrend} kpis={kpis} hideProfit={hideProfit} paymentModeSplit={paymentModeSplit} periodLabel={periodLabel} t={t} />
-      <TopListsCard topProducts={topProducts} hideProfit={hideProfit} periodLabel={periodLabel} t={t} onSeeAnalytics={onSeeAnalytics} />
+      {showTrends && <TrendsCard salesTrend={salesTrend} kpis={kpis} hideProfit={hideProfit} paymentModeSplit={paymentModeSplit} periodLabel={periodLabel} t={t} />}
+      {showTop && <TopListsCard topProducts={topProducts} hideProfit={hideProfit} periodLabel={periodLabel} t={t} onSeeAnalytics={onSeeAnalytics} />}
     </>
   )
 }
