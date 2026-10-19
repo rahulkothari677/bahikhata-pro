@@ -119,3 +119,25 @@ export function resolveFinalPaid(
 
   return roundMoney(finalPaid)
 }
+
+/**
+ * 🔒 Money owed by nobody (19 Oct, Phase 5c-2).
+ *
+ * A sale with no customer that is not paid in full — or a purchase with no
+ * supplier that is not paid in full — leaves money that no khata holds: it is
+ * in the sales, but "To collect" never shows it and nobody can be reminded.
+ * Found through Insights: October's bills said ₹782.70 went on udhaar, the
+ * customers' khatas said ₹272.70; the ₹510 between them was a walk-in bill
+ * saved with nothing paid. Neither the New Sale screen nor the server stopped
+ * it, and turning a walk-in estimate into a sale did the same (it starts
+ * unpaid). Checked here, on the server, for every route that saves one.
+ */
+export function owedByNobody(type: string, partyId: string | null | undefined, totalAmount: number, finalPaid: number): boolean {
+  return (type === 'sale' || type === 'purchase') && !partyId && finalPaid < totalAmount - 0.005
+}
+
+export function owedByNobodyMessage(type: string): string {
+  return type === 'purchase'
+    ? 'Credit needs a supplier. Pick who you owe the rest to, or pay the full amount.'
+    : 'Udhaar needs a customer. Pick who will pay the rest, or take the full amount.'
+}

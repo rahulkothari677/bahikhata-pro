@@ -22,7 +22,7 @@ import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
 import { tracksStock, stockAffectingLines } from '@/lib/inventory-tracking'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
-import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
+import { resolveFinalPaid, isNoteType, owedByNobody, owedByNobodyMessage } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
 import { buildCustomValues, loadFieldDefs, CustomFieldError } from '@/lib/custom-fields-server'
 import { formatInvoiceNo } from '@/lib/invoice-number'
@@ -747,6 +747,10 @@ export async function POST(req: NextRequest) {
     // default made a sales return reduce the customer's balance by ₹0.
     // Includes the FIX M3 snap-to-total clamp for explicit values.
     const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount, paymentMode)
+    // Phase 5c-2: udhaar (or supplier credit) needs someone who owes it — lib/paid-amount.ts.
+    if (owedByNobody(type, partyId, totalAmount, finalPaid)) {
+      return NextResponse.json({ error: owedByNobodyMessage(type), code: 'NEEDS_PARTY' }, { status: 400 })
+    }
 
     // 🔒 AUDIT V25 FIX §6.2 (Batch 7): Block credit/debit notes without a party.
     // A credit note with no partyId (walk-in) can't reduce any balance — there's

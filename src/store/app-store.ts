@@ -224,6 +224,13 @@ interface AppState {
    *  "Gave payment" (and later Home's To pay card) can open Suppliers. */
   khataSide: 'all' | 'customer' | 'supplier'
   setKhataSide: (side: 'all' | 'customer' | 'supplier') => void
+  /** Phase 5c-2: Home shows the Overview or Insights. In the store so coming
+   *  back from a party opened in Insights lands on Insights again. */
+  homeView: 'overview' | 'insights'
+  setHomeView: (view: 'overview' | 'insights') => void
+  /** Phase 5c-2: the Insights section on screen (validated where it is read). */
+  insightSection: string
+  setInsightSection: (section: string) => void
   /** Phase 5a-3: the New sheet opened by the bottom bar's + button. */
   newSheetOpen: boolean
   setNewSheetOpen: (open: boolean) => void
@@ -417,6 +424,10 @@ export const useAppStore = create<AppState>()(
       setReturnMode: (mode) => set({ returnMode: mode }),
       khataSide: 'customer',
       setKhataSide: (side) => set({ khataSide: side }),
+      homeView: 'overview',
+      setHomeView: (view) => set({ homeView: view }),
+      insightSection: 'sales',
+      setInsightSection: (section) => set({ insightSection: section }),
       newSheetOpen: false,
       setNewSheetOpen: (open) => set({ newSheetOpen: open }),
       pendingArrival: null,

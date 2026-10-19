@@ -240,7 +240,9 @@ save.
   `getBoundingClientRect()` centre × the pane's scale (0.4747 at the 375 px
   preset, 0.3535 at 1024 × 680 in this pane) and click that point. Sign-in:
   `form_input` does not reach React state — type into the fields, at desktop
-  size.
+  size. **A tab that is not in front has no layout** (refs report "outside
+  the viewport (0, 0)", clicks land nowhere): `tabs_select` it first, and
+  front Rahul's tab again afterwards (19 Oct).
 - **Commit messages go through a file** (`git commit -F msg.txt`). On 1 Oct a
   PowerShell here-string containing double quotes was split by Windows
   PowerShell 5.1 into pathspecs; the commit failed, the next command switched to
@@ -468,6 +470,11 @@ cause**, never as a new line at the bottom.
   was invisible on a new purchase** — its condition needed at least one line,
   and a new bill starts with none. Only opening the screen showed it. **Open
   every new control in the screen's EMPTY starting state first**, then filled.
+· **19 Oct (5c-2): every card added up on its own, and two of them still
+  disagreed.** Sales said ₹782.70 of October went on udhaar, Udhaar said
+  ₹272.70 was given on credit — both sums were right; the ₹510 between them
+  was a walk-in bill left unpaid, which the app should never have accepted
+  (#257). **Check the SAME fact across screens, not only each screen's sum.**
 
 **Cause 5 — Saying a thing instead of logging it**
 · Reported the period flash in chat and never logged it — twice in one day

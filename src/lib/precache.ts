@@ -19,7 +19,8 @@ const PRECACHE_URLS = [
   '/api/parties',
   '/api/transactions?limit=200',
   '/api/settings',
-  '/api/insights',
+  // '/api/insights' left in 5c-2: the engine needs ?section= (the old feed it fetched is gone),
+  // and each section is fetched when it is opened, for the period on screen.
 ]
 
 export async function precacheData(): Promise<void> {

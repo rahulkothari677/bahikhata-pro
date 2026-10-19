@@ -104,6 +104,8 @@ const SIGNED_LINE = Prisma.sql`(CASE WHEN t."type" = 'sale' THEN ${LINE_TAXABLE_
  * A typed-in line (no item) booked no profit, so it is 0 here too.
  */
 const SIGNED_PROFIT = Prisma.sql`(CASE WHEN ti."productId" IS NULL THEN 0 WHEN t."type" = 'sale' THEN 1 ELSE -1 END) * (${LINE_TAXABLE_SQL} - FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)::numeric)`
+/** What a bill left unpaid at the counter (never below 0). One rule for Sales → udhaar and Udhaar → given on credit. */
+const UNPAID_ON_BILL = Prisma.sql`GREATEST("totalAmount" - "paidAmount", 0)`
 const SALE_LINES = (userId: string, from: Date, to: Date) => Prisma.sql`
   FROM "TransactionItem" ti
   JOIN "Transaction" t ON t."id" = ti."transactionId"
@@ -115,13 +117,20 @@ const SALE_LINES = (userId: string, from: Date, to: Date) => Prisma.sql`
 // ─── Sales ──────────────────────────────────────────────────────────────
 
 async function salesSection({ userId, w }: Ctx) {
-  const [sums, modes, days, hours, cats] = await Promise.all([
+  const [sums, prevSums, modes, days, hours, cats] = await Promise.all([
     sumsByType(userId, w.from, w.to, ['sale', 'credit-note']),
-    db.transaction.groupBy({
-      by: ['paymentMode'],
-      where: activeTransactionWhere(userId, { type: 'sale', date: { gte: w.from, lte: w.to } }),
-      _sum: { totalAmount: true, paidAmount: true },
-    }),
+    sumsByType(userId, w.prevFrom, w.prevTo, ['sale', 'credit-note']),
+    // Each bill splits exactly: paid at the counter (up to its total), and the rest unpaid —
+    // on a customer's khata (udhaar), or on no khata at all (a walk-in bill left unpaid).
+    db.$queryRaw<Array<{ mode: string | null; paid: Num; udhaar: Num; nobody: Num }>>`
+      SELECT "paymentMode" AS "mode",
+             COALESCE(SUM(LEAST("paidAmount", "totalAmount")), 0)::numeric AS "paid",
+             COALESCE(SUM(${UNPAID_ON_BILL}) FILTER (WHERE "partyId" IS NOT NULL), 0)::numeric AS "udhaar",
+             COALESCE(SUM(${UNPAID_ON_BILL}) FILTER (WHERE "partyId" IS NULL), 0)::numeric AS "nobody"
+      FROM "Transaction"
+      WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "type" = 'sale'
+        AND "date" >= ${w.from} AND "date" <= ${w.to}
+      GROUP BY 1`,
     w.days <= 62 ? db.$queryRaw<Array<{ day: Date; paise: Num }>>`
       SELECT DATE_TRUNC('day', ${istLocal('"date"')}) AS "day",
              SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE -"totalAmount" END)::numeric AS "paise"
@@ -143,16 +152,17 @@ async function salesSection({ userId, w }: Ctx) {
   const sale = sums('sale'), ret = sums('credit-note')
   const sales = netSalesTotal(sale, ret)
   const bills = sale.count
-  // How bills were paid: what came in at the counter by mode, and what went on udhaar — shares of the bills' value.
+  // How bills were paid — shares of the bills' value; the rows add up to it to the paisa.
+  // A paid part beyond a bill's total is change or an advance, not part of the bill.
   const byMode = new Map<string, number>()
-  let udhaar = 0
+  let udhaar = 0, nobody = 0
   for (const m of modes) {
-    const total = m._sum.totalAmount ?? 0, paid = m._sum.paidAmount ?? 0
-    const mode = ['cash', 'upi', 'card', 'bank'].includes(m.paymentMode ?? '') ? m.paymentMode! : 'other'
-    byMode.set(mode, roundMoney((byMode.get(mode) ?? 0) + paid))
-    udhaar = roundMoney(udhaar + Math.max(0, total - paid))
+    const mode = ['cash', 'upi', 'card', 'bank'].includes(m.mode ?? '') ? m.mode! : 'other'
+    byMode.set(mode, roundMoney((byMode.get(mode) ?? 0) + p2r(m.paid)))
+    udhaar = roundMoney(udhaar + p2r(m.udhaar))
+    nobody = roundMoney(nobody + p2r(m.nobody))
   }
-  const payments = split([...[...byMode].map(([id, amount]) => ({ id, amount })), { id: 'udhaar', amount: udhaar }])
+  const payments = split([...[...byMode].map(([id, amount]) => ({ id, amount })), { id: 'udhaar', amount: udhaar }, { id: 'nobody', amount: nobody }])
   const dayMap = new Map<string, number>(days.map((d) => [new Date(d.day).toISOString(), p2r(d.paise)] as [string, number]))
   const calendar = w.days <= 62 ? trendBuckets(w.from, w.to, 'day').map((b) => ({ day: b.key, label: b.label, amount: dayMap.get(b.key) ?? 0 })) : []
   const hourRows = Array.from({ length: 24 }, (_, h) => {
@@ -165,7 +175,7 @@ async function salesSection({ userId, w }: Ctx) {
   const unmatched = remainder(beforeGst, catRows.map((c) => c.amount))
   if (unmatched !== 0) catRows.push({ id: UNMATCHED, amount: unmatched })
   return {
-    totals: { sales, bills, averageBill: bills > 0 ? roundMoney(sales / bills) : 0, returns: ret.totalAmount },
+    totals: { sales, bills, averageBill: bills > 0 ? roundMoney(sales / bills) : 0, returns: ret.totalAmount, previous: netSalesTotal(prevSums('sale'), prevSums('credit-note')) },
     payments, billsValue: sale.totalAmount, calendar, hours: hourRows,
     categories: split(catRows), beforeGst, unmatched,
   }
@@ -289,7 +299,7 @@ async function udhaarSection({ userId, w, now }: Ctx) {
     db.$queryRaw<Array<{ partyId: string; oldest: Date }>>(oldestDueSaleSql(userId)),
     db.payment.aggregate({ where: { userId, deletedAt: null, type: 'received', date: { gte: w.from, lte: w.to } }, _sum: { amount: true } }),
     db.$queryRaw<Array<{ paise: Num }>>`
-      SELECT COALESCE(SUM("totalAmount" - "paidAmount") FILTER (WHERE "totalAmount" > "paidAmount"), 0)::numeric AS "paise"
+      SELECT COALESCE(SUM(${UNPAID_ON_BILL}), 0)::numeric AS "paise"
       FROM "Transaction"
       WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "type" = 'sale' AND "partyId" IS NOT NULL
         AND "date" >= ${w.from} AND "date" <= ${w.to}`,

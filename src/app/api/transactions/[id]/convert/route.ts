@@ -111,6 +111,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // registered buyer, its bill-to-ship-to answer, read back from what the
     // estimate saved. If the party has changed since and the question is now
     // open, the estimate must be edited first: the answer changes the tax head.
+    // Phase 5c-2: the sale starts unpaid, so it needs a customer to owe it (lib/paid-amount.ts).
+    if (!estimate.partyId) {
+      return NextResponse.json({ error: 'Add a customer to this estimate first. The sale starts unpaid, so someone must owe it.', code: 'NEEDS_PARTY' }, { status: 400 })
+    }
     const billToShipTo = savedBillToShipTo(estimate)
     const {
       isInterState: derivedIsInterState,

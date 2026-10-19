@@ -60,6 +60,8 @@ import { TodayCard, QuickTiles, CollectPayCard } from '@/components/dashboard/To
 import { useDaySummary } from '@/hooks/use-day-summary'
 import { GoalCard } from '@/components/dashboard/GoalCard'
 import { CustomiseHome, useHomeSections } from '@/components/dashboard/CustomiseHome'
+import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
+import { InsightsView } from '@/components/insights/InsightsView'
 import { useArrivalRequest } from '@/hooks/use-new-entry-request'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
@@ -84,6 +86,8 @@ export function Dashboard() {
   const [proof, setProof] = useState<ProofSpec | null>(null)
   // Phase 5b-6: which Home sections show (this device).
   const home = useHomeSections()
+  const homeView = useAppStore((s) => s.homeView)
+  const setHomeView = useAppStore((s) => s.setHomeView)
   // Phase 5b-2: "Close day" from More, search or a Home tile opens the dialog
   // even when Home was not open yet.
   useArrivalRequest('dashboard', 'day-end', () => setShowDayEnd(true))
@@ -592,8 +596,28 @@ export function Dashboard() {
     )
   }
 
+  // Phase 5c-2 (ledger model v4 §2): Home is the Overview or Insights, one switch, one period chip.
+  const viewSwitch = (
+    <SegmentedSwitch
+      ariaLabel={t('ins.home_view')}
+      options={[{ value: 'overview' as const, label: t('ins.overview') }, { value: 'insights' as const, label: t('ins.insights') }]}
+      value={homeView}
+      onChange={setHomeView}
+      className="lg:max-w-sm"
+    />
+  )
+  if (homeView === 'insights') {
+    return (
+      <div className="space-y-3 lg:space-y-5">
+        {viewSwitch}
+        <InsightsView range={dateRange} preset={datePreset} onChange={handleDateChange} onPresetChange={setDatePreset} t={t} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3 lg:space-y-5">
+      {viewSwitch}
       {/* Phase 5b-2 (ledger model §7): the Today card, quick tiles, To collect / To pay. */}
       <TodayCard
         kpis={kpis}

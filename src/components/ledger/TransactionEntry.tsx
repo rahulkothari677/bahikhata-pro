@@ -19,6 +19,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { toast as sonnerToast } from 'sonner'
 import { resolveName } from '@/lib/resolve-name'
 import { formatINR, cn, getInitials } from '@/lib/utils'
+import { owedByNobody, owedByNobodyMessage } from '@/lib/paid-amount'
 import {
   ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
   TrendingUp, TrendingDown, Calendar, User, ScanLine, Folder, FolderOpen,
@@ -1099,6 +1100,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         description: `${lines}\n\nRecord a purchase first, or enable "Allow overselling" in Settings.`,
         duration: 8000,
       })
+      return
+    }
+    // Phase 5c-2: the server's rule (lib/paid-amount.ts) before saving — and before
+    // an offline sale is queued, which would otherwise fail later at sync.
+    const paidAsSaved = paidAmount === '' ? (paymentMode === 'credit' ? 0 : totalAmount) : paid
+    if (owedByNobody(actualType, partyId, totalAmount, paidAsSaved)) {
+      sonnerToast.error(owedByNobodyMessage(actualType))
+      document.getElementById('field-party-search')?.focus()
       return
     }
     setSaving(true)

@@ -20,7 +20,7 @@ import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { logFieldChanges, TRACKED_TRANSACTION_FIELDS } from '@/lib/field-audit'
-import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
+import { resolveFinalPaid, isNoteType, owedByNobody, owedByNobodyMessage } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
 import { checkLinkedNotesCap } from '@/lib/linked-notes-guard'
 import { computePartyBalance } from '@/lib/party-balance'
@@ -637,6 +637,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // missing paidAmount defaults to 0 (khata adjustment), not totalAmount.
     // Includes the FIX M3 snap-to-total clamp for explicit values.
     const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount, paymentMode)
+    // Phase 5c-2: an edit cannot leave udhaar (or supplier credit) owed by nobody either — lib/paid-amount.ts.
+    if (owedByNobody(type, partyId, totalAmount, finalPaid)) {
+      return NextResponse.json({ error: owedByNobodyMessage(type), code: 'NEEDS_PARTY' }, { status: 400 })
+    }
 
     // (a note with no party was resolved to the walk-in party above, so the
     //  old rejection here is gone — see POST for why)
