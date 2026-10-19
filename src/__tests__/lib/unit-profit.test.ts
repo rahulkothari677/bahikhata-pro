@@ -11,7 +11,7 @@
 import fs from 'fs'
 import path from 'path'
 import { computeLineItems } from '@/lib/line-items'
-import { saleValueBeforeGst, unitProfit, stockPotentialProfit, todayMarginPct } from '@/lib/unit-profit'
+import { saleValueBeforeGst, unitProfit, stockPotentialProfit, todayMarginPct, earnPerUnit } from '@/lib/unit-profit'
 
 const toPaise = (r: number) => Math.round(r * 100)
 const ATTA = { salePrice: 255, purchasePrice: 230, gstRate: 5, priceIncludesGst: true }
@@ -173,5 +173,30 @@ describe('guard — profit before GST, margin on sales before GST', () => {
     }
     expect(offenders).toEqual([])
     for (const [rel, { count }] of Object.entries(ALLOWED_SALE_MINUS_COST)) expect(counts[rel] ?? 0).toBe(count)
+  })
+})
+
+/*
+ * 19 Oct (5c-4 live check): Insights' "cost went up" worked salePrice minus the
+ * purchase rate in the engine - the #134 example again: atta at Rs 255 incl.
+ * 5% on a Rs 230 cost read "you earn Rs 25"; the real figure is Rs 12.86. The
+ * name-based sweep above could not see it (different variable names), so the
+ * engine now calls earnPerUnit and this checks both the rule and the caller.
+ */
+describe('earn per unit (Insights: cost went up)', () => {
+  const atta = { salePrice: 255, gstRate: 5, priceIncludesGst: true }
+  test('a GST shop: price before GST minus the before-GST cost', () => {
+    expect(earnPerUnit(atta, { unitPrice: 230, gstRate: 5 }, { chargesGst: true, claimsItc: true })).toBe(12.86)
+  })
+  test('a not-registered shop keeps the whole price and paid the GST for good', () => {
+    expect(earnPerUnit(atta, { unitPrice: 230, gstRate: 5 }, { chargesGst: false, claimsItc: false })).toBe(13.5)
+  })
+  test('a GST shop whose bill credit is blocked carries the GST in the cost', () => {
+    expect(earnPerUnit(atta, { unitPrice: 230, gstRate: 5 }, { chargesGst: true, claimsItc: false })).toBe(1.36)
+  })
+  test('the insights engine uses it, never a raw subtraction', () => {
+    const code = fs.readFileSync(path.join(process.cwd(), 'src/app/api/insights/route.ts'), 'utf8')
+    expect(code.split('earnPerUnit(').length - 1).toBe(2)
+    expect(code).not.toMatch(/roundMoney\(sp - /)
   })
 })

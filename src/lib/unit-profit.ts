@@ -114,3 +114,20 @@ export function purchaseRateFromCost(
   if (opts.claimsItc) return cost
   return roundMoney((cost * 100) / (100 + (Number(product.gstRate) || 0)))
 }
+
+/**
+ * What one unit earns at today's sale price on a purchase at `line`'s rate —
+ * Insights → Profit's "cost went up" (Phase 5c-4). The sale price before GST
+ * minus the cost as the shop really paid it, both by the rules above.
+ *
+ * It was `salePrice − unitPrice` in the engine (19 Oct, found on the live
+ * check): the #134 example exactly — atta at ₹255 incl. 5% on a ₹230 cost
+ * read "you earn ₹25", the real figure is ₹12.86.
+ */
+export function earnPerUnit(
+  product: PricedProduct,
+  line: { unitPrice: number; gstRate?: number | null },
+  opts: { chargesGst: boolean; claimsItc: boolean },
+): number {
+  return roundMoney(saleValueBeforeGst(product, { chargesGst: opts.chargesGst }) - purchaseCostPerUnit(line, { claimsItc: opts.claimsItc }))
+}

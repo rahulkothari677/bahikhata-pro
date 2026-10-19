@@ -18,6 +18,8 @@ import { abcGroups, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMAT
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
 import { WALK_IN_PARTY_NAME } from '@/lib/walk-in-party'
 import { DEAD_DAYS } from '@/lib/stock-aging'
+import { earnPerUnit, purchaseCostPerUnit } from '@/lib/unit-profit'
+import { chargesGstOnSales, claimsInputCredit, gstStatus } from '@/lib/shop-tax'
 
 /**
  * GET /api/insights?section=sales|items|customers|udhaar|profit[&from&to]
@@ -332,6 +334,9 @@ async function udhaarSection({ userId, w, now }: Ctx) {
 // ─── Profit ─────────────────────────────────────────────────────────────
 
 async function profitSection({ userId, w }: Ctx) {
+  const setting = await db.setting.findUnique({ where: { userId }, select: { compositionCategory: true, gstRegistered: true } })
+  const status = gstStatus(setting)
+  const shop = { chargesGst: chargesGstOnSales(status), claimsItc: claimsInputCredit(status) }
   const [sums, prevSums, cats, perItem, costUp] = await Promise.all([
     sumsByType(userId, w.from, w.to, ['sale', 'credit-note', 'income', 'expense']),
     sumsByType(userId, w.prevFrom, w.prevTo, ['sale', 'credit-note']),
@@ -346,15 +351,17 @@ async function profitSection({ userId, w }: Ctx) {
       ${SALE_LINES(userId, w.from, w.to)} AND ti."productId" IS NOT NULL
       GROUP BY ti."productId"`,
     // The last two purchase prices of each product: where the latest is higher, the cost went up.
-    db.$queryRaw<Array<{ id: string; name: string; salePrice: Num; latest: Num; previous: Num; latestDate: Date }>>`
+    db.$queryRaw<Array<{ id: string; name: string; salePrice: Num; gstRate: number; priceIncludesGst: boolean; latest: Num; latestGst: number; latestBlocked: boolean; previous: Num; previousGst: number; previousBlocked: boolean; latestDate: Date }>>`
       WITH buys AS (
-        SELECT ti."productId" AS pid, ti."unitPrice" AS cost, t."date" AS d,
+        SELECT ti."productId" AS pid, ti."unitPrice" AS cost, ti."gstRate" AS gst, (t."itcBlockedReason" IS NOT NULL) AS blocked, t."date" AS d,
                ROW_NUMBER() OVER (PARTITION BY ti."productId" ORDER BY t."date" DESC, t."id" DESC) AS rn
         FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"
         WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'purchase'
           AND ti."productId" IS NOT NULL AND ti."unitPrice" > 0
       )
-      SELECT p."id", p."name", p."salePrice" AS "salePrice", l.cost AS "latest", pr.cost AS "previous", l.d AS "latestDate"
+      SELECT p."id", p."name", p."salePrice" AS "salePrice", p."gstRate" AS "gstRate", p."priceIncludesGst" AS "priceIncludesGst",
+             l.cost AS "latest", l.gst AS "latestGst", l.blocked AS "latestBlocked",
+             pr.cost AS "previous", pr.gst AS "previousGst", pr.blocked AS "previousBlocked", l.d AS "latestDate"
       FROM buys l
       JOIN buys pr ON pr.pid = l.pid AND pr.rn = 2
       JOIN "Product" p ON p."id" = l.pid
@@ -385,9 +392,20 @@ async function profitSection({ userId, w }: Ctx) {
     },
     unmatched,
     byCategory, lowest,
+    // What a unit costs and earns, by the shared rules (lib/unit-profit.ts): the sale price before GST, and the
+    // cost as the shop really paid it (with the GST when it cannot claim it back, or the bill's credit is blocked).
     costUp: costUp.map((r) => {
-      const sp = p2r(r.salePrice), latest = p2r(r.latest), previous = p2r(r.previous)
-      return { id: r.id, name: r.name, previous, latest, salePrice: sp, earnNow: roundMoney(sp - latest), earnBefore: roundMoney(sp - previous), date: r.latestDate }
+      const product = { salePrice: p2r(r.salePrice), gstRate: Number(r.gstRate), priceIncludesGst: r.priceIncludesGst }
+      const latestLine = { unitPrice: p2r(r.latest), gstRate: Number(r.latestGst) }
+      const previousLine = { unitPrice: p2r(r.previous), gstRate: Number(r.previousGst) }
+      const opts = (blocked: boolean) => ({ chargesGst: shop.chargesGst, claimsItc: shop.claimsItc && !blocked })
+      return {
+        id: r.id, name: r.name,
+        previous: purchaseCostPerUnit(previousLine, opts(r.previousBlocked)), latest: purchaseCostPerUnit(latestLine, opts(r.latestBlocked)),
+        salePrice: product.salePrice,
+        earnNow: earnPerUnit(product, latestLine, opts(r.latestBlocked)), earnBefore: earnPerUnit(product, previousLine, opts(r.previousBlocked)),
+        date: r.latestDate,
+      }
     }),
   }
 }
