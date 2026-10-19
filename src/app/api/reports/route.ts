@@ -494,15 +494,19 @@ export async function GET(req: NextRequest) {
           id: string; name: string; category: string | null; hsn: string | null
           unit: string | null; currentStock: number; purchasePrice: number
           salePrice: number; mrp: number; gstRate: number; lowStockThreshold: number
+          createdAt: Date; lastSoldAt: Date | null
         }>>`
           SELECT
-            "id", "name", "category", "hsn", "unit",
-            "currentStock", "purchasePrice", "salePrice", "mrp",
-            "gstRate", "lowStockThreshold"
-          FROM "Product"
-          WHERE "userId" = ${userId}
-            AND "tracksInventory" = true  -- see the totals query above
-          ORDER BY ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric) DESC
+            p."id", p."name", p."category", p."hsn", p."unit",
+            p."currentStock", p."purchasePrice", p."salePrice", p."mrp",
+            p."gstRate", p."lowStockThreshold", p."createdAt",
+            -- Inventory Aging ages stock from the last sale (lib/stock-aging.ts, 5c-4).
+            (SELECT MAX(t."date") FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"
+              WHERE ti."productId" = p."id" AND t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale') AS "lastSoldAt"
+          FROM "Product" p
+          WHERE p."userId" = ${userId}
+            AND p."tracksInventory" = true  -- see the totals query above
+          ORDER BY ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric) DESC
           LIMIT ${STOCK_REPORT_LIMIT}
         `,
       ])
@@ -534,6 +538,8 @@ export async function GET(req: NextRequest) {
         potentialSaleValue: roundMoney(Math.max(0, p.currentStock) * p.salePrice),
         isLowStock: p.currentStock <= p.lowStockThreshold,
         isOversold: p.currentStock < 0,  // 🔒 V11: distinct flag for OVERSOLD badge
+        createdAt: p.createdAt,
+        lastSoldAt: p.lastSoldAt,
       }))
 
       // 🔒 N4: totals span EVERY product, not just the ones in the capped list.

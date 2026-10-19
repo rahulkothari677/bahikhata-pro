@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { useDashboard } from '@/hooks/use-dashboard'
-import { SmartInsights } from '@/components/dashboard/SmartInsights'
 import { BusinessHealthScore } from '@/components/dashboard/BusinessHealthScore'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,10 +43,9 @@ const DashboardCharts = dynamic(() => import('./DashboardCharts').then(m => m.Da
   ),
 })
 // 🔒 V20-003: Lazy-load heavy dashboard sub-components to reduce initial bundle.
-// DayEndSummary and AnalyticsInsights import recharts + other heavy deps.
+// DayEndSummary imports heavy deps.
 // Loading them dynamically moves ~200KB out of the initial JS payload.
 const DayEndSummary = dynamic(() => import('@/components/dashboard/DayEndSummary').then(m => ({ default: m.DayEndSummary })), { ssr: false, loading: () => null })
-const AnalyticsInsights = dynamic(() => import('@/components/dashboard/AnalyticsInsights').then(m => ({ default: m.AnalyticsInsights })), { ssr: false, loading: () => null })
 import { useRecurringEntries } from '@/hooks/use-recurring-entries'
 import { toast as sonnerToast } from 'sonner'
 import { refillPrice } from '@/lib/refill-line'
@@ -86,8 +84,11 @@ export function Dashboard() {
   const [proof, setProof] = useState<ProofSpec | null>(null)
   // Phase 5b-6: which Home sections show (this device).
   const home = useHomeSections()
-  const homeView = useAppStore((s) => s.homeView)
+  // The Insights view is the Business Analytics feature (Settings > Features), on by default.
+  const storedHomeView = useAppStore((s) => s.homeView)
+  const homeView = features?.businessAnalytics === false ? 'overview' : storedHomeView
   const setHomeView = useAppStore((s) => s.setHomeView)
+  const setInsightSection = useAppStore((s) => s.setInsightSection)
   // Phase 5b-2: "Close day" from More, search or a Home tile opens the dialog
   // even when Home was not open yet.
   useArrivalRequest('dashboard', 'day-end', () => setShowDayEnd(true))
@@ -597,7 +598,7 @@ export function Dashboard() {
   }
 
   // Phase 5c-2 (ledger model v4 §2): Home is the Overview or Insights, one switch, one period chip.
-  const viewSwitch = (
+  const viewSwitch = features?.businessAnalytics === false ? null : (
     <SegmentedSwitch
       ariaLabel={t('ins.home_view')}
       options={[{ value: 'overview' as const, label: t('ins.overview') }, { value: 'insights' as const, label: t('ins.insights') }]}
@@ -733,7 +734,7 @@ export function Dashboard() {
         paymentModeSplit={paymentModeSplit}
         periodLabel={rangeLabel}
         t={t}
-        onSeeAnalytics={() => setScrollTarget('business-analytics')}
+        onSeeAnalytics={() => { setInsightSection('items'); setHomeView('insights'); window.scrollTo({ top: 0 }) }}
         showTrends={home.shown('trends')}
         showTop={home.shown('top')}
       />
@@ -1100,21 +1101,11 @@ export function Dashboard() {
           but user feedback said the earlier version looked better). */}
       {home.shown('health') && kpis && kpis.rangeTxnCount > 0 && <BusinessHealthScore kpis={kpis} />}
 
-      {/* 🔒 AUDIT V25 BATCH 4c (user request): Smart Insights + Business Analytics
-          reverted to standalone full-width (was 2-col grid in Batch 4). User
-          feedback: content was too cramped in 2-col. Now full-width with
-          improved internal readability — larger text, more padding, 2-col
-          insight grid inside each card to fill horizontal space. */}
-
-      {/* {t('dash.smart_insights')} - AI-powered alerts */}
-      {/* 🔒 AUDIT V25 FIX BUG-032 (Batch 6): id='smart-insights' for scroll-target deep-link. */}
-      <div id="smart-insights" hidden={!home.shown('insights')}>
-        {kpis && <SmartInsights />}
-      </div>
-
-      {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
-      {/* id: Top lists' "More in Business Analytics" scrolls here (5b-5, until 5c). */}
-      {features?.businessAnalytics && home.shown('analytics') && <div id="business-analytics"><AnalyticsInsights /></div>}
+      {/* Phase 5c-4: Smart Insights and Business Analytics retired from Home (#238-#240,
+          one engine). Everything they showed lives on: today's figures in the Today
+          card; stock, margins, udhaar and sales up or down in Insights; best sellers,
+          top customers and buy again in Top lists and Insights; dead stock by name in
+          Inventory Aging (Insights -> Items opens it). */}
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
       <CustomiseHome home={home} />

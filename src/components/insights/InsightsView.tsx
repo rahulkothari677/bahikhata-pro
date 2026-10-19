@@ -8,11 +8,12 @@
 import { useAppStore } from '@/store/app-store'
 import { ChipRow } from '@/components/common/ChipRow'
 import { DateRangePicker, type DatePreset, type DateRange } from '@/components/common/DateRangePicker'
-import { LIVE_SECTIONS, type InsightSection } from '@/lib/insights-view'
+import { visibleSections, type InsightSection } from '@/lib/insights-view'
 import { SalesSection } from '@/components/insights/SalesSection'
 import { UdhaarSection } from '@/components/insights/UdhaarSection'
 import { ItemsSection } from '@/components/insights/ItemsSection'
 import { CustomersSection } from '@/components/insights/CustomersSection'
+import { ProfitSection } from '@/components/insights/ProfitSection'
 
 export function InsightsView({ range, preset, onChange, onPresetChange, hideProfit, t }: {
   range: DateRange
@@ -24,12 +25,13 @@ export function InsightsView({ range, preset, onChange, onPresetChange, hideProf
 }) {
   const stored = useAppStore((s) => s.insightSection)
   const setSection = useAppStore((s) => s.setInsightSection)
-  const section: InsightSection = (LIVE_SECTIONS as readonly string[]).includes(stored) ? (stored as InsightSection) : 'sales'
+  const sections = visibleSections(hideProfit)
+  const section: InsightSection = (sections as readonly string[]).includes(stored) ? (stored as InsightSection) : 'sales'
   return (
     <div className="space-y-3">
       <ChipRow
         ariaLabel={t('ins.sections')}
-        chips={LIVE_SECTIONS.map((s) => ({ value: s, label: t(`ins.sec.${s}`) }))}
+        chips={sections.map((s) => ({ value: s, label: t(`ins.sec.${s}`) }))}
         value={section}
         onChange={(s) => setSection(s)}
       />
@@ -40,6 +42,7 @@ export function InsightsView({ range, preset, onChange, onPresetChange, hideProf
       {section === 'items' && <ItemsSection range={range} hideProfit={hideProfit} t={t} />}
       {section === 'customers' && <CustomersSection range={range} hideProfit={hideProfit} t={t} />}
       {section === 'udhaar' && <UdhaarSection range={range} t={t} />}
+      {section === 'profit' && <ProfitSection range={range} t={t} />}
     </div>
   )
 }

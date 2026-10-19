@@ -50,8 +50,8 @@ describe('Top lists', () => {
     expect(rows.map((r) => [r.name, r.value])).toEqual([['Oil', 'Due'], ['Sugar', 'In 6 days']])
     expect(rows[0].line).toBe('Every 7 days · last 9 days ago')
   })
-  test('one analytics query for Top lists and Business Analytics', () => {
-    for (const f of ['src/components/dashboard/DashboardCharts.tsx', 'src/components/dashboard/AnalyticsInsights.tsx']) {
+  test('Top lists read the one shared analytics query (Business Analytics card retired in 5c-4)', () => {
+    for (const f of ['src/components/dashboard/DashboardCharts.tsx']) {
       const code = readCode(f)
       expect({ f, shared: /useAnalytics\(\)/.test(code), own: /queryKey: \['analytics'\]/.test(code) }).toEqual({ f, shared: true, own: false })
     }

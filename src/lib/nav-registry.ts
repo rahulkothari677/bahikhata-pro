@@ -199,6 +199,7 @@ export interface NavDestination {
     fireTriggerVoiceOpen?: boolean    // opens TransactionEntry voice dialog
     fireTriggerBarcodeOpen?: boolean  // opens TransactionEntry barcode scanner
     khataSide?: 'customer' | 'supplier'  // Phase 5a-3: which side Khata opens on
+    homeView?: 'overview' | 'insights'   // Phase 5c-4: which Home view opens
   }
 
   // ─── Categorization ──────────────────────────────────
@@ -1211,14 +1212,16 @@ export const NAV_REGISTRY: NavDestination[] = [
     moduleKey: 'sales',  // 🔒 V26 N16
   },
   {
+    // Phase 5c-4: the Smart Insights card retired (#240 — one engine); this entry
+    // opens Home's Insights view. The id stays so saved links and tests still hold.
     id: 'smart-insights',
-    label: 'Smart Insights',
-    description: 'AI-powered alerts & suggestions',
+    label: 'Insights',
+    description: 'Sales, items, customers, udhaar and profit',
     icon: Sparkles,
     iconColor: VIOLET,
     iconBg: VIOLET_BG,
-    actionKind: 'navigate-scroll',
-    actionParams: { scrollTarget: 'smart-insights' },
+    actionKind: 'navigate',
+    actionParams: { homeView: 'insights' },
     view: 'dashboard',
     category: 'tools',
     subcategory: 'smart-tools',
@@ -1228,7 +1231,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools,
     moreGroup: 'tools',
     moreOrder: 7,
-    keywords: 'smart insights ai alerts suggestions tips',
+    keywords: 'insights smart analytics business analytics sales items customers udhaar profit groups',
     sortOrder: 5,
     labelKey: 'nav.label.smart-insights',
     descKey: 'nav.desc.smart-insights',

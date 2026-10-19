@@ -8,9 +8,14 @@
  */
 import { istDaysBetween } from './insights'
 
-/** The sections built so far, in chip order. 5c-4 adds profit. */
-export const LIVE_SECTIONS = ['sales', 'items', 'customers', 'udhaar'] as const
+/** The five sections, in chip order (ledger model v4). Profit is left out for staff who may not see it. */
+export const LIVE_SECTIONS = ['sales', 'items', 'customers', 'udhaar', 'profit'] as const
 export type InsightSection = (typeof LIVE_SECTIONS)[number]
+
+/** The chips a viewer gets: Profit only for those who may see profit (the engine refuses the rest anyway). */
+export function visibleSections(hideProfit: boolean): InsightSection[] {
+  return LIVE_SECTIONS.filter((s) => !(hideProfit && s === 'profit'))
+}
 
 /** Change on the period before, in whole percent. Null when there is nothing to compare with. */
 export function changeVsBefore(now: number, before: number): { dir: 'up' | 'down' | 'same'; pct: number } | null {

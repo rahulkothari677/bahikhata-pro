@@ -17,6 +17,7 @@ import { trendBuckets } from '@/lib/trend-buckets'
 import { abcGroups, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMATCHED } from '@/lib/insights'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
 import { WALK_IN_PARTY_NAME } from '@/lib/walk-in-party'
+import { DEAD_DAYS } from '@/lib/stock-aging'
 
 /**
  * GET /api/insights?section=sales|items|customers|udhaar|profit[&from&to]
@@ -185,7 +186,8 @@ async function salesSection({ userId, w }: Ctx) {
 // ─── Items ──────────────────────────────────────────────────────────────
 
 async function itemsSection({ userId, w, now, hideProfit }: Ctx) {
-  const since90 = new Date(now.getTime() - 90 * 86_400_000)
+  // Dead stock: the shared rule (lib/stock-aging.ts) — no sale in DEAD_DAYS, and on the books that long.
+  const since90 = new Date(now.getTime() - DEAD_DAYS * 86_400_000)
   const [perItem, productStats, notSold, productCount] = await Promise.all([
     db.$queryRaw<Array<{ id: string; name: string; sales: Num; qty: Num; profit: Num }>>`
       SELECT ti."productId" AS "id", MAX(p."name") AS "name",
@@ -218,8 +220,8 @@ async function itemsSection({ userId, w, now, hideProfit }: Ctx) {
       SELECT
         COUNT(*) FILTER (WHERE sp.pid IS NULL)::bigint AS "periodCount",
         COALESCE(SUM(ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric)) FILTER (WHERE sp.pid IS NULL), 0)::numeric AS "periodPaise",
-        COUNT(*) FILTER (WHERE s90.pid IS NULL)::bigint AS "d90Count",
-        COALESCE(SUM(ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric)) FILTER (WHERE s90.pid IS NULL), 0)::numeric AS "d90Paise"
+        COUNT(*) FILTER (WHERE s90.pid IS NULL AND p."createdAt" < ${since90})::bigint AS "d90Count",
+        COALESCE(SUM(ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric)) FILTER (WHERE s90.pid IS NULL AND p."createdAt" < ${since90}), 0)::numeric AS "d90Paise"
       FROM "Product" p LEFT JOIN sp ON sp.pid = p."id" LEFT JOIN s90 ON s90.pid = p."id"
       WHERE p."userId" = ${userId} AND p."tracksInventory" = true AND p."currentStock" > 0`,
     db.product.count({ where: { userId } }),
@@ -330,8 +332,9 @@ async function udhaarSection({ userId, w, now }: Ctx) {
 // ─── Profit ─────────────────────────────────────────────────────────────
 
 async function profitSection({ userId, w }: Ctx) {
-  const [sums, cats, perItem, costUp] = await Promise.all([
+  const [sums, prevSums, cats, perItem, costUp] = await Promise.all([
     sumsByType(userId, w.from, w.to, ['sale', 'credit-note', 'income', 'expense']),
+    sumsByType(userId, w.prevFrom, w.prevTo, ['sale', 'credit-note']),
     // Every line, by the item's category; typed-in lines (no item, no cost price) as their own row.
     db.$queryRaw<Array<{ category: string; sales: Num; profit: Num }>>`
       SELECT CASE WHEN ti."productId" IS NULL THEN ${TYPED_IN} ELSE COALESCE(p."category", '') END AS "category",
@@ -377,6 +380,7 @@ async function profitSection({ userId, w }: Ctx) {
   return {
     totals: {
       profit, netSales, margin: netSales > 0 ? Math.round((profit / netSales) * 1000) / 10 : null,
+      previous: netSalesProfit(prevSums('sale'), prevSums('credit-note')),
       afterExpenses: roundMoney(profit + income - expenses), expenses, income,
     },
     unmatched,

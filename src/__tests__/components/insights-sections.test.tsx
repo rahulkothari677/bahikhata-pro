@@ -16,7 +16,7 @@ import { translations } from '@/lib/i18n'
 import { udhaarAge } from '@/lib/insights'
 import { formatINR } from '@/lib/utils'
 
-const mockState: Record<string, any> = { sales: null, udhaar: null, items: null, customers: null }
+const mockState: Record<string, any> = { sales: null, udhaar: null, items: null, customers: null, profit: null }
 jest.mock('@/hooks/use-insights', () => ({ useInsights: (section: string) => mockState[section] }))
 jest.mock('@/lib/haptic', () => ({ haptic: { click: jest.fn() } }))
 const mockNav = jest.fn()
@@ -26,6 +26,7 @@ import { SalesSection, MODE_DOT, categoryLabel } from '@/components/insights/Sal
 import { UdhaarSection, AGE_DOT } from '@/components/insights/UdhaarSection'
 import { ItemsSection, ABC_DOT } from '@/components/insights/ItemsSection'
 import { CustomersSection, SEG_DOT } from '@/components/insights/CustomersSection'
+import { ProfitSection } from '@/components/insights/ProfitSection'
 import { abcGroups, customerGroups } from '@/lib/insights'
 import { useAppStore } from '@/store/app-store'
 
@@ -162,6 +163,39 @@ describe('Customers', () => {
     expect(screen.getAllByText('28%').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: /Ramesh Verma/ }))
     expect(useAppStore.getState().selectedPartyId).toBe('c1')
+  })
+})
+
+const PROFIT = {
+  totals: { profit: 8291, netSales: 53857, margin: 15.4, previous: 7000, afterExpenses: -14258, expenses: 23349, income: 800 },
+  unmatched: { sales: 0, profit: 0.01 },
+  byCategory: [
+    { id: 'Tea', sales: 10254.36, profit: 1614.36, margin: 15.7 },
+    { id: '__typed', sales: 500, profit: 0, margin: null },
+    { id: '__unmatched', sales: 0, profit: 0.01, margin: null },
+  ],
+  lowest: [{ id: 'l1', name: 'Lays Magic Masala 52g', sales: 400, profit: 38, margin: 9.5 }],
+  costUp: [{ id: 'o1', name: 'Fortune Sunflower Oil 1L', previous: 130, latest: 140, salePrice: 155, earnNow: 15, earnBefore: 25, date: '2026-10-10T05:00:00Z' }],
+}
+
+describe('Profit', () => {
+  test('totals with the change on before; every category row, the typed-in and gap rows named; margins and cost rises', () => {
+    mockState.profit = ok(PROFIT)
+    render(<ProfitSection range={range} t={t} />)
+    expect(screen.getByText('↑ 18% on the period before')).toBeTruthy()
+    expect(screen.getByText(formatINR(-14258))).toBeTruthy()
+    expect(screen.getByText('Typed-in items (no cost price)')).toBeTruthy()
+    expect(screen.getByText('no cost price')).toBeTruthy()
+    expect(screen.getByText('Not matched to items')).toBeTruthy()
+    expect(screen.getByText('9.5%')).toBeTruthy()
+    expect(screen.getByText('Cost ₹130 → ₹140 · you earn ₹15 a unit (was ₹25)')).toBeTruthy()
+    expect(screen.getByText('+7.7%')).toBeTruthy()
+  })
+  test('a failed load is an error, never ₹0 profit', () => {
+    mockState.profit = { data: undefined, isLoading: false, isError: true, refetch: jest.fn() }
+    render(<ProfitSection range={range} t={t} />)
+    expect(screen.queryByText('₹0')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
   })
 })
 

@@ -6,6 +6,7 @@
 
 import { Capacitor } from '@capacitor/core'
 import { GST_RATES } from '@/lib/gst-rates'
+import { ageBucket, stockAgeDays } from '@/lib/stock-aging'
 
 function escapeCSV(value: any): string {
   if (value === null || value === undefined) return ''
@@ -275,15 +276,14 @@ export async function exportDebtAgingCSV(data: any, periodLabel: string) {
 }
 
 export async function exportInventoryAgingCSV(data: any) {
-  const headers = ['Product', 'Category', 'Stock', 'Unit', 'Stock Value', 'Age (days)', 'Status']
-  const rows: (string | number)[][] = (data.products || []).map((p: any) => [
-    p.name,
-    p.category || '',
-    p.currentStock,
-    p.unit,
-    p.stockValue,
-    p.ageInDays || 0,
-    p.ageBucket || '',
-  ])
+  // 5c-4: the same rows and rule as the screen (lib/stock-aging.ts). It read
+  // p.ageInDays / p.ageBucket, which nothing ever set: every row said 0 days.
+  const now = new Date()
+  const label: Record<string, string> = { fresh: 'Fresh', slow: 'Slow', dead: 'Dead stock' }
+  const headers = ['Product', 'Category', 'Stock', 'Unit', 'Stock Value', 'Days since sale', 'Never sold', 'Status']
+  const rows: (string | number)[][] = (data.products || []).filter((p: any) => p.currentStock > 0).map((p: any) => {
+    const days = stockAgeDays(p.lastSoldAt, p.createdAt, now)
+    return [p.name, p.category || '', p.currentStock, p.unit, p.stockValue ?? '', days ?? '', p.lastSoldAt ? 'No' : 'Yes', label[ageBucket(days) ?? ''] ?? '']
+  })
   await exportCSV('Inventory_Aging', headers, rows)
 }

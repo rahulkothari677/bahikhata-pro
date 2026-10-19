@@ -48,7 +48,15 @@ export interface CustomersInsights {
   top: { sales: TopCustomer[]; bills: TopCustomer[]; profit: TopCustomer[] }
 }
 
-export interface InsightsBySection { sales: SalesInsights; items: ItemsInsights; customers: CustomersInsights; udhaar: UdhaarInsights }
+export interface ProfitInsights {
+  totals: { profit: number; netSales: number; margin: number | null; previous: number; afterExpenses: number; expenses: number; income: number }
+  unmatched: { sales: number; profit: number }
+  byCategory: { id: string; sales: number; profit: number; margin: number | null }[]
+  lowest: { id: string; name: string; sales: number; profit: number; margin: number }[]
+  costUp: { id: string; name: string; previous: number; latest: number; salePrice: number; earnNow: number; earnBefore: number; date: string }[]
+}
+
+export interface InsightsBySection { sales: SalesInsights; items: ItemsInsights; customers: CustomersInsights; udhaar: UdhaarInsights; profit: ProfitInsights }
 
 export function useInsights<S extends InsightSection>(section: S, range: DateRange) {
   const refreshKey = useAppStore((s) => s.refreshKey)

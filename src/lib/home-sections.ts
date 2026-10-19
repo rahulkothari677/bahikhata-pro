@@ -19,8 +19,6 @@ export const HOME_SECTIONS = [
   { id: 'stock', key: 'home.sec.stock' },
   { id: 'recent', key: 'home.sec.recent' },
   { id: 'health', key: 'home.sec.health' },
-  { id: 'insights', key: 'home.sec.insights' },
-  { id: 'analytics', key: 'home.sec.analytics' },
 ] as const
 
 export type HomeSectionId = (typeof HOME_SECTIONS)[number]['id']

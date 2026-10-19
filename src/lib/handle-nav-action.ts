@@ -40,6 +40,8 @@ export function handleNavAction(
   const params = dest.actionParams || {}
   // Phase 5a-3: "Got payment" opens Khata on Customers, "Gave payment" on Suppliers.
   if (params.khataSide) store.setKhataSide(params.khataSide)
+  // Phase 5c-4: "Insights" from More, the menu or search opens Home on Insights.
+  if (params.homeView) store.setHomeView(params.homeView)
 
   // Nothing to do about scroll position here: store.setView starts every
   // forward navigation at the top on its own. 'navigate-scroll' still works,

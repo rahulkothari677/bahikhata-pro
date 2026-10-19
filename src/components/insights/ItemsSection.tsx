@@ -11,6 +11,8 @@ import { useAppStore } from '@/store/app-store'
 import { haptic } from '@/lib/haptic'
 import { formatINR } from '@/lib/utils'
 import { shares } from '@/lib/insights'
+import { getById } from '@/lib/nav-registry'
+import { handleNavAction } from '@/lib/handle-nav-action'
 import { useInsights, type TopItem } from '@/hooks/use-insights'
 import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { GroupBar, InsightCard, InsightsState, RankList, SECTION_GRID, StatRows, TotalsStrip } from '@/components/insights/InsightsKit'
@@ -36,6 +38,8 @@ export function ItemsSection({ range, hideProfit, t }: { range: DateRange; hideP
   const itemShare = shares(data.abc.map((g) => g.count))
   const n = (key: string, count: number) => t(count === 1 ? `${key}_1` : `${key}_n`).replace('{n}', String(count))
   const openItems = () => { haptic.click(); setPreviousView('dashboard'); setView('inventory') }
+  // The full list behind "not sold in 90 days": Inventory Aging, the same rule (lib/stock-aging.ts).
+  const aging = getById('inventory-aging')
   const line = (x: TopItem) => {
     const sold = t('ins.sold_n').replace('{n}', qtyText(x.qty))
     return x.profit !== null && x.sales > 0 ? `${sold} · ${t('ins.margin_pct').replace('{n}', String(Math.round((x.profit / x.sales) * 100)))}` : sold
@@ -69,6 +73,11 @@ export function ItemsSection({ range, hideProfit, t }: { range: DateRange; hideP
             { id: 'period', dot: 'bg-muted-foreground/50', label: `${t('ins.not_sold_period')} · ${stock.notSoldPeriod.count}`, value: formatINR(stock.notSoldPeriod.stockValue), small: t('ins.in_stock') },
             { id: 'd90', dot: 'bg-muted-foreground/30', label: `${t('ins.not_sold_90')} · ${stock.notSold90.count}`, value: formatINR(stock.notSold90.stockValue), small: t('ins.in_stock') },
           ]} />
+          {aging && (
+            <button type="button" onClick={() => handleNavAction(aging, { previousView: 'dashboard' })} className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted">
+              {t('ins.see_aging')}
+            </button>
+          )}
         </InsightCard>
 
         <InsightCard title={t('ins.top_items')} className="lg:col-span-2">

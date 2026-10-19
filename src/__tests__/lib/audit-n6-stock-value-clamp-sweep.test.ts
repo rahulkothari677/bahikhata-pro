@@ -25,7 +25,8 @@ import path from 'path'
 const SQL_SITES = [
   { file: 'src/app/api/dashboard/route.ts', what: 'dashboard "Stock Value" KPI' },
   { file: 'src/app/api/reports/route.ts', what: 'stock report totals' },
-  { file: 'src/app/api/analytics/route.ts', what: 'dead-stock tied-up value ordering' },
+  // 5c-4: dead stock moved from the analytics route to the insights engine (#240, one engine).
+  { file: 'src/app/api/insights/route.ts', what: 'Insights stock value and not-selling stock' },
 ]
 
 function readCode(rel: string): string {

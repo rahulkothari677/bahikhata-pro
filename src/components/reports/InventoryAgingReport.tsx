@@ -1,49 +1,42 @@
 'use client'
 
 /**
- * InventoryAgingReport — shows how long products have been in stock.
+ * InventoryAgingReport — how long the stock you hold has sat unsold.
  *
- * Buckets:
- *   <30 days (Fresh) → Green
- *   30-90 days (Slow) → Amber
- *   90+ days (Dead Stock) → Red
+ * Age = days since the item last sold, or since it was added if it never sold
+ * (lib/stock-aging.ts — the same rule as Insights → Items, "not sold in 90
+ * days"). Buckets: under 30 days, 30–89, 90 or more (dead stock). Only items
+ * in stock are aged: an item with none on the shelf ties up nothing.
  *
- * Helps identify dead stock that ties up capital.
+ * 5c-4 (19 Oct): it aged by the created date, which the stock data never
+ * carried — every item read "Fresh" and dead stock was always empty.
  */
-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Notice } from '@/components/ui/notice'
 import { formatINR, cn } from '@/lib/utils'
-import { Package, AlertTriangle, TrendingDown } from 'lucide-react'
+import { ageBucket, stockAgeDays, type AgeBucket } from '@/lib/stock-aging'
+import { Package } from 'lucide-react'
+
+interface AgedRow { id: string; name: string; category?: string | null; unit?: string | null; currentStock: number; stockValue?: number; ageDays: number | null; bucket: AgeBucket | null; neverSold: boolean }
+
+/** The rows the report shows, aged and bucketed. Exported for the guard. */
+export function agedStock(products: any[], now: Date): AgedRow[] {
+  return (products || []).filter((p) => p.currentStock > 0).map((p) => {
+    const ageDays = stockAgeDays(p.lastSoldAt, p.createdAt, now)
+    return { ...p, ageDays, bucket: ageBucket(ageDays), neverSold: !p.lastSoldAt }
+  })
+}
 
 export function InventoryAgingReport({ data }: { data: any }) {
-  const products = (data?.products || []).filter((p: any) => p.currentStock > 0)
-  const now = new Date()
-
-  // Age each product based on createdAt
-  const agedProducts = products.map((p: any) => {
-    const days = Math.floor((now.getTime() - new Date(p.createdAt).getTime()) / (1000 * 60 * 60 * 24))
-    let bucket = 'fresh'
-    if (days >= 90) bucket = 'dead'
-    else if (days >= 30) bucket = 'slow'
-    return { ...p, ageDays: days, bucket }
-  })
-
-  const buckets = {
-    fresh: agedProducts.filter(p => p.bucket === 'fresh'),
-    slow: agedProducts.filter(p => p.bucket === 'slow'),
-    dead: agedProducts.filter(p => p.bucket === 'dead'),
-  }
-
-  const bucketValues = {
-    fresh: buckets.fresh.reduce((s, p) => s + (p.stockValue || 0), 0),
-    slow: buckets.slow.reduce((s, p) => s + (p.stockValue || 0), 0),
-    dead: buckets.dead.reduce((s, p) => s + (p.stockValue || 0), 0),
-  }
-
+  const agedProducts = agedStock(data?.products, new Date())
+  const of = (b: AgeBucket) => agedProducts.filter((p) => p.bucket === b)
+  const buckets = { fresh: of('fresh'), slow: of('slow'), dead: of('dead') }
+  const value = (rows: AgedRow[]) => rows.reduce((s, p) => s + (p.stockValue || 0), 0)
+  const bucketValues = { fresh: value(buckets.fresh), slow: value(buckets.slow), dead: value(buckets.dead) }
   const totalValue = bucketValues.fresh + bucketValues.slow + bucketValues.dead
 
-  if (products.length === 0) {
+  if (agedProducts.length === 0) {
     return (
       <Card className="shadow-card border-border/60">
         <CardContent className="py-12 text-center">
@@ -51,21 +44,19 @@ export function InventoryAgingReport({ data }: { data: any }) {
             <Package className="w-7 h-7 text-muted-foreground" />
           </div>
           <p className="text-sm font-medium">No products in stock</p>
-          <p className="text-xs text-muted-foreground mt-1">Add products to inventory to see aging analysis.</p>
         </CardContent>
       </Card>
     )
   }
 
   const bucketConfig = [
-    { key: 'fresh', label: '< 30 Days', sublabel: 'Fresh Stock', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500', lightBg: 'bg-emerald-50 dark:bg-emerald-950/30', count: buckets.fresh.length, value: bucketValues.fresh },
-    { key: 'slow', label: '30-90 Days', sublabel: 'Slow Moving', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500', lightBg: 'bg-amber-50 dark:bg-amber-950/30', count: buckets.slow.length, value: bucketValues.slow },
-    { key: 'dead', label: '90+ Days', sublabel: 'Dead Stock', color: 'text-rose-600', bg: 'bg-rose-500', lightBg: 'bg-rose-50 dark:bg-rose-950/30', count: buckets.dead.length, value: bucketValues.dead },
+    { key: 'fresh', label: 'Sold in the last 30 days', sublabel: 'Fresh', color: 'text-good', bg: 'bg-good', lightBg: 'bg-good-soft', count: buckets.fresh.length, value: bucketValues.fresh },
+    { key: 'slow', label: '30–89 days since a sale', sublabel: 'Slow', color: 'text-check', bg: 'bg-check', lightBg: 'bg-check-soft', count: buckets.slow.length, value: bucketValues.slow },
+    { key: 'dead', label: 'Not sold in 90 days', sublabel: 'Dead stock', color: 'text-bad', bg: 'bg-bad', lightBg: 'bg-bad-soft', count: buckets.dead.length, value: bucketValues.dead },
   ]
 
   return (
     <div className="space-y-4">
-      {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
         {bucketConfig.map(bucket => (
           <Card key={bucket.key} className={cn('shadow-card border-border/60 overflow-hidden', bucket.lightBg)}>
@@ -75,7 +66,7 @@ export function InventoryAgingReport({ data }: { data: any }) {
                 <p className="text-xs text-muted-foreground font-semibold">{bucket.sublabel}</p>
               </div>
               <p className="text-xs text-muted-foreground mb-1">{bucket.label}</p>
-              <p className={cn('text-lg font-bold', bucket.color)}>{formatINR(bucket.value)}</p>
+              <p className={cn('text-lg font-bold', bucket.color)}>{totalValue > 0 ? formatINR(bucket.value) : bucket.count}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {bucket.count} product{bucket.count !== 1 ? 's' : ''}
                 {totalValue > 0 ? ` · ${((bucket.value / totalValue) * 100).toFixed(0)}%` : ''}
@@ -85,28 +76,20 @@ export function InventoryAgingReport({ data }: { data: any }) {
         ))}
       </div>
 
-      {/* Dead stock alert */}
-      {bucketValues.dead > 0 && (
-        <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50">
-          <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-xs font-medium text-rose-700 dark:text-rose-400">
-              {formatINR(bucketValues.dead)} tied up in dead stock (90+ days)
-            </p>
-            <p className="text-xs text-rose-600 dark:text-rose-500 mt-0.5">
-              Consider discounting or liquidating these products to free up capital. Dead stock reduces your business health score.
-            </p>
-          </div>
-        </div>
+      {buckets.dead.length > 0 && (
+        <Notice
+          level="act"
+          title={bucketValues.dead > 0 ? `${formatINR(bucketValues.dead)} in stock not sold in 90 days` : `${buckets.dead.length} products not sold in 90 days`}
+          info="Money tied up in stock that is not selling. A discount, a return to the supplier or not reordering frees it."
+        />
       )}
 
-      {/* Detailed table */}
       <Card className="shadow-card border-border/60">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Package className="w-4 h-4" /> Product-wise Aging
           </CardTitle>
-          <p className="text-xs text-muted-foreground">{products.length} products in stock</p>
+          <p className="text-xs text-muted-foreground">{agedProducts.length} products in stock</p>
         </CardHeader>
         <CardContent>
           <div className="overflow-auto max-h-[60vh] thin-scrollbar">
@@ -116,34 +99,36 @@ export function InventoryAgingReport({ data }: { data: any }) {
                   <th className="py-2 px-2 font-medium text-muted-foreground">Product</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground">Category</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Stock</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Stock Value</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Age (days)</th>
+                  {totalValue > 0 && <th className="py-2 px-2 font-medium text-muted-foreground text-right">Stock Value</th>}
+                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Days since sale</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-center">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {agedProducts.sort((a, b) => b.ageDays - a.ageDays).map((p: any) => (
+                {[...agedProducts].sort((a, b) => (b.ageDays ?? -1) - (a.ageDays ?? -1)).map((p) => (
                   <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30">
                     <td className="py-2 px-2 font-medium">{p.name}</td>
                     <td className="py-2 px-2 text-muted-foreground">{p.category || '—'}</td>
                     <td className="py-2 px-2 text-right">{p.currentStock} {p.unit}</td>
-                    <td className="py-2 px-2 text-right font-medium">{formatINR(p.stockValue || 0)}</td>
-                    <td className="py-2 px-2 text-right text-muted-foreground">{p.ageDays}</td>
+                    {totalValue > 0 && <td className="py-2 px-2 text-right font-medium">{formatINR(p.stockValue || 0)}</td>}
+                    <td className="py-2 px-2 text-right text-muted-foreground">{p.ageDays === null ? '—' : p.neverSold ? `${p.ageDays} (never sold)` : p.ageDays}</td>
                     <td className="py-2 px-2 text-center">
-                      {p.bucket === 'fresh' && <Badge className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">Fresh</Badge>}
-                      {p.bucket === 'slow' && <Badge className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Slow</Badge>}
-                      {p.bucket === 'dead' && <Badge variant="destructive" className="text-xs">Dead Stock</Badge>}
+                      {p.bucket === 'fresh' && <Badge className="text-xs bg-good-soft text-good">Fresh</Badge>}
+                      {p.bucket === 'slow' && <Badge className="text-xs bg-check-soft text-check">Slow</Badge>}
+                      {p.bucket === 'dead' && <Badge variant="destructive" className="text-xs">Dead stock</Badge>}
                     </td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-border font-semibold">
-                  <td className="py-2 px-2" colSpan={3}>Total</td>
-                  <td className="py-2 px-2 text-right font-bold">{formatINR(totalValue)}</td>
-                  <td className="py-2 px-2" colSpan={2}></td>
-                </tr>
-              </tfoot>
+              {totalValue > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-border font-semibold">
+                    <td className="py-2 px-2" colSpan={3}>Total</td>
+                    <td className="py-2 px-2 text-right font-bold">{formatINR(totalValue)}</td>
+                    <td className="py-2 px-2" colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </CardContent>

@@ -2,10 +2,9 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
-import { roundMoney, fromPaise } from '@/lib/money'
+import { fromPaise } from '@/lib/money'
 import { shouldHideProfit } from '@/lib/profit-visibility'
 import { apiError } from '@/lib/api-error'
-import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
 
 /**
  * GET /api/analytics
@@ -13,8 +12,9 @@ import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
  * V17-Ext 5.5: Business analytics that surface insight, not just tables.
  * Four analytics, all using SQL aggregates (O(1) memory, no row fetching):
  *
- * 1. Best-selling items (last 30 days) — top 5 by revenue
- * 2. Dead stock — products with stock > 0 but zero sales in 90 days
+ * (Phase 5c-4: best sellers and dead stock were removed with the Business
+ *  Analytics card — #240, one engine. Top items come from the dashboard route,
+ *  dead stock from the insights engine and Inventory Aging, lib/stock-aging.ts.)
  * 3. Most profitable customers — top 5 parties by grossProfit (owner only)
  * 4. Reorder patterns — "you usually reorder X every ~N days"
  *
@@ -33,107 +33,7 @@ export async function GET() {
     const hideProfit = await shouldHideProfit(userId, authCtx.role)
 
     const now = new Date()
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000)
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 86400000)
-
-    // === 1. Best-selling items (last 30 days) ===
-    // SQL GROUP BY productName, SUM quantity + revenue. Returns top 5.
-    // 🔒 V17 PAISE MIGRATION Phase 2E: SQL returns paise (integer). JS converts
-    // back to rupees via fromPaise(). Same pattern as Phase 2A/2B/2D.
-    // 🔒 AUDIT PASS-1 M3: net of returns, matching the Dashboard's top-products
-    // query. Was `type = 'sale'` only, while dashboard/route.ts subtracted
-    // credit notes — so the SAME product could rank as a bestseller on one
-    // screen and not the other, and a line that was almost entirely returned
-    // still looked like a strong seller here. Returns are business reality;
-    // a "bestseller" that came back through the door was not sold.
-    const bestSellersRaw = await db.$queryRaw<Array<{
-      productName: string
-      totalQty: bigint
-      totalRevenuePaise: string
-    }>>`
-      SELECT
-        ti."productName",
-        SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQty",
-        SUM(CASE WHEN t."type" = 'sale'
-                 THEN ${LINE_GROSS_SQL}
-                 ELSE -${LINE_GROSS_SQL} END) AS "totalRevenuePaise"
-      FROM "TransactionItem" ti
-      JOIN "Transaction" t ON ti."transactionId" = t.id
-      WHERE t."userId" = ${userId}
-        AND t."deletedAt" IS NULL
-        AND t."type" IN ('sale', 'credit-note')
-        AND t."date" >= ${thirtyDaysAgo}
-      GROUP BY ti."productName"
-      ORDER BY "totalRevenuePaise" DESC
-      LIMIT 5
-    `
-    const bestSellers = bestSellersRaw.map(r => ({
-      name: r.productName,
-      quantity: Number(r.totalQty),
-      revenue: fromPaise(Number(r.totalRevenuePaise)),
-    }))
-
-    // === 2. Dead stock — products with stock > 0 but zero sales in 90 days ===
-    //
-    // 🔒 AUDIT PASS-1 N4: one bounded SQL query replaces TWO unbounded reads.
-    //
-    // WAS: (a) SELECT DISTINCT every product id sold in 90 days, into a JS Set,
-    //      and (b) db.product.findMany for EVERY in-stock product — then the
-    //      set difference, sort and .slice(0, 5) all happened in JavaScript.
-    //      A shop with 20,000 products materialised 20,000 rows plus a Set of
-    //      every sold id, to display five lines.
-    //
-    // NOW: NOT EXISTS does the exclusion inside Postgres, the ranking is an
-    // ORDER BY, and LIMIT 5 means at most five rows ever cross the wire. This
-    // is the same result computed where the data already lives.
-    //
-    // Ordering note: the old code sorted by tiedUpValue DESC, which is
-    // GREATEST(currentStock, 0) × purchasePrice. That expression is reproduced
-    // in the ORDER BY so the same five products surface in the same order.
-    // Ranking still uses the real value even when hideProfit blanks it for
-    // display — otherwise staff would see a differently-ordered list from the
-    // owner, which would leak ordering information about cost prices.
-    //
-    // $queryRaw bypasses the money extension, so purchasePrice arrives as raw
-    // PAISE and is converted explicitly below.
-    const deadStockRows = await db.$queryRaw<Array<{
-      name: string
-      currentStock: number
-      unit: string | null
-      purchasePrice: number
-    }>>`
-      SELECT p."name", p."currentStock", p."unit", p."purchasePrice"
-      FROM "Product" p
-      WHERE p."userId" = ${userId}
-        AND p."currentStock" > 0
-        AND NOT EXISTS (
-          SELECT 1
-          FROM "TransactionItem" ti
-          JOIN "Transaction" t ON ti."transactionId" = t.id
-          WHERE ti."productId" = p."id"
-            AND t."userId" = ${userId}
-            AND t."deletedAt" IS NULL
-            AND t."type" = 'sale'
-            AND t."date" >= ${ninetyDaysAgo}
-        )
-      ORDER BY ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric) DESC
-      LIMIT 5
-    `
-    const deadStock = deadStockRows
-      .map(p => ({
-        name: p.name,
-        currentStock: p.currentStock,
-        unit: p.unit || 'pcs',
-        // 🔒 V26 M12: gate by hideProfit + clamp at 0
-        tiedUpValue: hideProfit
-          ? 0
-          : roundMoney(Math.max(0, p.currentStock) * fromPaise(Number(p.purchasePrice || 0))),
-      }))
-    // 🔒 N4: the trailing `.sort(...).slice(0, 5)` was removed — ORDER BY and
-    // LIMIT 5 in the query above now do both. Keeping the JS sort would have
-    // been actively wrong under hideProfit: every tiedUpValue is blanked to 0
-    // there, so re-sorting on it would discard the SQL ordering and hand staff
-    // a differently-ordered list than the owner sees.
 
     // === 3. Most profitable customers (owner only) ===
     // SQL GROUP BY partyId, SUM grossProfit. Returns top 5.
@@ -228,8 +128,6 @@ export async function GET() {
     }).filter(r => r.shouldReorder).slice(0, 3)
 
     return NextResponse.json({
-      bestSellers,
-      deadStock,
       topCustomers,
       reorderSuggestions,
     })

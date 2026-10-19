@@ -771,19 +771,9 @@ describe('V17 Phase 2E — paise-read-pattern regression guard (analytics + part
       expect(analyticsSource.length).toBeGreaterThan(0)
     })
 
-    it('best-sellers query returns totalRevenuePaise (not totalRevenue)', () => {
+    it('best sellers and dead stock are no longer worked out here (5c-4, #240: one engine)', () => {
       if (!analyticsSource) return
-      const queries = extractRawSql(analyticsSource)
-      // Best-sellers query: GROUP BY productName, filters type='sale', has totalQty
-      const bestSellersQuery = queries.find(q =>
-        q.includes('"productName"') && q.includes('"totalQty"') && q.includes("'sale'")
-      )
-      if (!bestSellersQuery) {
-        throw new Error('Could not find best-sellers query in analytics/route.ts.')
-      }
-      expect(bestSellersQuery).toContain('"totalRevenuePaise"')
-      expect(bestSellersQuery).not.toMatch(/AS\s+"totalRevenue"\s/)
-      expect(bestSellersQuery).not.toMatch(/\*\s*100/)
+      expect(analyticsSource).not.toMatch(/bestSellers|deadStock/)
     })
 
     it('top-customers query returns totalProfitPaise + totalSalesPaise', () => {
@@ -809,7 +799,6 @@ describe('V17 Phase 2E — paise-read-pattern regression guard (analytics + part
 
     it('JS processing uses fromPaise(Number(row.XPaise)) pattern', () => {
       if (!analyticsSource) return
-      expect(analyticsSource).toMatch(/fromPaise\(Number\(r\.totalRevenuePaise\)\)/)
       expect(analyticsSource).toMatch(/fromPaise\(Number\(r\.totalProfitPaise\)\)/)
     })
   })
