@@ -261,34 +261,22 @@ describe('V17 Phase 2A — paise-read-pattern regression guard (insights route)'
     expect(source.length).toBeGreaterThan(0)
   })
 
-  it('top-product query returns paise (alias "totalRevenuePaise", not "totalRevenue")', () => {
+  it('every money sum is wide enough and read back from paise (Phase 5c engine)', () => {
     if (skip) return
+    // Phase 5c replaced the alert feed with the section engine. The lessons this
+    // test carried still hold for every query there:
+    //  - AUDIT PASS-1 H3: a SUM cast to ::int overflows at 2,147,483,647 paise
+    //    (Rs 21,47,483.65) and the whole request throws. Sums are ::numeric.
+    //  - No "* 100" inside SQL: the columns are already paise.
+    //  - Money read back through fromPaise (the route's p2r helper).
     const queries = extractRawSql(source)
-    // The top-product query is the one that sums the shared line value
-    // (it referenced unitPrice before #98 moved it to lib/line-taxable-sql.ts)
-    const topProductQuery = queries.find(q => q.includes('LINE_GROSS_SQL') && q.includes('SUM'))
-    if (!topProductQuery) {
-      throw new Error(
-        'Could not find the top-product query in insights/route.ts. ' +
-        'Did the SQL shape change? Update this test to match.',
-      )
+    const sums = queries.filter((q) => /SUM\(/.test(q))
+    expect(sums.length).toBeGreaterThanOrEqual(5)
+    for (const q of sums) {
+      expect(q).not.toMatch(/SUM\([^)]*\)\s*::int\b/)
+      expect(q).not.toMatch(/\*\s*100\b/)
     }
-    // Must use the paise alias (regression: must not revert to "totalRevenue")
-    expect(topProductQuery).toContain('"totalRevenuePaise"')
-    expect(topProductQuery).not.toMatch(/AS\s+"totalRevenue"\s/)
-
-    // Must cast to an INTEGER type (regression: must not return Float rupees).
-    //
-    // 🔒 AUDIT PASS-1 H3: the cast must be ::bigint, NOT ::int. Postgres int4
-    // caps at 2,147,483,647 paise = ₹21,47,483.65, so a single product crossing
-    // that in a 30-day window made the whole /api/insights request throw
-    // "integer out of range" → 500. Asserting ::bigint here stops anyone
-    // "simplifying" it back to ::int and re-introducing the overflow.
-    expect(topProductQuery).toMatch(/::bigint\s+AS\s+"totalRevenuePaise"/)
-    expect(topProductQuery).not.toMatch(/::int\s+AS\s+"totalRevenuePaise"/)
-
-    // Must multiply by 100 inside the SUM (regression: must not skip the *100)
-    expect(topProductQuery).not.toMatch(/\*\s*100/)
+    expect(source).toMatch(/const p2r = \(v: Num\) => fromPaise\(/)
   })
 
   it('insights route imports fromPaise from money.ts', () => {

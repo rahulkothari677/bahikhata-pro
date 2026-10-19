@@ -6,7 +6,8 @@ import { shouldHideProfit } from '@/lib/profit-visibility'
 import { noStore } from '@/lib/cache'
 import { apiError } from '@/lib/api-error'
 import { activeTransactionWhere } from '@/lib/query-helpers'
-import { istDayStart, istMonthStart, sameTimeLastWeek } from '@/lib/timezone'
+import { istDayStart, sameTimeLastWeek } from '@/lib/timezone'
+import { rangeWindow } from '@/lib/period'
 import { netSalesProfit, netSalesTaxable, netSalesTotal } from '@/lib/net-sales'
 import { fromPaise, roundMoney } from '@/lib/money'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
@@ -42,11 +43,9 @@ function windowFor(scope: string, fromStr: string | null, toStr: string | null, 
     return { from: istDayStart(now), to: now, prevFrom: lastWeek.from, prevTo: lastWeek.to, compareKey: 'proof.cmp_last_week' }
   }
   if (scope !== 'range') return null
-  const from = fromStr ? new Date(fromStr) : istMonthStart(now)
-  const to = toStr ? new Date(toStr) : now
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) return null
-  const dur = to.getTime() - from.getTime()
-  return { from, to, prevFrom: new Date(from.getTime() - dur), prevTo: new Date(from.getTime() - 1), compareKey: 'proof.cmp_prev_period' }
+  // One rule for "the period and the one before" (lib/period.ts, shared with Insights).
+  const w = rangeWindow(fromStr, toStr, now)
+  return w && { from: w.from, to: w.to, prevFrom: w.prevFrom, prevTo: w.prevTo, compareKey: 'proof.cmp_prev_period' }
 }
 
 /** Sums by type for one window: the inputs the net-sales helpers take. */

@@ -17,6 +17,7 @@ import {
   type TypeAggregates,
 } from '@/lib/net-sales'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
+import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 
 // ⏱️ Vercel serverless timeout — reports can aggregate thousands of
@@ -625,16 +626,11 @@ export async function GET(req: NextRequest) {
         // 3. Oldest not-fully-paid sale per party — for Debt Aging.
         //    Column-to-column comparison (totalAmount > paidAmount) needs raw
         //    SQL; only dates are read, so no paise conversion is involved.
-        db.$queryRaw<Array<{ partyId: string; oldestUnpaidSaleDate: Date }>>`
-          SELECT "partyId", MIN("date") AS "oldestUnpaidSaleDate"
-          FROM "Transaction"
-          WHERE "userId" = ${userId}
-            AND "deletedAt" IS NULL
-            AND "type" = 'sale'
-            AND "partyId" IS NOT NULL
-            AND "totalAmount" > "paidAmount"
-          GROUP BY "partyId"
-        `,
+        //    19 Oct (Phase 5c): through oldestDueSaleSql — payments settled
+        //    against a bill later now count (was `totalAmount > paidAmount`,
+        //    which kept a cleared bill "unpaid" and aged udhaar too old).
+        db.$queryRaw<Array<{ partyId: string; oldest: Date }>>(oldestDueSaleSql(userId))
+          .then((rows) => rows.map((x) => ({ partyId: x.partyId, oldestUnpaidSaleDate: x.oldest }))),
         /*
          * 4. 🔒 SETTLEMENTS MADE IN THE PERIOD (2026-08-03).
          *

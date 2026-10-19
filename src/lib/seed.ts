@@ -1,5 +1,7 @@
 import { db } from '@/lib/db'
 import { calculateGst, splitGst, roundMoney } from '@/lib/money'
+import { computeLineItems } from '@/lib/line-items'
+import { chargesGstOnSales, gstStatus } from '@/lib/shop-tax'
 
 // Indian shop demo data — Kirana / General Store
 export async function seedDemoData(userId: string) {
@@ -68,6 +70,8 @@ export async function seedDemoData(userId: string) {
 
   const salesData: any[] = []
   const purchaseData: any[] = []
+  const productMap = new Map(createdProducts.map((p) => [p.id, p]))
+  const shopChargesGst = chargesGstOnSales(gstStatus(await db.setting.findUnique({ where: { userId } })))
 
   for (let dayOffset = 60; dayOffset >= 0; dayOffset--) {
     const date = new Date(now)
@@ -78,43 +82,21 @@ export async function seedDemoData(userId: string) {
     for (let s = 0; s < salesCount; s++) {
       const customer = customers[Math.floor(Math.random() * customers.length)]
       const itemCount = 1 + Math.floor(Math.random() * 4)
-      const items: any[] = []
-      let subtotal = 0
-      let cgst = 0, sgst = 0
-      let profit = 0
-
-      for (let i = 0; i < itemCount; i++) {
+      const raw = Array.from({ length: itemCount }, () => {
         const product = createdProducts[Math.floor(Math.random() * createdProducts.length)]
-        const qty = 1 + Math.floor(Math.random() * 5)
-        const unitPrice = product.salePrice
-        const amount = qty * unitPrice
-        // 🔒 FIX L5: Was `amount * product.gstRate / 100` — float-precision
-        // (e.g., 0.30000000000000004). Now uses calculateGst from money.ts.
-        const itemGst = calculateGst(amount, product.gstRate)
-        const itemProfit = (product.salePrice - product.purchasePrice) * qty
-
-        const { cgst: itemCgst, sgst: itemSgst } = splitGst(itemGst)
-        items.push({
-          productId: product.id,
-          productName: product.name,
-          quantity: qty,
-          unitPrice,
-          gstRate: product.gstRate,
-          cgst: itemCgst,  // 🔒 FIX L9: per-item GST (was missing)
-          sgst: itemSgst,
-          igst: 0,
-          total: amount + itemGst,
-        })
-
-        subtotal += amount
-        // 🔒 FIX L5: Use the per-item split values (already computed above)
-        cgst = roundMoney(cgst + itemCgst)
-        sgst = roundMoney(sgst + itemSgst)
-        profit += itemProfit
-      }
-
-      const discountAmount = Math.random() > 0.7 ? Math.floor(subtotal * 0.02) : 0
-      const totalAmount = subtotal - discountAmount + cgst + sgst
+        return { productId: product.id, productName: product.name, quantity: 1 + Math.floor(Math.random() * 5), unitPrice: product.salePrice, gstRate: product.gstRate, unit: product.unit }
+      })
+      /*
+       * Through the billing code itself (19 Oct, Phase 5c). This used to build
+       * the lines by hand: no cost price on them and the bill discount not
+       * split, so profit by item added up to ₹54,092 against ₹8,526 on the
+       * bills — and GST was put on a not-registered shop's sales. A first pass
+       * with no discount gives the subtotal the 2% discount is taken from.
+       */
+      const build = (orderDiscount: number) => computeLineItems({ items: raw, productMap, isInterState: false, orderDiscount, type: 'sale', chargesGst: shopChargesGst })
+      const discountAmount = Math.random() > 0.7 ? Math.floor(build(0).subtotal * 0.02) : 0
+      const bill = build(discountAmount)
+      const totalAmount = bill.totalBeforeRoundOff
       const isCredit = Math.random() > 0.75
       const paidAmount = isCredit ? Math.floor(totalAmount * 0.5) : totalAmount
 
@@ -123,17 +105,17 @@ export async function seedDemoData(userId: string) {
         type: 'sale',
         partyId: customer.id,
         date: new Date(date),
-        subtotal,
+        subtotal: bill.subtotal,
         discountAmount,
-        cgst,
-        sgst,
-        igst: 0,
+        cgst: bill.cgst,
+        sgst: bill.sgst,
+        igst: bill.igst,
         totalAmount,
         paidAmount,
         paymentMode: ['cash', 'upi', 'card'][Math.floor(Math.random() * 3)],
         isInterState: false,
-        grossProfit: profit,
-        items: { create: items },
+        grossProfit: bill.grossProfit,
+        items: { create: bill.txItems },
         invoiceNo: `INV-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}-${String(salesData.length + 1).padStart(3, '0')}`,
       })
     }
@@ -201,6 +183,23 @@ export async function seedDemoData(userId: string) {
   }
   for (const purchase of purchaseData) {
     await db.transaction.create({ data: purchase })
+  }
+
+  /*
+   * Stock. The levels listed above are what the shop holds TODAY; the opening
+   * stock is worked back from the sample bills, so opening + bought − sold =
+   * current — the running balance the billing code keeps. These bills are
+   * written directly, so nothing else moves the stock (19 Oct: current stock
+   * was left at 0 and a new demo shop showed every item out of stock).
+   */
+  const moved = new Map<string, number>()
+  for (const t of [...salesData, ...purchaseData]) {
+    for (const l of t.items.create) moved.set(l.productId, (moved.get(l.productId) ?? 0) + (t.type === 'purchase' ? l.quantity : -l.quantity))
+  }
+  for (const p of createdProducts) {
+    const net = moved.get(p.id) ?? 0
+    const opening = Math.max(0, p.openingStock - net)
+    await db.product.update({ where: { id: p.id }, data: { openingStock: opening, currentStock: opening + net } })
   }
 
   // 5. Create some expenses

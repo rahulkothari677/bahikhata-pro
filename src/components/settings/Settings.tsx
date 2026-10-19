@@ -876,7 +876,7 @@ export function Settings({
     if (!hostTitle) return false
     // '&' and the word 'and' both fold away, so a "Staff Access" card sitting
     // under a "Staff & Access" page is recognised as the echo it is.
-    const fold = (t: string) => t.toLowerCase().replace(/&/g, ' ').replace(/and/g, ' ').replace(/[^a-z0-9]/g, '')
+    const fold = (t: string) => t.toLowerCase().replace(/&/g, ' ').replace(/\band\b/g, ' ').replace(/[^a-z0-9]/g, '')
     return fold(hostTitle) === fold(title)
   }
 

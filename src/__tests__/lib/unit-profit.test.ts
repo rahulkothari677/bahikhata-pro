@@ -127,9 +127,8 @@ function findLines(source: string, re: RegExp): number[] {
   return out
 }
 
-const ALLOWED_SALE_MINUS_COST: Record<string, { count: number; why: string }> = {
-  'src/lib/seed.ts': { count: 1, why: 'Sample products are all priced before GST; the seed adds GST on top (calculateGst), so sale − cost is the taxable profit.' },
-}
+// Empty since 19 Oct (Phase 5c): the demo-data maker (seed.ts) worked sale − cost by hand; it now bills through computeLineItems.
+const ALLOWED_SALE_MINUS_COST: Record<string, { count: number; why: string }> = {}
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = []

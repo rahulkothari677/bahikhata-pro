@@ -431,6 +431,16 @@ cause**, never as a new line at the bottom.
   same day. **When a change alters a stored value's meaning, grep every place
   that reads it as an INPUT (pre-fills, defaults, copies), not just displays.**
 
+· **19 Oct (5c-1): a second WRITER of one record.** The demo-data maker built
+  sale lines by hand — no cost on the line, discount not split, GST on a
+  not-registered shop — so a correct Insights engine showed profit by category
+  ₹54,092 against ₹8,526 on the bills, and I spent an hour suspecting the
+  engine. **When one function builds a record, every writer of that record
+  calls it** (bill-lines-one-builder.test.ts), and a test of a READER on data
+  that bypassed the builder proves nothing about the reader. Also: a test call
+  with `to=2026-09-30` read as UTC midnight dropped a day — hand-check the
+  window before blaming the sums.
+
 **Cause 3 — A refusal that isn't a refusal**
 · Advice/predictions returned null from the parser; the model answered them
 · **Then the identical thing with impossible dates, hours later**

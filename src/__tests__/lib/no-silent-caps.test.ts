@@ -161,17 +161,19 @@ describe('a cap is allowed — being silent about it is not', () => {
     expect(src).toContain('take: 5000')   // the fuse is deliberate and stays
   })
 
-  test('the margin trend is summed by the database, not from capped rows', () => {
+  test('insights totals are summed by the database, never from capped rows', () => {
     /*
-     * The one real number in this pass. "Your margin dropped 5.2%" was
-     * computed by reducing over a 5,000-row slice of a 60-day window — about
-     * 12,000 bills at 200 a day — and the rows dropped were the OLDEST in
-     * each half, which is the direction that fabricates a trend.
+     * The old feed's "Your margin dropped 5.2%" was computed by reducing over
+     * a 5,000-row slice of a 60-day window, dropping the OLDEST rows — the
+     * direction that fabricates a trend. Phase 5c replaced the feed with the
+     * section engine: every total is a database sum (groupBy / aggregate /
+     * SQL SUM), the only caps are top-10 lists, and no findMany loads bills.
      */
     const src = read('src/app/api/insights/route.ts')
-    expect(src).toContain('marginTotals')
     expect(src).toMatch(/groupBy/)
-    expect(src).not.toMatch(/last30Sales\.reduce/)
-    expect(src).not.toMatch(/prev30Sales\.reduce/)
+    expect(src).toMatch(/SUM\(/)
+    expect(src).not.toMatch(/transaction\.findMany/)
+    expect(src).not.toMatch(/take:\s*\d{3,}/)
+    expect(src).toMatch(/const TOP = 10/)
   })
 })

@@ -1,424 +1,371 @@
-import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
+import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { shouldHideProfit } from '@/lib/profit-visibility'
-import { roundMoney, fromPaise } from '@/lib/money'
-import { activeTransactionWhere } from '@/lib/query-helpers'
-import { getReceivablePayable } from '@/lib/party-balance'
-import { computeInvoiceDue } from '@/lib/invoice-due'
+import { noStore } from '@/lib/cache'
 import { apiError } from '@/lib/api-error'
-import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
+import { activeTransactionWhere } from '@/lib/query-helpers'
+import { fromPaise, roundMoney } from '@/lib/money'
+import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
+import { istLocal } from '@/lib/ist-sql'
+import { getReceivablePayable } from '@/lib/party-balance'
+import { netSalesProfit, netSalesTaxable, netSalesTotal } from '@/lib/net-sales'
+import { rangeWindow } from '@/lib/period'
+import { trendBuckets } from '@/lib/trend-buckets'
+import { abcGroups, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMATCHED } from '@/lib/insights'
+import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
 
-// ⏱️ Vercel serverless timeout — insights aggregates dashboard data and
-// may call AI for smart alerts. Set explicit maxDuration.
-// (Audit fix Phase 1.3)
+/**
+ * GET /api/insights?section=sales|items|customers|udhaar|profit[&from&to]
+ *
+ * Phase 5c (ledger model v4 §2–3): the ONE insights engine. It replaces the
+ * old alert feed here (critical/warning cards — the v3 "feed of insight cards"
+ * that v4 removed) and, in 5c-4, the client rules in SmartInsights.tsx (#240:
+ * two engines describing one thing).
+ *
+ * Read-only. The database does every sum and count; lib/insights.ts only
+ * arranges the totals it returns into groups that add up to the whole. The
+ * same definitions as Home and Reports: sales = sale − credit-note
+ * totalAmount; item sales = line value before GST (the shared line-taxable
+ * SQL) net of returns; profit = stored grossProfit, per line the same
+ * line-items.ts rule through purchasePriceAtSale. Group rows summed from lines
+ * add up to the bills' own totals; any gap is its own row (`remainder`).
+ * Lists are top 10; every group carries its count, so a list is never mistaken
+ * for the whole. Profit follows the hide-profit setting.
+ */
+
 export const maxDuration = 60
+const SECTIONS = ['sales', 'items', 'customers', 'udhaar', 'profit'] as const
+type Section = (typeof SECTIONS)[number]
+const TOP = 10
 
-// GET /api/insights - AI-powered smart insights and alerts
-//
-// 🔒 AUDIT FIX V7 M1: Was loading ALL transactions (with items + party)
-// into memory and re-deriving stock from openingStock + Σ(purchases) − Σ(sales).
-// Two problems:
-//   1. Scale: unbounded findMany → slow + memory-heavy at scale
-//   2. Consistency: re-derived stock disagreed with the `currentStock`
-//      column used by dashboard/reports (the single source of truth)
-//
-// Now: reads `currentStock` from the Product column (O(1)), uses bounded
-// queries (last 30 days) for sales-velocity insights, and uses the shared
-// getReceivablePayable() helper for outstanding dues. No more loading
-// all-time transactions.
-export async function GET() {
+type Num = unknown
+const p2r = (v: Num) => fromPaise(Number(v ?? 0))
+
+export async function GET(req: NextRequest) {
   try {
-    // 🔒 V26 N4: Switched from getAuthUserIdWithModule('dashboard') to
-    // getAuthContext() so we can read the caller's role and gate profit-bearing
-    // insights behind shouldHideProfit. Without this gate, a staff member the
-    // owner explicitly hid profit from could read the exact profit margin and
-    // its trend from the insights feed (and via the raw /api/insights response).
     const authCtx = await getAuthContext()
     if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const userId = authCtx.userId
-
     if (!canAccessModule(authCtx.role, authCtx.permissions, 'dashboard')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-
-    // 🔒 V26 N4: When the owner has hidden profit from staff and the caller is
-    // staff, the entire profit-category insight block (margin-drop, margin-up,
-    // and any future insight whose category === 'profit') is skipped.
-    const hideProfit = await shouldHideProfit(userId, authCtx.role)
-
+    const userId = authCtx.userId
+    const { searchParams } = new URL(req.url)
+    const section = (searchParams.get('section') ?? 'sales') as Section
+    if (!SECTIONS.includes(section)) return NextResponse.json({ error: 'Unknown section' }, { status: 400 })
     const now = new Date()
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000)
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000)
-    const sixtyDaysAgo = new Date(now.getTime() - 60 * 86400000)  // for 30-day comparison
+    const w = rangeWindow(searchParams.get('from'), searchParams.get('to'), now)
+    if (!w) return NextResponse.json({ error: 'Bad period' }, { status: 400 })
+    const hideProfit = await shouldHideProfit(userId, authCtx.role)
+    if (section === 'profit' && hideProfit) return NextResponse.json({ error: 'Profit is hidden for this account' }, { status: 403 })
 
-    // 🔒 V7 M1: Bounded queries — only fetch what we need, only last 60 days max.
-    // Was: db.transaction.findMany({ where: activeTransactionWhere(userId), include: { items, party } })
-    // with NO date filter → loaded ALL transactions for the user.
-    const [products, salesVelocityRows, topProductRows, productsWithSales30d, recentTransactions, receivablePayable] = await Promise.all([
-      // Products — read currentStock column directly (no re-derivation)
-      // 🔒 AUDIT PASS-1 N4: defensive cap, matching this file's own existing
-      // convention (`take: 5000` on the transaction fetch below, added by FIX
-      // M16 for the same reason).
-      //
-      // Unlike the dashboard's product read, this one cannot become a pure
-      // aggregate: the insight generators genuinely iterate products to compute
-      // stock-out velocity predictions and dead-stock candidates. So it is
-      // bounded rather than rewritten.
-      //
-      // ORDERING MATTERS: rows come back most-depleted first. If a catalogue
-      // ever exceeds the cap, the products retained are the ones most likely to
-      // produce an actionable insight ("running out soon"), rather than an
-      // arbitrary 5,000 in primary-key order. Truncation should degrade the
-      // tail of the list, not its usefulness.
-      db.product.findMany({
-        // Services excluded at the query: every insight built from these rows
-        // is a stock insight ("OUT OF STOCK", "below threshold", "Record
-        // Purchase"), and none of them means anything for a haircut. A service
-        // would otherwise generate a permanent, undismissable OUT OF STOCK
-        // alert from the moment it is created.
-        where: { userId, tracksInventory: true },
-        select: {
-          id: true,
-          name: true,
-          unit: true,
-          purchasePrice: true,
-          currentStock: true,  // 🔒 V7 M1: use the column, not openingStock
-          lowStockThreshold: true,
-        },
-        orderBy: { currentStock: 'asc' },
-        take: 5000,
-      }),
-      // 🔒 FIX M16: Was `findMany({ include: { items: true } })` loading 60 days
-      // of transactions with all items into memory (30K rows at scale → OOM).
-      // Now: two targeted queries:
-      // 1. SQL GROUP BY for per-product 7-day sales velocity (stock-out predictions)
-      // 2. findMany WITHOUT items + take:5000 for header-only needs (dues, margin)
-      db.$queryRaw<Array<{ productId: string; totalQty: number }>>`
-        SELECT ti."productId", SUM(ti."quantity") AS "totalQty"
-        FROM "TransactionItem" ti
-        JOIN "Transaction" t ON ti."transactionId" = t.id
-        WHERE t."userId" = ${userId}
-          AND t."deletedAt" IS NULL
-          AND t."type" = 'sale'
-          AND t."date" >= ${sevenDaysAgo}
-        GROUP BY ti."productId"
-      `,
-      // 🔒 FIX M16: Top product (last 30 days) — SQL aggregate instead of JS loop
-      //
-      // 🔒 V17 PAISE MIGRATION Phase 2A: SQL now returns paise (integer) instead
-      // of rupees (Float). The transformation is:
-      //   Old: SUM(ROUND(qty*price, 2)) AS "totalRevenue"          → Float rupees
-      //   New: SUM(ROUND(qty*price, 2) * 100)::bigint AS "totalRevenuePaise"  → Int paise
-      //
-      // 🔒 AUDIT PASS-1 H3: the cast is ::bigint, NOT ::int. Postgres int4 caps
-      // at 2,147,483,647 paise = ₹21,47,483.65. A single product crossing that
-      // in a 30-day window made this whole endpoint throw "integer out of range"
-      // → 500 on /api/insights. That is an ordinary month for a wholesaler.
-      // The consumer at the bottom of this file already wraps in Number().
-      //
-      // Why this preserves behavior:
-      //   - Per-item rounding is unchanged: ROUND(qty*price, 2) still happens per item.
-      //   - The * 100 and ::bigint happen AFTER the per-item round, so the integer
-      //     paise value is exactly round(rupee_value * 100) — no float drift.
-      //   - At the display boundary, fromPaise(paise) = paise / 100 gives back
-      //     the same rupee Float the UI used to receive.
-      //
-      // Why bother: when Phase 4 changes the column type from Float to Int
-      // (paise), this SQL simplifies to just `SUM("unitPricePaise" * "quantity")::bigint`
-      // — no calling-code changes needed because the contract (returns paise)
-      // is already established here.
-      db.$queryRaw<Array<{ productName: string; productId: string | null; totalRevenuePaise: bigint; totalQty: number }>>`
-        SELECT
-          ti."productName",
-          ti."productId",
-          SUM(${LINE_GROSS_SQL})::bigint AS "totalRevenuePaise",
-          SUM(ti."quantity") AS "totalQty"
-        FROM "TransactionItem" ti
-        JOIN "Transaction" t ON ti."transactionId" = t.id
-        WHERE t."userId" = ${userId}
-          AND t."deletedAt" IS NULL
-          AND t."type" = 'sale'
-          AND t."date" >= ${thirtyDaysAgo}
-        GROUP BY ti."productName", ti."productId"
-        ORDER BY "totalRevenuePaise" DESC
-        LIMIT 1
-      `,
-      // 🔒 FIX M16: Products that had sales in 30 days (for dead-stock detection)
-      db.$queryRaw<Array<{ productId: string }>>`
-        SELECT DISTINCT ti."productId"
-        FROM "TransactionItem" ti
-        JOIN "Transaction" t ON ti."transactionId" = t.id
-        WHERE t."userId" = ${userId}
-          AND t."deletedAt" IS NULL
-          AND t."type" = 'sale'
-          AND t."date" >= ${thirtyDaysAgo}
-          AND ti."productId" IS NOT NULL
-      `,
-      db.transaction.findMany({
-        where: activeTransactionWhere(userId, {
-          // 🔒 V17 Audit Phase 5 (Bug I): Include credit notes so margin insights
-          // are net of returns. Was: type: 'sale' only → margin overstated because
-          // credit notes (which reduce profit) were excluded from the calc.
-          type: { in: ['sale', 'credit-note'] },
-          date: { gte: sixtyDaysAgo },
-        }),
-        orderBy: { date: 'desc' },
-        take: 5000,  // 🔒 FIX M16: defensive cap — prevents OOM at scale
-        // 🔒 AUDIT C5: allocations, so a Settle-cleared bill is not reported overdue.
-        include: { paymentAllocations: { select: { amount: true } } },
-      }),
-      // 🔒 V7 H1+H2: Use shared helper for receivable/payable (correct balances)
-      getReceivablePayable(userId),
-    ])
-
-    const insights: any[] = []
-
-    // Split recent sales into last-30-days and prev-30-days for margin comparison
-    const last30Sales = recentTransactions.filter(t => t.date >= thirtyDaysAgo)
-    const prev30Sales = recentTransactions.filter(t => t.date < thirtyDaysAgo && t.date >= sixtyDaysAgo)
-
-    // 1. Stock-out predictions based on sales velocity (last 7 days)
-    // 🔒 FIX M16: Was O(products × transactions × items) JS loop. Now uses
-    // pre-computed SQL GROUP BY result (O(products) lookup).
-    const velocityMap = new Map<string, number>()
-    for (const row of salesVelocityRows) {
-      if (row.productId) velocityMap.set(row.productId, Number(row.totalQty))
-    }
-
-    for (const p of products) {
-      const stock = p.currentStock  // read the column directly
-      if (stock <= 0) continue
-
-      const soldIn7Days = velocityMap.get(p.id) || 0
-
-      if (soldIn7Days > 0) {
-        const dailyVelocity = soldIn7Days / 7
-        const daysUntilOut = Math.floor(stock / dailyVelocity)
-        if (daysUntilOut <= 7) {
-          insights.push({
-            id: `stock-${p.id}`,
-            type: daysUntilOut <= 3 ? 'critical' : 'warning',
-            category: 'stock',
-            title: `${p.name} will run out in ${daysUntilOut} days`,
-            description: `Selling ${dailyVelocity.toFixed(1)} ${p.unit}/day, current stock: ${stock} ${p.unit}. Reorder soon!`,
-            action: 'reorder',
-            actionLabel: 'Record Purchase',
-            productId: p.id,
-          })
-        }
-      }
-    }
-
-    // 2. Out of stock + low stock alerts (uses currentStock column)
-    for (const p of products) {
-      const stock = p.currentStock
-      if (stock <= 0) {
-        insights.push({
-          id: `out-${p.id}`,
-          type: 'critical',
-          category: 'stock',
-          title: `${p.name} is OUT OF STOCK`,
-          description: `Restock immediately — you're losing sales.`,
-          action: 'reorder',
-          actionLabel: 'Record Purchase',
-          productId: p.id,
-        })
-      } else if (stock <= p.lowStockThreshold) {
-        insights.push({
-          id: `low-${p.id}`,
-          type: 'warning',
-          category: 'stock',
-          title: `${p.name} is below threshold`,
-          description: `Stock: ${stock} ${p.unit} (threshold: ${p.lowStockThreshold}). Consider reordering.`,
-          action: 'reorder',
-          actionLabel: 'Record Purchase',
-          productId: p.id,
-        })
-      }
-    }
-
-    // 3. Outstanding dues alerts (uses shared helper — correct balances)
-    for (const [partyId, balanceInfo] of receivablePayable.partyBalances) {
-      const balance = balanceInfo.balance
-      if (balance > 500) {
-        // Find oldest unpaid sale in the bounded window for the overdue calculation.
-        // Note: this is approximate (only looks at last 60 days) — if the oldest
-        // unpaid sale is older than 60 days, daysOverdue will be 0. Acceptable
-        // for an insights widget; the party detail page has the exact date.
-        const partySales = recentTransactions.filter(t => t.partyId === partyId)
-        // 🔒 AUDIT C5: a bill settled through "Settle" is paid, even though its
-        // paidAmount is still 0. Filtering on `total − paidAmount` would treat
-        // it as unpaid and report an overdue age for a bill the customer has
-        // already cleared — the app chasing money it has been given.
-        const unpaidSales = partySales
-          .filter(t => computeInvoiceDue({
-            totalAmount: t.totalAmount,
-            paidAmount: t.paidAmount,
-            allocatedAmount: (t as any).paymentAllocations?.reduce(
-              (s: number, a: any) => s + (a.amount || 0), 0,
-            ) || 0,
-          }) > 0)
-          .sort((a, b) => a.date.getTime() - b.date.getTime())
-        const oldest = unpaidSales[0]
-        const daysOverdue = oldest ? Math.floor((now.getTime() - oldest.date.getTime()) / 86400000) : 0
-
-        // Get party name (need to fetch — the helper only returns balances)
-        // For efficiency, we skip the name lookup here and let the frontend
-        // resolve it. If the frontend needs the name, it can fetch the party.
-        // For now, use a generic label.
-        insights.push({
-          id: `due-${partyId}`,
-          type: daysOverdue > 15 ? 'critical' : daysOverdue > 7 ? 'warning' : 'info',
-          category: 'dues',
-          title: `Outstanding: ₹${balance.toFixed(0)}`,
-          description: daysOverdue > 0
-            ? `Oldest unpaid: ${daysOverdue} days ago. Send a reminder?`
-            : `Outstanding balance: ₹${balance.toFixed(0)}`,
-          action: 'remind',
-          actionLabel: 'Send Reminder',
-          partyId,
-          amount: balance,
-        })
-      }
-    }
-
-    // 4. Profit margin insights (last 30 days vs prev 30 days)
-    // 🔒 V17 Audit Phase 5 (Bug I): Margin is now net of credit notes.
-    // Credit notes have NEGATIVE grossProfit and POSITIVE totalAmount.
-    // Net profit = Σ grossProfit (sale positive + credit-note negative).
-    // Net revenue = Σ totalAmount(sale) - Σ totalAmount(credit-note).
-    // Was: type='sale' only → margin overstated (credit notes excluded).
-    //
-    // 🔒 V26 N4: Skip the entire profit-category insight block when hideProfit
-    // is on. The exact profit margin (and its trend) is the number the owner
-    // hid — surfacing "margin dropped 5.2%" leaks both the absolute margin and
-    // the delta. Stock/dues/sales insights remain (they don't reveal profit).
-    if (!hideProfit && last30Sales.length > 0 && prev30Sales.length > 0) {
-      /*
-       * 🔒 #71: THE MARGIN IS SUMMED BY THE DATABASE, OVER EVERY BILL.
-       *
-       * These four totals were `reduce` over `last30Sales` / `prev30Sales` —
-       * slices of a fetch capped at 5,000 rows across 60 days. A shop doing
-       * 200 transactions a day writes about 12,000 in that window, so "your
-       * margin dropped 5.2%" was computed from roughly 40% of the bills, and
-       * the missing 60% were the OLDEST ones in each half — which is exactly
-       * the direction that fabricates a trend. A made-up trend on the owner's
-       * profit is worse than no insight at all.
-       *
-       * Grouping by type keeps the credit-note arithmetic identical: profit
-       * is the plain sum (credit notes carry negative grossProfit), revenue
-       * subtracts credit-note totals.
-       */
-      const marginTotals = async (gte: Date, lt: Date) => {
-        const rows = await db.transaction.groupBy({
-          by: ['type'],
-          where: {
-            userId, deletedAt: null,
-            type: { in: ['sale', 'credit-note'] },
-            date: { gte, lt },
-          },
-          _sum: { grossProfit: true, totalAmount: true },
-        })
-        let profit = 0
-        let revenue = 0
-        for (const r of rows) {
-          profit += r._sum.grossProfit || 0
-          revenue += r.type === 'credit-note'
-            ? -(r._sum.totalAmount || 0)
-            : (r._sum.totalAmount || 0)
-        }
-        return { profit, revenue }
-      }
-
-      const [lastTotals, prevTotals] = await Promise.all([
-        marginTotals(thirtyDaysAgo, now),
-        marginTotals(sixtyDaysAgo, thirtyDaysAgo),
-      ])
-      const lastProfit = lastTotals.profit
-      const lastRevenue = lastTotals.revenue
-      const prevProfit = prevTotals.profit
-      const prevRevenue = prevTotals.revenue
-
-      const lastMargin = lastRevenue > 0 ? (lastProfit / lastRevenue) * 100 : 0
-      const prevMargin = prevRevenue > 0 ? (prevProfit / prevRevenue) * 100 : 0
-      const marginChange = lastMargin - prevMargin
-
-      if (marginChange < -3) {
-        insights.push({
-          id: 'margin-drop',
-          type: 'warning',
-          category: 'profit',
-          title: `Profit margin dropped ${Math.abs(marginChange).toFixed(1)}%`,
-          description: `Current: ${lastMargin.toFixed(1)}% vs previous: ${prevMargin.toFixed(1)}%. Review pricing or costs.`,
-          action: 'reports',
-          actionLabel: 'View P&L Report',
-        })
-      } else if (marginChange > 3) {
-        insights.push({
-          id: 'margin-up',
-          type: 'success',
-          category: 'profit',
-          title: `Profit margin improved ${marginChange.toFixed(1)}%`,
-          description: `Current: ${lastMargin.toFixed(1)}% vs previous: ${prevMargin.toFixed(1)}%. Keep it up!`,
-          action: 'reports',
-          actionLabel: 'View Details',
-        })
-      }
-    }
-
-    // 5. Top performer insights (last 30 days) — 🔒 FIX M16: uses SQL aggregate
-    // 🔒 V17 PAISE MIGRATION Phase 2A: SQL now returns paise; convert to rupees
-    // for display using fromPaise(). Behavior is identical to the old code
-    // because fromPaise(p) = p / 100 — the same value the UI used to receive.
-    const topProduct = topProductRows[0]
-    if (topProduct) {
-      insights.push({
-        id: 'top-product',
-        type: 'info',
-        category: 'sales',
-        title: `${topProduct.productName} is your bestseller`,
-        description: `₹${fromPaise(Number(topProduct.totalRevenuePaise)).toFixed(0)} revenue from ${Number(topProduct.totalQty)} units sold in last 30 days.`,
-        action: 'inventory',
-        actionLabel: 'View Product',
-      })
-    }
-
-    // 6. Dead stock detection (no sales in 30 days, but has stock)
-    // 🔒 FIX M16: Was O(products × transactions × items) JS loop. Now uses
-    // pre-computed SQL DISTINCT result — O(products) set lookup.
-    const productsSold30d = new Set(productsWithSales30d.map(r => r.productId))
-    const deadStock = products.filter(p =>
-      p.currentStock > 0 && !productsSold30d.has(p.id)
-    )
-
-    if (deadStock.length > 0) {
-      const deadStockValue = roundMoney(deadStock.reduce((s, p) => s + p.currentStock * p.purchasePrice, 0))
-      insights.push({
-        id: 'dead-stock',
-        type: 'warning',
-        category: 'stock',
-        title: `${deadStock.length} products with no sales in 30 days`,
-        description: `Dead stock worth ₹${deadStockValue.toFixed(0)}. Consider discounting to clear.`,
-        action: 'inventory',
-        actionLabel: 'View Products',
-      })
-    }
-
-    // Sort: critical first, then warning, then info/success
-    const typeOrder = { critical: 0, warning: 1, info: 2, success: 3 }
-    insights.sort((a, b) => typeOrder[a.type as keyof typeof typeOrder] - typeOrder[b.type as keyof typeof typeOrder])
-
-    return NextResponse.json({
-      insights,
-      summary: {
-        total: insights.length,
-        critical: insights.filter(i => i.type === 'critical').length,
-        warnings: insights.filter(i => i.type === 'warning').length,
-      },
-    })
+    const ctx = { userId, w, now, hideProfit }
+    const body: object = await withConnectionRetry((): Promise<object> => (
+      section === 'sales' ? salesSection(ctx)
+        : section === 'items' ? itemsSection(ctx)
+        : section === 'customers' ? customersSection(ctx)
+        : section === 'udhaar' ? udhaarSection(ctx)
+        : profitSection(ctx)
+    ))
+    return noStore({ section, from: w.from, to: w.to, ...body })
   } catch (error) {
-    return apiError(error, 'Failed to generate insights', 500)
+    return apiError(error, 'Failed to load insights', 500)
+  }
+}
+
+interface Ctx { userId: string; w: NonNullable<ReturnType<typeof rangeWindow>>; now: Date; hideProfit: boolean }
+
+/** Sums by type in a window (the net-sales helpers' inputs). */
+async function sumsByType(userId: string, from: Date, to: Date, types: string[]) {
+  const rows = await db.transaction.groupBy({
+    by: ['type'],
+    where: activeTransactionWhere(userId, { type: { in: types }, date: { gte: from, lte: to } }),
+    _sum: { totalAmount: true, subtotal: true, discountAmount: true, grossProfit: true, paidAmount: true },
+    _count: { _all: true },
+  })
+  return (type: string) => {
+    const r = rows.find((x) => x.type === type)
+    return {
+      totalAmount: r?._sum.totalAmount ?? 0, subtotal: r?._sum.subtotal ?? 0, discountAmount: r?._sum.discountAmount ?? 0,
+      grossProfit: r?._sum.grossProfit ?? 0, paidAmount: r?._sum.paidAmount ?? 0, count: r?._count._all ?? 0,
+    }
+  }
+}
+
+/** Per-line value before GST, signed: + for a sale, − for a return. Table aliases ti / t. */
+const SIGNED_LINE = Prisma.sql`(CASE WHEN t."type" = 'sale' THEN ${LINE_TAXABLE_SQL} ELSE -${LINE_TAXABLE_SQL} END)`
+/**
+ * Per-line profit, signed — exactly what lib/line-items.ts booked on the line:
+ * value − Math.round(qty × cost at sale). FLOOR(x + 0.5) on the float product
+ * is Math.round to the bit (both IEEE doubles); ROUND on a numeric would round
+ * 100.49999999999999 up, and ROUND on a double rounds 50.5 to even.
+ * A typed-in line (no item) booked no profit, so it is 0 here too.
+ */
+const SIGNED_PROFIT = Prisma.sql`(CASE WHEN ti."productId" IS NULL THEN 0 WHEN t."type" = 'sale' THEN 1 ELSE -1 END) * (${LINE_TAXABLE_SQL} - FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)::numeric)`
+const SALE_LINES = (userId: string, from: Date, to: Date) => Prisma.sql`
+  FROM "TransactionItem" ti
+  JOIN "Transaction" t ON t."id" = ti."transactionId"
+  LEFT JOIN "Product" p ON p."id" = ti."productId"
+  WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL
+    AND t."type" IN ('sale', 'credit-note')
+    AND t."date" >= ${from} AND t."date" <= ${to}`
+
+// ─── Sales ──────────────────────────────────────────────────────────────
+
+async function salesSection({ userId, w }: Ctx) {
+  const [sums, modes, days, hours, cats] = await Promise.all([
+    sumsByType(userId, w.from, w.to, ['sale', 'credit-note']),
+    db.transaction.groupBy({
+      by: ['paymentMode'],
+      where: activeTransactionWhere(userId, { type: 'sale', date: { gte: w.from, lte: w.to } }),
+      _sum: { totalAmount: true, paidAmount: true },
+    }),
+    w.days <= 62 ? db.$queryRaw<Array<{ day: Date; paise: Num }>>`
+      SELECT DATE_TRUNC('day', ${istLocal('"date"')}) AS "day",
+             SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE -"totalAmount" END)::numeric AS "paise"
+      FROM "Transaction"
+      WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "type" IN ('sale', 'credit-note')
+        AND "date" >= ${w.from} AND "date" <= ${w.to}
+      GROUP BY 1` : Promise.resolve([]),
+    db.$queryRaw<Array<{ hour: number; paise: Num; bills: bigint }>>`
+      SELECT EXTRACT(HOUR FROM ${istLocal('"date"')})::int AS "hour", SUM("totalAmount")::numeric AS "paise", COUNT(*)::bigint AS "bills"
+      FROM "Transaction"
+      WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "type" = 'sale'
+        AND "date" >= ${w.from} AND "date" <= ${w.to}
+      GROUP BY 1`,
+    db.$queryRaw<Array<{ category: string | null; paise: Num }>>`
+      SELECT p."category" AS "category", SUM(${SIGNED_LINE})::numeric AS "paise"
+      ${SALE_LINES(userId, w.from, w.to)}
+      GROUP BY p."category"`,
+  ])
+  const sale = sums('sale'), ret = sums('credit-note')
+  const sales = netSalesTotal(sale, ret)
+  const bills = sale.count
+  // How bills were paid: what came in at the counter by mode, and what went on udhaar — shares of the bills' value.
+  const byMode = new Map<string, number>()
+  let udhaar = 0
+  for (const m of modes) {
+    const total = m._sum.totalAmount ?? 0, paid = m._sum.paidAmount ?? 0
+    const mode = ['cash', 'upi', 'card', 'bank'].includes(m.paymentMode ?? '') ? m.paymentMode! : 'other'
+    byMode.set(mode, roundMoney((byMode.get(mode) ?? 0) + paid))
+    udhaar = roundMoney(udhaar + Math.max(0, total - paid))
+  }
+  const payments = split([...[...byMode].map(([id, amount]) => ({ id, amount })), { id: 'udhaar', amount: udhaar }])
+  const dayMap = new Map<string, number>(days.map((d) => [new Date(d.day).toISOString(), p2r(d.paise)] as [string, number]))
+  const calendar = w.days <= 62 ? trendBuckets(w.from, w.to, 'day').map((b) => ({ day: b.key, label: b.label, amount: dayMap.get(b.key) ?? 0 })) : []
+  const hourRows = Array.from({ length: 24 }, (_, h) => {
+    const r = hours.find((x) => Number(x.hour) === h)
+    return { hour: h, perDay: r ? roundMoney(p2r(r.paise) / w.days) : 0, bills: r ? Number(r.bills) : 0 }
+  })
+  // Categories split the sales before GST; their rows add up to the bills' own figure, any gap its own row.
+  const beforeGst = netSalesTaxable(sale, ret)
+  const catRows = cats.map((c) => ({ id: c.category || '', amount: p2r(c.paise) }))
+  const unmatched = remainder(beforeGst, catRows.map((c) => c.amount))
+  if (unmatched !== 0) catRows.push({ id: UNMATCHED, amount: unmatched })
+  return {
+    totals: { sales, bills, averageBill: bills > 0 ? roundMoney(sales / bills) : 0, returns: ret.totalAmount },
+    payments, billsValue: sale.totalAmount, calendar, hours: hourRows,
+    categories: split(catRows), beforeGst, unmatched,
+  }
+}
+
+// ─── Items ──────────────────────────────────────────────────────────────
+
+async function itemsSection({ userId, w, now, hideProfit }: Ctx) {
+  const since90 = new Date(now.getTime() - 90 * 86_400_000)
+  const [perItem, productStats, notSold, productCount] = await Promise.all([
+    db.$queryRaw<Array<{ id: string; name: string; sales: Num; qty: Num; profit: Num }>>`
+      SELECT ti."productId" AS "id", MAX(p."name") AS "name",
+             SUM(${SIGNED_LINE})::numeric AS "sales",
+             SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END)::numeric AS "qty",
+             SUM(${SIGNED_PROFIT})::numeric AS "profit"
+      ${SALE_LINES(userId, w.from, w.to)} AND ti."productId" IS NOT NULL
+      GROUP BY ti."productId"`,
+    db.$queryRaw<Array<{ outCount: bigint; lowCount: bigint; stockPaise: Num }>>`
+      SELECT
+        COUNT(*) FILTER (WHERE "tracksInventory" = true AND "currentStock" <= 0)::bigint AS "outCount",
+        COUNT(*) FILTER (WHERE "tracksInventory" = true AND "currentStock" > 0 AND "currentStock" <= "lowStockThreshold")::bigint AS "lowCount",
+        COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric)) FILTER (WHERE "tracksInventory" = true), 0)::numeric AS "stockPaise"
+      FROM "Product" WHERE "userId" = ${userId}`,
+    // Goods in stock with no sale in the period, and with none in 90 days, with the stock they hold.
+    db.$queryRaw<Array<{ periodCount: bigint; periodPaise: Num; d90Count: bigint; d90Paise: Num }>>`
+      WITH sold AS (
+        SELECT ti."productId" AS pid, MAX(t."date") AS last
+        FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"
+        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale' AND t."date" >= ${since90 < w.from ? since90 : w.from}
+          AND ti."productId" IS NOT NULL
+        GROUP BY ti."productId"
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE s.last IS NULL OR s.last < ${w.from})::bigint AS "periodCount",
+        COALESCE(SUM(ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric)) FILTER (WHERE s.last IS NULL OR s.last < ${w.from}), 0)::numeric AS "periodPaise",
+        COUNT(*) FILTER (WHERE s.last IS NULL OR s.last < ${since90})::bigint AS "d90Count",
+        COALESCE(SUM(ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric)) FILTER (WHERE s.last IS NULL OR s.last < ${since90}), 0)::numeric AS "d90Paise"
+      FROM "Product" p LEFT JOIN sold s ON s.pid = p."id"
+      WHERE p."userId" = ${userId} AND p."tracksInventory" = true AND p."currentStock" > 0`,
+    db.product.count({ where: { userId } }),
+  ])
+  const items = perItem.map((r) => ({ id: r.id, name: r.name ?? '—', sales: p2r(r.sales), qty: Number(r.qty ?? 0), profit: p2r(r.profit) }))
+  const { groups } = abcGroups(items, productCount)
+  const sold = items.filter((x) => x.sales > 0).length
+  const st = productStats[0], ns = notSold[0]
+  const top = (key: 'sales' | 'qty' | 'profit') => [...items].filter((x) => x[key] > 0)
+    .sort((a, b) => b[key] - a[key] || a.name.localeCompare(b.name)).slice(0, TOP)
+    .map((x) => ({ id: x.id, name: x.name, sales: x.sales, qty: Math.round(x.qty * 100) / 100, profit: hideProfit ? null : x.profit }))
+  return {
+    totals: { sold, items: productCount, stockValue: p2r(st?.stockPaise), outOfStock: Number(st?.outCount ?? 0) },
+    abc: groups,
+    stock: {
+      out: Number(st?.outCount ?? 0), low: Number(st?.lowCount ?? 0),
+      notSoldPeriod: { count: Number(ns?.periodCount ?? 0), stockValue: p2r(ns?.periodPaise) },
+      notSold90: { count: Number(ns?.d90Count ?? 0), stockValue: p2r(ns?.d90Paise) },
+    },
+    top: { sales: top('sales'), qty: top('qty'), profit: hideProfit ? [] : top('profit') },
+  }
+}
+
+// ─── Customers ──────────────────────────────────────────────────────────
+
+async function customersSection({ userId, w, hideProfit }: Ctx) {
+  const [activity, customerCount, walkIn] = await Promise.all([
+    db.$queryRaw<Array<{ id: string; name: string; billsNow: bigint; salesNow: Num; profitNow: Num; billsPrev: bigint; salesPrev: Num; firstBill: Date | null }>>`
+      WITH a AS (
+        SELECT t."partyId" AS pid,
+          COUNT(*) FILTER (WHERE t."type" = 'sale' AND t."date" >= ${w.from} AND t."date" <= ${w.to})::bigint AS "billsNow",
+          COALESCE(SUM(CASE WHEN t."type" = 'sale' THEN t."totalAmount" ELSE -t."totalAmount" END) FILTER (WHERE t."date" >= ${w.from} AND t."date" <= ${w.to}), 0)::numeric AS "salesNow",
+          COALESCE(SUM(t."grossProfit") FILTER (WHERE t."date" >= ${w.from} AND t."date" <= ${w.to}), 0)::numeric AS "profitNow",
+          COUNT(*) FILTER (WHERE t."type" = 'sale' AND t."date" >= ${w.prevFrom} AND t."date" <= ${w.prevTo})::bigint AS "billsPrev",
+          COALESCE(SUM(CASE WHEN t."type" = 'sale' THEN t."totalAmount" ELSE -t."totalAmount" END) FILTER (WHERE t."date" >= ${w.prevFrom} AND t."date" <= ${w.prevTo}), 0)::numeric AS "salesPrev"
+        FROM "Transaction" t
+        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" IN ('sale', 'credit-note')
+          AND t."partyId" IS NOT NULL AND t."date" >= ${w.prevFrom} AND t."date" <= ${w.to}
+        GROUP BY t."partyId"
+      )
+      SELECT a.pid AS "id", p."name" AS "name", a."billsNow", a."salesNow", a."profitNow", a."billsPrev", a."salesPrev",
+        (SELECT MIN(t2."date") FROM "Transaction" t2 WHERE t2."userId" = ${userId} AND t2."partyId" = a.pid AND t2."deletedAt" IS NULL AND t2."type" = 'sale') AS "firstBill"
+      FROM a JOIN "Party" p ON p."id" = a.pid AND p."deletedAt" IS NULL`,
+    db.party.count({ where: { userId, deletedAt: null, type: { in: ['customer', 'both'] } } }),
+    sumsByType(userId, w.from, w.to, ['sale', 'credit-note']).then(async (all) => {
+      const named = await db.transaction.groupBy({
+        by: ['type'],
+        where: activeTransactionWhere(userId, { type: { in: ['sale', 'credit-note'] }, partyId: { not: null }, date: { gte: w.from, lte: w.to } }),
+        _sum: { totalAmount: true },
+      })
+      const n = (t: string) => ({ totalAmount: named.find((x) => x.type === t)?._sum.totalAmount ?? 0 })
+      return { total: netSalesTotal(all('sale'), all('credit-note')), named: netSalesTotal(n('sale'), n('credit-note')) }
+    }),
+  ])
+  const rows = activity.map((r) => ({
+    id: r.id, name: r.name, billsNow: Number(r.billsNow), salesNow: p2r(r.salesNow), profitNow: p2r(r.profitNow),
+    billsPrev: Number(r.billsPrev), salesPrev: p2r(r.salesPrev), firstBill: r.firstBill ? new Date(r.firstBill) : null,
+  }))
+  const groups = customerGroups(rows, w.from)
+  // Customers with no bill in either period are not in `activity`; they are inactive.
+  const counted = groups.reduce((s, g) => s + g.count, 0)
+  const inactive = groups.find((g) => g.id === 'inactive')!
+  inactive.count += Math.max(0, customerCount - counted)
+  const bought = rows.filter((r) => r.billsNow > 0).length
+  const walkInSales = roundMoney(walkIn.total - walkIn.named)
+  const top = (key: 'salesNow' | 'profitNow' | 'billsNow') => rows.filter((r) => r[key] > 0)
+    .sort((a, b) => b[key] - a[key] || a.name.localeCompare(b.name)).slice(0, TOP)
+    .map((r) => ({ id: r.id, name: r.name, sales: r.salesNow, bills: r.billsNow, profit: hideProfit ? null : r.profitNow }))
+  return {
+    totals: { bought, customers: Math.max(customerCount, counted), newCount: groups.find((g) => g.id === 'new')!.count, walkInShare: walkIn.total > 0 ? Math.round((walkInSales / walkIn.total) * 100) : 0 },
+    groups,
+    namedVsWalkIn: split([{ id: 'named', amount: walkIn.named }, { id: 'walkin', amount: walkInSales }]),
+    top: { sales: top('salesNow'), bills: top('billsNow'), profit: hideProfit ? [] : top('profitNow') },
+  }
+}
+
+// ─── Udhaar (as of today) ───────────────────────────────────────────────
+
+async function udhaarSection({ userId, w, now }: Ctx) {
+  const [rp, oldest, collected, given] = await Promise.all([
+    getReceivablePayable(userId),
+    // Oldest bill still due — computeInvoiceDue's rule in SQL (lib/invoice-due-sql.ts):
+    // payments settled against a bill later count, so a cleared bill is not "old udhaar".
+    db.$queryRaw<Array<{ partyId: string; oldest: Date }>>(oldestDueSaleSql(userId)),
+    db.payment.aggregate({ where: { userId, deletedAt: null, type: 'received', date: { gte: w.from, lte: w.to } }, _sum: { amount: true } }),
+    db.$queryRaw<Array<{ paise: Num }>>`
+      SELECT COALESCE(SUM("totalAmount" - "paidAmount") FILTER (WHERE "totalAmount" > "paidAmount"), 0)::numeric AS "paise"
+      FROM "Transaction"
+      WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "type" = 'sale' AND "partyId" IS NOT NULL
+        AND "date" >= ${w.from} AND "date" <= ${w.to}`,
+  ])
+  const oldestMap = new Map(oldest.map((r) => [r.partyId, new Date(r.oldest)]))
+  const balances = [...rp.partyBalances].map(([id, b]) => ({ id, balance: b.balance, oldestUnpaid: oldestMap.get(id) ?? null }))
+  const age = udhaarAge(balances, now)
+  const owing = balances.filter((b) => b.balance > 0).sort((a, b) => b.balance - a.balance)
+  const owed = balances.filter((b) => b.balance < 0).sort((a, b) => a.balance - b.balance)
+  const ids = [...owing.slice(0, TOP), ...owed.slice(0, 5)].map((b) => b.id)
+  const names = new Map((await db.party.findMany({ where: { id: { in: ids }, userId }, select: { id: true, name: true } })).map((p) => [p.id, p.name]))
+  return {
+    totals: { toCollect: rp.totalReceivable, customers: owing.length, collected: roundMoney(collected._sum.amount ?? 0), given: p2r(given[0]?.paise) },
+    age,
+    biggest: owing.slice(0, TOP).map((b) => ({ id: b.id, name: names.get(b.id) ?? '—', balance: b.balance, oldestUnpaid: b.oldestUnpaid })),
+    toPay: { total: rp.totalPayable, suppliers: owed.length, biggest: owed.slice(0, 5).map((b) => ({ id: b.id, name: names.get(b.id) ?? '—', balance: -b.balance })) },
+  }
+}
+
+// ─── Profit ─────────────────────────────────────────────────────────────
+
+async function profitSection({ userId, w }: Ctx) {
+  const [sums, cats, perItem, costUp] = await Promise.all([
+    sumsByType(userId, w.from, w.to, ['sale', 'credit-note', 'income', 'expense']),
+    // Every line, by the item's category; typed-in lines (no item, no cost price) as their own row.
+    db.$queryRaw<Array<{ category: string; sales: Num; profit: Num }>>`
+      SELECT CASE WHEN ti."productId" IS NULL THEN ${TYPED_IN} ELSE COALESCE(p."category", '') END AS "category",
+             SUM(${SIGNED_LINE})::numeric AS "sales", SUM(${SIGNED_PROFIT})::numeric AS "profit"
+      ${SALE_LINES(userId, w.from, w.to)}
+      GROUP BY 1`,
+    db.$queryRaw<Array<{ id: string; name: string; sales: Num; profit: Num }>>`
+      SELECT ti."productId" AS "id", MAX(p."name") AS "name", SUM(${SIGNED_LINE})::numeric AS "sales", SUM(${SIGNED_PROFIT})::numeric AS "profit"
+      ${SALE_LINES(userId, w.from, w.to)} AND ti."productId" IS NOT NULL
+      GROUP BY ti."productId"`,
+    // The last two purchase prices of each product: where the latest is higher, the cost went up.
+    db.$queryRaw<Array<{ id: string; name: string; salePrice: Num; latest: Num; previous: Num; latestDate: Date }>>`
+      WITH buys AS (
+        SELECT ti."productId" AS pid, ti."unitPrice" AS cost, t."date" AS d,
+               ROW_NUMBER() OVER (PARTITION BY ti."productId" ORDER BY t."date" DESC, t."id" DESC) AS rn
+        FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"
+        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'purchase'
+          AND ti."productId" IS NOT NULL AND ti."unitPrice" > 0
+      )
+      SELECT p."id", p."name", p."salePrice" AS "salePrice", l.cost AS "latest", pr.cost AS "previous", l.d AS "latestDate"
+      FROM buys l
+      JOIN buys pr ON pr.pid = l.pid AND pr.rn = 2
+      JOIN "Product" p ON p."id" = l.pid
+      WHERE l.rn = 1 AND l.cost > pr.cost
+      ORDER BY (l.cost - pr.cost)::numeric / NULLIF(pr.cost, 0) DESC
+      LIMIT ${TOP}`,
+  ])
+  const sale = sums('sale'), ret = sums('credit-note')
+  const netSales = netSalesTaxable(sale, ret)
+  const profit = netSalesProfit(sale, ret)
+  const income = sums('income').totalAmount, expenses = sums('expense').totalAmount
+  const rows = cats.map((c) => ({ id: c.category, sales: p2r(c.sales), profit: p2r(c.profit) }))
+  // The rows add up to the Home figures; whatever does not is shown, never spread or dropped.
+  const unmatched = { sales: remainder(netSales, rows.map((r) => r.sales)), profit: remainder(profit, rows.map((r) => r.profit)) }
+  if (unmatched.sales !== 0 || unmatched.profit !== 0) rows.push({ id: UNMATCHED, ...unmatched })
+  const byCategory = rows
+    .sort((a, b) => b.profit - a.profit || a.id.localeCompare(b.id))
+    .map((c) => ({ ...c, margin: c.sales > 0 && c.id !== TYPED_IN && c.id !== UNMATCHED ? Math.round((c.profit / c.sales) * 1000) / 10 : null }))
+  const lowest = perItem.map((r) => ({ id: r.id, name: r.name ?? '—', sales: p2r(r.sales), profit: p2r(r.profit) }))
+    .filter((r) => r.sales >= 300)
+    .map((r) => ({ ...r, margin: Math.round((r.profit / r.sales) * 1000) / 10 }))
+    .sort((a, b) => a.margin - b.margin || a.name.localeCompare(b.name)).slice(0, TOP)
+  return {
+    totals: {
+      profit, netSales, margin: netSales > 0 ? Math.round((profit / netSales) * 1000) / 10 : null,
+      afterExpenses: roundMoney(profit + income - expenses), expenses, income,
+    },
+    unmatched,
+    byCategory, lowest,
+    costUp: costUp.map((r) => {
+      const sp = p2r(r.salePrice), latest = p2r(r.latest), previous = p2r(r.previous)
+      return { id: r.id, name: r.name, previous, latest, salePrice: sp, earnNow: roundMoney(sp - latest), earnBefore: roundMoney(sp - previous), date: r.latestDate }
+    }),
   }
 }

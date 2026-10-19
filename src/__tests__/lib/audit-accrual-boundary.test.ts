@@ -195,8 +195,9 @@ describe('#11 — surfaces that show a bill due use the one shared definition', 
     test(`${f} computes due via the shared helper, not inline`, () => {
       const s = fs.readFileSync(path.join(process.cwd(), f), 'utf8')
       // The helper subtracts allocations; `total - paidAmount` does not, which
-      // is the stale Due that invites collecting a bill twice.
-      expect(s).toMatch(/computeInvoiceDue|computeDueBreakdown/)
+      // is the stale Due that invites collecting a bill twice. In SQL the same
+      // rule is oldestDueSaleSql / DUE_SQL (lib/invoice-due-sql.ts, Phase 5c).
+      expect(s).toMatch(/computeInvoiceDue|computeDueBreakdown|oldestDueSaleSql/)
     })
   }
 })
