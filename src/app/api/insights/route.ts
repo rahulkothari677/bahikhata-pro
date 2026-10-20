@@ -16,7 +16,7 @@ import { rangeWindow } from '@/lib/period'
 import { trendBuckets } from '@/lib/trend-buckets'
 import { abcGroups, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMATCHED } from '@/lib/insights'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
-import { customerActivityInPeriod, itemSalesInPeriod, SALE_LINES, SIGNED_LINE, SIGNED_PROFIT } from '@/lib/insights-queries'
+import { customerActivityInPeriod, itemSalesInPeriod, SALE_LINES, SIGNED_LINE, SIGNED_PROFIT, SOLD_IN_WINDOW } from '@/lib/insights-queries'
 import { WALK_IN_PARTY_NAME } from '@/lib/walk-in-party'
 import { DEAD_DAYS } from '@/lib/stock-aging'
 import { earnPerUnit, purchaseCostPerUnit } from '@/lib/unit-profit'
@@ -188,12 +188,7 @@ async function itemsSection({ userId, w, now, hideProfit }: Ctx) {
     // Inside the period, not "last sale before it": viewing September in October, an item sold only in
     // October was not sold in September (5c-3 fix — the old test looked only at the last sale).
     db.$queryRaw<Array<{ periodCount: bigint; periodPaise: Num; d90Count: bigint; d90Paise: Num }>>`
-      WITH sp AS (
-        SELECT DISTINCT ti."productId" AS pid
-        FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"
-        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale'
-          AND t."date" >= ${w.from} AND t."date" <= ${w.to} AND ti."productId" IS NOT NULL
-      ), s90 AS (
+      WITH sp AS (${SOLD_IN_WINDOW(userId, w.from, w.to)}), s90 AS (
         SELECT DISTINCT ti."productId" AS pid
         FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"
         WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale'

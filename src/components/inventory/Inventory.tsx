@@ -20,6 +20,7 @@ import { ProductDialog } from './ProductDialog'
 import { ExemptReclassifyReview } from './ExemptReclassifyReview'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { ChipRow } from '@/components/common/ChipRow'
+import { FocusChip } from '@/components/common/FocusChip'
 import { ITEM_SORTS, NO_CATEGORY, type ItemChip, type ItemSort } from '@/lib/items-list'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -57,6 +58,23 @@ export function Inventory() {
     const id = setTimeout(() => setDebouncedSearch(search.trim()), 300)
     return () => clearTimeout(id)
   }, [search])
+  // Phase 5e-4b: opened from an Insights group (lib/list-focus.ts). Out / Running low / Not sold in 90 days
+  // arrive as this list's own chip; A / B / C / Not sold this period as a group the server narrows by.
+  const listFocus = useAppStore((s) => s.listFocus)
+  const setListFocus = useAppStore((s) => s.setListFocus)
+  const focus = listFocus?.screen === 'items' && !listFocus.focus.startsWith('chip:') ? listFocus : null
+  useEffect(() => {
+    if (listFocus?.screen !== 'items') return
+    // The group alone, as Insights counted it: no leftover search or category on top of it.
+    setSearch('')
+    setInventoryCategory(null)
+    if (listFocus.focus.startsWith('chip:')) {
+      setChip(listFocus.focus.slice(5) as ItemChip)
+      setListFocus(null)
+    } else {
+      setChip('all')
+    }
+  }, [listFocus, setListFocus, setInventoryCategory])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [subCategory, setSubCategory] = useState<string | null>(null)
@@ -69,11 +87,16 @@ export function Inventory() {
    * worked these out here.
    */
   const { data: pages, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ['items', chip, sort, debouncedSearch, inventoryCategory, refreshKey],
+    queryKey: ['items', chip, sort, debouncedSearch, inventoryCategory, focus?.focus, focus?.from, focus?.to, refreshKey],
     queryFn: async ({ pageParam }) => {
       const qp = new URLSearchParams({ chip, sort, offset: String(pageParam) })
       if (debouncedSearch) qp.set('search', debouncedSearch)
       if (inventoryCategory) qp.set('category', inventoryCategory)
+      if (focus) {
+        qp.set('focus', focus.focus)
+        if (focus.from) qp.set('from', focus.from)
+        if (focus.to) qp.set('to', focus.to)
+      }
       const r = await offlineFetch(`/api/products/list?${qp}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
@@ -160,6 +183,8 @@ export function Inventory() {
         * no GST, so its items need no GST-rules review.
         */}
       {gstStatus(setting) !== 'unregistered' && <ExemptReclassifyReview />}
+
+      {focus && <FocusChip label={focus.label} onClear={() => setListFocus(null)} clearLabel={t('list.clear_focus')} />}
 
       <ChipRow
         ariaLabel={t('items.show')}
@@ -264,7 +289,7 @@ export function Inventory() {
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60">
           <CardContent className="p-0">
-            {itemCount === 0 && !debouncedSearch && !inventoryCategory ? (
+            {itemCount === 0 && !debouncedSearch && !inventoryCategory && !focus ? (
               <EmptyState
                 icon={Package}
                 title={t('items.none')}

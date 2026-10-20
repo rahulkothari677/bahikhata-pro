@@ -12,6 +12,7 @@ import { haptic } from '@/lib/haptic'
 import { formatINR } from '@/lib/utils'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { getById } from '@/lib/nav-registry'
+import { useOpenList } from '@/hooks/use-open-list'
 import { useInsights } from '@/hooks/use-insights'
 import { daysOld } from '@/lib/insights-view'
 import { GroupBar, InsightCard, InsightsState, RankList, SECTION_GRID, TotalsStrip } from '@/components/insights/InsightsKit'
@@ -28,6 +29,7 @@ export function UdhaarSection({ range, t }: { range: DateRange; t: (k: string) =
   const setPreviousView = useAppStore((s) => s.setPreviousView)
   const setView = useAppStore((s) => s.setView)
   const setKhataSide = useAppStore((s) => s.setKhataSide)
+  const openList = useOpenList()
   if (isLoading && !data) return <InsightsState kind="loading" t={t} />
   if (isError || !data) return <InsightsState kind="error" onRetry={() => refetch()} t={t} />
 
@@ -51,7 +53,11 @@ export function UdhaarSection({ range, t }: { range: DateRange; t: (k: string) =
         <InsightCard title={t('ins.age_title')} note={t('ins.as_of_today')} info={t('ins.age_info')}>
           <GroupBar
             ariaLabel={t('ins.age_title')}
-            rows={data.age.map((g) => ({ id: g.id, label: t(`ins.age.${g.id}`), sub: custN(g.count), amount: g.amount, share: g.share, dot: AGE_DOT[g.id] ?? AGE_DOT.opening }))}
+            rows={data.age.map((g) => ({
+              id: g.id, label: t(`ins.age.${g.id}`), sub: custN(g.count), amount: g.amount, share: g.share, dot: AGE_DOT[g.id] ?? AGE_DOT.opening,
+              // 5e-4b: the age band opens Khata with exactly these customers (as of today, so no period).
+              onClick: g.count > 0 ? () => openList('khata', `age:${g.id}`, t(`ins.age.${g.id}`)) : undefined,
+            }))}
           />
         </InsightCard>
       )}

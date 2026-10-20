@@ -217,7 +217,11 @@ save.
   by the guard's own bad-input case (no-control-characters.test.ts now
   sweeps src). **Appending a test that holds a regex is still "a line with
   a backslash": Write tool or Edit tool, never a heredoc.** In a template
-  literal use `String.raw`.
+  literal use `String.raw`. **20 Oct (5e-4b): a quoted `python - <<'EOF'`
+  with NO backslashes still failed** ("unexpected EOF while looking for
+  matching quote") on a script full of template-literal backticks — nothing
+  ran, by luck. Any multi-line script is a file written by the Write tool,
+  whatever it contains.
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck

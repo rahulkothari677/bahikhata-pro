@@ -122,11 +122,12 @@ export function matchesSearch(p: KhataParty, q: string): boolean {
 }
 
 /** The page, the counts of every chip and the side's totals — all over every party, never just the page. */
-export function khataList(all: KhataParty[], opts: { side: KhataSide; chip: KhataChip; search: string; sort: KhataSort; offset: number; limit?: number }) {
+export function khataList(all: KhataParty[], opts: { side: KhataSide; chip: KhataChip; search: string; sort: KhataSort; offset: number; limit?: number; focusIds?: Set<string> | null }) {
   // #267: the walk-in khata (counter returns) is not a customer — kept out of the list and every count, sent on its own.
   const walkIn = all.find((p) => isWalkInParty(p)) ?? null
   const side = all.filter((p) => onSide(p.type, opts.side) && p !== walkIn)
-  const searched = side.filter((p) => matchesSearch(p, opts.search))
+  // A group opened from Insights (lib/list-focus.ts) narrows the list and its counts like a search — never the card.
+  const searched = side.filter((p) => (!opts.focusIds || opts.focusIds.has(p.id)) && matchesSearch(p, opts.search))
   const counts = Object.fromEntries(KHATA_CHIPS.map((c) => [c, searched.filter((p) => inChip(p, opts.side, c)).length])) as Record<KhataChip, number>
   const rows = searched.filter((p) => inChip(p, opts.side, opts.chip))
   // Most owed first on either side: the customer who owes most, the supplier you owe most.

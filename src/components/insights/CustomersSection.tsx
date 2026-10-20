@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { haptic } from '@/lib/haptic'
 import { formatINR } from '@/lib/utils'
+import { useOpenList } from '@/hooks/use-open-list'
 import { useInsights, type TopCustomer } from '@/hooks/use-insights'
 import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { GroupBar, InsightCard, InsightsState, RankList, SECTION_GRID, TotalsStrip } from '@/components/insights/InsightsKit'
@@ -23,13 +24,14 @@ export const SEG_DOT: Record<string, string> = {
 const SPLIT_DOT: Record<string, string> = { named: 'bg-good', walkin: 'bg-muted-foreground/40' }
 type Sort = 'sales' | 'profit' | 'bills'
 
-export function CustomersSection({ range, hideProfit, t }: { range: DateRange; hideProfit: boolean; t: (k: string) => string }) {
+export function CustomersSection({ range, period, hideProfit, t }: { range: DateRange; period: string; hideProfit: boolean; t: (k: string) => string }) {
   const { data, isLoading, isError, refetch } = useInsights('customers', range)
   const [sort, setSort] = useState<Sort>('sales')
   const setSelectedPartyId = useAppStore((s) => s.setSelectedPartyId)
   const setPreviousView = useAppStore((s) => s.setPreviousView)
   const setView = useAppStore((s) => s.setView)
   const setKhataSide = useAppStore((s) => s.setKhataSide)
+  const openList = useOpenList()
   if (isLoading && !data) return <InsightsState kind="loading" t={t} />
   if (isError || !data) return <InsightsState kind="error" onRetry={() => refetch()} t={t} />
 
@@ -60,6 +62,8 @@ export function CustomersSection({ range, hideProfit, t }: { range: DateRange; h
               id: g.id, dot: SEG_DOT[g.id] ?? SEG_DOT.inactive, amount: g.amount, share: g.share, weight: g.count,
               label: `${t(`ins.seg.${g.id}`)} · ${g.count}`, sub: t(`ins.seg_d.${g.id}`),
               value: groupValue(g.id, g.amount), small: groupSmall(g.id, g.share),
+              // 5e-4b: the group opens Khata with exactly these customers, counted over this same period.
+              onClick: g.count > 0 ? () => openList('khata', `group:${g.id}`, `${t(`ins.seg.${g.id}`)} · ${period}`, range) : undefined,
             }))}
           />
         </InsightCard>

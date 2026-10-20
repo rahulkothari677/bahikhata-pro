@@ -7,7 +7,8 @@
  */
 import { useAppStore } from '@/store/app-store'
 import { ChipRow } from '@/components/common/ChipRow'
-import { DateRangePicker, type DatePreset, type DateRange } from '@/components/common/DateRangePicker'
+import { DateRangePicker, getPresetLabel, type DatePreset, type DateRange } from '@/components/common/DateRangePicker'
+import { formatDate } from '@/lib/utils'
 import { visibleSections, type InsightSection } from '@/lib/insights-view'
 import { SalesSection } from '@/components/insights/SalesSection'
 import { UdhaarSection } from '@/components/insights/UdhaarSection'
@@ -27,6 +28,8 @@ export function InsightsView({ range, preset, onChange, onPresetChange, hideProf
   const setSection = useAppStore((s) => s.setInsightSection)
   const sections = visibleSections(hideProfit)
   const section: InsightSection = (sections as readonly string[]).includes(stored) ? (stored as InsightSection) : 'sales'
+  // The period's name for a list opened from a group ("A items · This Month"); a custom range says its dates.
+  const period = preset === 'custom' ? `${formatDate(range.from)} – ${formatDate(range.to)}` : getPresetLabel(preset)
   return (
     <div className="space-y-3">
       <ChipRow
@@ -39,8 +42,8 @@ export function InsightsView({ range, preset, onChange, onPresetChange, hideProf
         <DateRangePicker value={range} onChange={onChange} preset={preset} onPresetChange={onPresetChange} />
       </div>
       {section === 'sales' && <SalesSection range={range} t={t} />}
-      {section === 'items' && <ItemsSection range={range} hideProfit={hideProfit} t={t} />}
-      {section === 'customers' && <CustomersSection range={range} hideProfit={hideProfit} t={t} />}
+      {section === 'items' && <ItemsSection range={range} period={period} hideProfit={hideProfit} t={t} />}
+      {section === 'customers' && <CustomersSection range={range} period={period} hideProfit={hideProfit} t={t} />}
       {section === 'udhaar' && <UdhaarSection range={range} t={t} />}
       {section === 'profit' && <ProfitSection range={range} t={t} />}
     </div>

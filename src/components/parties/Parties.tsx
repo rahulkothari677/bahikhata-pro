@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { ChipRow } from '@/components/common/ChipRow'
+import { FocusChip } from '@/components/common/FocusChip'
 import { KHATA_SORTS, type KhataChip, type KhataSort } from '@/lib/khata-list'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -68,11 +69,26 @@ export function Parties() {
     return () => clearTimeout(id)
   }, [search])
   useEffect(() => { setChip('all') }, [side])
+  // Phase 5e-4b: opened from an Insights customer group or udhaar age (lib/list-focus.ts) — customers only.
+  const listFocus = useAppStore((s) => s.listFocus)
+  const setListFocus = useAppStore((s) => s.setListFocus)
+  const focus = listFocus?.screen === 'khata' && side === 'customer' ? listFocus : null
+  useEffect(() => {
+    if (listFocus?.screen !== 'khata') return
+    // The group alone, as Insights counted it: no leftover search or chip on top of it.
+    setSearch('')
+    setChip('all')
+  }, [listFocus])
   const { data: pages, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ['khata', side, chip, sort, debouncedSearch, refreshKey],
+    queryKey: ['khata', side, chip, sort, debouncedSearch, focus?.focus, focus?.from, focus?.to, refreshKey],
     queryFn: async ({ pageParam }) => {
       const qp = new URLSearchParams({ side, chip, sort, offset: String(pageParam) })
       if (debouncedSearch) qp.set('search', debouncedSearch)
+      if (focus) {
+        qp.set('focus', focus.focus)
+        if (focus.from) qp.set('from', focus.from)
+        if (focus.to) qp.set('to', focus.to)
+      }
       const r = await offlineFetch(`/api/parties/list?${qp}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
@@ -157,6 +173,7 @@ export function Parties() {
           </Button>
         )}
       </section>
+      {focus && <FocusChip label={focus.label} onClear={() => setListFocus(null)} clearLabel={t('list.clear_focus')} />}
       <ChipRow
         ariaLabel={t('khata.show')}
         value={chip}
@@ -219,7 +236,7 @@ export function Parties() {
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60">
           <CardContent className="p-0">
-            {totals && totals.parties === 0 && !debouncedSearch ? (
+            {totals && totals.parties === 0 && !debouncedSearch && !focus ? (
               <EmptyState
                 icon={Users}
                 title="No customers or suppliers yet"
@@ -447,7 +464,7 @@ export function Parties() {
 
       {/* #267: the counter-returns khata (returns from customers with no khata). Not a person, so not in the
           list or any count, no phone, no reminder — one row after the customers, opening its statement. */}
-      {side === 'customer' && chip === 'all' && !debouncedSearch && !hasNextPage && data?.counter && (
+      {side === 'customer' && chip === 'all' && !debouncedSearch && !focus && !hasNextPage && data?.counter && (
         <button
           type="button"
           onClick={() => handleViewParty(data.counter.id)}

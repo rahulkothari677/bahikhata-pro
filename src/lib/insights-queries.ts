@@ -36,6 +36,22 @@ export const SALE_LINES = (userId: string, from: Date, to: Date) => Prisma.sql`
     AND t."type" IN ('sale', 'credit-note')
     AND t."date" >= ${from} AND t."date" <= ${to}`
 
+/**
+ * Items with a SALE line in the window — a return is not a sale. "Not sold this
+ * period" is an item in stock that is not in this set: Insights counts it in
+ * SQL, the Items chip lists it, both from this one fragment (column `pid`).
+ */
+export const SOLD_IN_WINDOW = (userId: string, from: Date, to: Date) => Prisma.sql`
+  SELECT DISTINCT ti."productId" AS pid
+  FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"
+  WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale'
+    AND t."date" >= ${from} AND t."date" <= ${to} AND ti."productId" IS NOT NULL`
+
+export async function itemIdsSoldInPeriod(userId: string, from: Date, to: Date): Promise<Set<string>> {
+  const rows = await db.$queryRaw<Array<{ pid: string }>>(SOLD_IN_WINDOW(userId, from, to))
+  return new Set(rows.map((r) => r.pid))
+}
+
 export interface ItemPeriodRow { id: string; name: string; sales: number; qty: number; profit: number }
 
 /** Every item sold or returned in the window: sales before GST, quantity and profit, net of returns. */

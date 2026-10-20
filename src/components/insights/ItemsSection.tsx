@@ -14,6 +14,7 @@ import { shares } from '@/lib/insights'
 import { getById } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { useInsights, type TopItem } from '@/hooks/use-insights'
+import { useOpenList } from '@/hooks/use-open-list'
 import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { GroupBar, InsightCard, InsightsState, RankList, SECTION_GRID, StatRows, TotalsStrip } from '@/components/insights/InsightsKit'
 import type { DateRange } from '@/components/common/DateRangePicker'
@@ -24,11 +25,12 @@ type Sort = 'sales' | 'profit' | 'qty'
 
 const qtyText = (q: number) => String(Math.round(q * 100) / 100)
 
-export function ItemsSection({ range, hideProfit, t }: { range: DateRange; hideProfit: boolean; t: (k: string) => string }) {
+export function ItemsSection({ range, period, hideProfit, t }: { range: DateRange; period: string; hideProfit: boolean; t: (k: string) => string }) {
   const { data, isLoading, isError, refetch } = useInsights('items', range)
   const [sort, setSort] = useState<Sort>('sales')
   const setView = useAppStore((s) => s.setView)
   const setPreviousView = useAppStore((s) => s.setPreviousView)
+  const openList = useOpenList()
   if (isLoading && !data) return <InsightsState kind="loading" t={t} />
   if (isError || !data) return <InsightsState kind="error" onRetry={() => refetch()} t={t} />
 
@@ -62,16 +64,20 @@ export function ItemsSection({ range, hideProfit, t }: { range: DateRange; hideP
               id: g.id, dot: ABC_DOT[g.id] ?? ABC_DOT.none, amount: g.amount, share: g.share,
               label: `${t(`ins.abc.${g.id}`)} · ${g.count}`,
               sub: t('ins.pct_of_items').replace('{n}', String(itemShare[i])),
+              // 5e-4b: the group opens Items with it selected, graded over this same period.
+              onClick: g.count > 0 ? () => openList('items', `abc:${g.id}`, `${t(`ins.abc.${g.id}`)} · ${period}`, range) : undefined,
             }))}
           />
         </InsightCard>
 
         <InsightCard title={t('ins.stock')} note={t('ins.as_of_today')}>
           <StatRows rows={[
-            { id: 'out', dot: 'bg-bad', label: t('ins.out_of_stock'), value: String(stock.out), small: n('ins.items', stock.out) },
-            { id: 'low', dot: 'bg-check', label: t('ins.running_low'), value: String(stock.low), small: n('ins.items', stock.low) },
-            { id: 'period', dot: 'bg-muted-foreground/50', label: `${t('ins.not_sold_period')} · ${stock.notSoldPeriod.count}`, value: formatINR(stock.notSoldPeriod.stockValue), small: t('ins.in_stock') },
-            { id: 'd90', dot: 'bg-muted-foreground/30', label: `${t('ins.not_sold_90')} · ${stock.notSold90.count}`, value: formatINR(stock.notSold90.stockValue), small: t('ins.in_stock') },
+            // 5e-4b: Out / Running low / Not sold in 90 days are the Items list's own chips (the same rules);
+            // "not sold this period" depends on the period, so it opens as a group with ✕.
+            { id: 'out', dot: 'bg-bad', label: t('ins.out_of_stock'), value: String(stock.out), small: n('ins.items', stock.out), onClick: stock.out > 0 ? () => openList('items', 'chip:out', '') : undefined },
+            { id: 'low', dot: 'bg-check', label: t('ins.running_low'), value: String(stock.low), small: n('ins.items', stock.low), onClick: stock.low > 0 ? () => openList('items', 'chip:low', '') : undefined },
+            { id: 'period', dot: 'bg-muted-foreground/50', label: `${t('ins.not_sold_period')} · ${stock.notSoldPeriod.count}`, value: formatINR(stock.notSoldPeriod.stockValue), small: t('ins.in_stock'), onClick: stock.notSoldPeriod.count > 0 ? () => openList('items', 'unsold', `${t('ins.not_sold_period')} · ${period}`, range) : undefined },
+            { id: 'd90', dot: 'bg-muted-foreground/30', label: `${t('ins.not_sold_90')} · ${stock.notSold90.count}`, value: formatINR(stock.notSold90.stockValue), small: t('ins.in_stock'), onClick: stock.notSold90.count > 0 ? () => openList('items', 'chip:dead', '') : undefined },
           ]} />
           {aging && (
             <button type="button" onClick={() => handleNavAction(aging, { previousView: 'dashboard' })} className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted">

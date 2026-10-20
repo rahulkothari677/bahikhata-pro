@@ -54,7 +54,7 @@ export function inItemChip(p: ItemRow, chip: ItemChip, now: Date): boolean {
   }
 }
 
-export function itemsList(all: ItemRow[], opts: { chip: ItemChip; search: string; category: string | null; sort: ItemSort; offset: number; now: Date; limit?: number }) {
+export function itemsList(all: ItemRow[], opts: { chip: ItemChip; search: string; category: string | null; sort: ItemSort; offset: number; now: Date; limit?: number; focusIds?: Set<string> | null }) {
   const cat = (p: ItemRow) => p.category || NO_CATEGORY
   // Categories of the whole shop (with what their stock is worth), for the category list.
   const catMap = new Map<string, { count: number; value: number }>()
@@ -66,7 +66,8 @@ export function itemsList(all: ItemRow[], opts: { chip: ItemChip; search: string
   // Staff who may not see profit get no stock value (it is at cost) — null, never a ₹0 that reads as a fact.
   const hidden = all.some((p) => p.stockValue === undefined)
   const categories = [...catMap].sort((a, b) => a[0].localeCompare(b[0])).map(([name, c]) => ({ name, count: c.count, value: hidden ? null : c.value / 100 }))
-  const scoped = all.filter((p) => (!opts.category || cat(p) === opts.category)
+  // A group opened from Insights (lib/list-focus.ts) narrows the list and its counts like a search — never the shop totals.
+  const scoped = all.filter((p) => (!opts.focusIds || opts.focusIds.has(p.id)) && (!opts.category || cat(p) === opts.category)
     && (!opts.search.trim() || matchesProductSearch(p, opts.search) || cat(p).toLowerCase().includes(opts.search.trim().toLowerCase())))
   const counts = Object.fromEntries(ITEM_CHIPS.map((c) => [c, scoped.filter((p) => inItemChip(p, c, opts.now)).length])) as Record<ItemChip, number>
   const rows = scoped.filter((p) => inItemChip(p, opts.chip, opts.now))

@@ -22,7 +22,7 @@ describe('Items', () => {
   })
   test('the route uses the shared stock view, the shared profit rule and the tested list logic', () => {
     expect(route).toMatch(/withStockView\(p, hideProfit\)/)
-    expect(route).toMatch(/itemsList\(rows, \{ chip, search, category, sort, offset, now \}\)/)
+    expect(route).toMatch(/itemsList\(rows, \{ chip, search, category, sort, offset, now, focusIds \}\)/)
     expect(route).toMatch(/hideProfit \? null : roundMoney\(products\.reduce\(\(s, p\) => s \+ stockPotentialProfit\(p, profitOpts\)/)
     // The pickers' list shows stock the same way — one view, two routes.
     expect(products).toMatch(/withStockView\(/)

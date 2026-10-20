@@ -135,7 +135,7 @@ const CUSTOMERS = {
 describe('Items', () => {
   test('A/B/C groups and stock rows are the engine’s; switching to Quantity ranks by quantity', () => {
     mockState.items = ok(ITEMS)
-    render(<ItemsSection range={range} hideProfit={false} t={t} />)
+    render(<ItemsSection range={range} period="This Month" hideProfit={false} t={t} />)
     expect(screen.getByText('A items · 6')).toBeTruthy()
     expect(screen.getByText('No sale · 1')).toBeTruthy()
     expect(screen.getByText(formatINR(43181.26))).toBeTruthy()
@@ -147,7 +147,7 @@ describe('Items', () => {
   })
   test('hide profit: no Profit sort and no margin', () => {
     mockState.items = ok({ ...ITEMS, top: { sales: ITEMS.top.sales.map((x) => ({ ...x, profit: null })), qty: [], profit: [] } })
-    render(<ItemsSection range={range} hideProfit t={t} />)
+    render(<ItemsSection range={range} period="This Month" hideProfit t={t} />)
     expect(screen.queryByRole('button', { name: 'Profit' })).toBeNull()
     expect(screen.queryByText(/margin/)).toBeNull()
   })
@@ -156,7 +156,7 @@ describe('Items', () => {
 describe('Customers', () => {
   test('groups, walk-in share and the top list; a customer opens their khata', () => {
     mockState.customers = ok(CUSTOMERS)
-    render(<CustomersSection range={range} hideProfit={false} t={t} />)
+    render(<CustomersSection range={range} period="This Month" hideProfit={false} t={t} />)
     expect(screen.getByText('Regular · 3')).toBeTruthy()
     expect(screen.getByText('Gone quiet · 1')).toBeTruthy()
     expect(screen.getByText('period before')).toBeTruthy()

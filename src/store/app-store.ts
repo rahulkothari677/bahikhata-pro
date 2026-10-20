@@ -1,3 +1,4 @@
+import type { ListFocus } from '@/lib/list-focus'
 import { create } from 'zustand'
 import { rememberScroll, restoreScroll, scrollToTop } from '@/lib/scroll-memory'
 
@@ -231,6 +232,10 @@ interface AppState {
   /** Phase 5c-2: the Insights section on screen (validated where it is read). */
   insightSection: string
   setInsightSection: (section: string) => void
+  /** Phase 5e-4b: an Insights group opening Items or Khata with that group selected (lib/list-focus.ts).
+   *  The list clears it with the chip's ✕; not saved across reloads. */
+  listFocus: ListFocus | null
+  setListFocus: (focus: ListFocus | null) => void
   /** Phase 5a-3: the New sheet opened by the bottom bar's + button. */
   newSheetOpen: boolean
   setNewSheetOpen: (open: boolean) => void
@@ -428,6 +433,8 @@ export const useAppStore = create<AppState>()(
       setHomeView: (view) => set({ homeView: view }),
       insightSection: 'sales',
       setInsightSection: (section) => set({ insightSection: section }),
+      listFocus: null,
+      setListFocus: (focus) => set({ listFocus: focus }),
       newSheetOpen: false,
       setNewSheetOpen: (open) => set({ newSheetOpen: open }),
       pendingArrival: null,

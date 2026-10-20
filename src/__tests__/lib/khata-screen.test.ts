@@ -19,7 +19,7 @@ describe('Khata', () => {
   test('the route uses the shared balance, the shared "still due" rule and the tested list logic', () => {
     expect(route).toMatch(/getReceivablePayable\(userId\)/)
     expect(route).toMatch(/oldestDueSaleSql\(userId\)/)
-    expect(route).toMatch(/khataList\(rows, \{ side, chip, search, sort, offset \}\)/)
+    expect(route).toMatch(/khataList\(rows, \{ side, chip, search, sort, offset, focusIds \}\)/)
   })
   test('#261: Home and Insights take "to collect / to pay" from khataSides — the rule Khata\'s cards use — never from the sign', () => {
     const dash = readCode('src/app/api/dashboard/route.ts')

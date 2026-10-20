@@ -52,6 +52,8 @@ export interface GroupRow {
   weight?: number
   /** What sits under the value, when not the share (e.g. "in stock"). */
   small?: string
+  /** Phase 5e-4b: open the full list with this group selected (ledger model v4 §2). */
+  onClick?: () => void
 }
 
 /**
@@ -70,19 +72,29 @@ export function GroupBar({ rows, ariaLabel }: { rows: GroupRow[]; ariaLabel: str
         ))}
       </div>
       <ul className="divide-y divide-border/60">
-        {rows.map((r) => (
-          <li key={r.id} className="flex items-center gap-3 py-2.5">
-            <span aria-hidden className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', r.dot)} />
-            <span className="flex-1 min-w-0">
-              <span className="block text-sm font-semibold break-words">{r.label}</span>
-              {r.sub && <span className="block text-xs text-muted-foreground">{r.sub}</span>}
-            </span>
-            <span className="text-right">
-              <span className="block text-sm font-bold tabular-nums whitespace-nowrap">{r.value ?? formatINR(r.amount)}</span>
-              <span className="block text-xs text-muted-foreground tabular-nums">{r.small ?? `${r.share}%`}</span>
-            </span>
-          </li>
-        ))}
+        {rows.map((r) => {
+          const body = (
+            <>
+              <span aria-hidden className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', r.dot)} />
+              <span className="flex-1 min-w-0 text-left">
+                <span className="block text-sm font-semibold break-words">{r.label}</span>
+                {r.sub && <span className="block text-xs text-muted-foreground">{r.sub}</span>}
+              </span>
+              <span className="text-right">
+                <span className="block text-sm font-bold tabular-nums whitespace-nowrap">{r.value ?? formatINR(r.amount)}</span>
+                <span className="block text-xs text-muted-foreground tabular-nums">{r.small ?? `${r.share}%`}</span>
+              </span>
+              {r.onClick && <ChevronRight aria-hidden className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+            </>
+          )
+          return (
+            <li key={r.id}>
+              {r.onClick
+                ? <button type="button" onClick={r.onClick} className="w-full min-h-12 flex items-center gap-3 py-2.5 hover:bg-muted/40 rounded-lg">{body}</button>
+                : <div className="flex items-center gap-3 py-2.5">{body}</div>}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
@@ -90,25 +102,35 @@ export function GroupBar({ rows, ariaLabel }: { rows: GroupRow[]; ariaLabel: str
 
 export interface RankRow { key: string; name: string; line?: string; value: string; tone?: 'good' | 'bad'; onClick?: () => void }
 
-export interface StatRow { id: string; label: string; sub?: string; value: string; small?: string; dot: string }
+export interface StatRow { id: string; label: string; sub?: string; value: string; small?: string; dot: string; onClick?: () => void }
 
 /** Rows that are counts, not parts of one whole (stock: out, low, not sold) — no bar, no share. */
 export function StatRows({ rows }: { rows: StatRow[] }) {
   return (
     <ul className="divide-y divide-border/60">
-      {rows.map((r) => (
-        <li key={r.id} className="flex items-center gap-3 py-2.5">
-          <span aria-hidden className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', r.dot)} />
-          <span className="flex-1 min-w-0">
-            <span className="block text-sm font-semibold break-words">{r.label}</span>
-            {r.sub && <span className="block text-xs text-muted-foreground">{r.sub}</span>}
-          </span>
-          <span className="text-right">
-            <span className="block text-sm font-bold tabular-nums whitespace-nowrap">{r.value}</span>
-            {r.small && <span className="block text-xs text-muted-foreground">{r.small}</span>}
-          </span>
-        </li>
-      ))}
+      {rows.map((r) => {
+        const body = (
+          <>
+            <span aria-hidden className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', r.dot)} />
+            <span className="flex-1 min-w-0 text-left">
+              <span className="block text-sm font-semibold break-words">{r.label}</span>
+              {r.sub && <span className="block text-xs text-muted-foreground">{r.sub}</span>}
+            </span>
+            <span className="text-right">
+              <span className="block text-sm font-bold tabular-nums whitespace-nowrap">{r.value}</span>
+              {r.small && <span className="block text-xs text-muted-foreground">{r.small}</span>}
+            </span>
+            {r.onClick && <ChevronRight aria-hidden className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+          </>
+        )
+        return (
+          <li key={r.id}>
+            {r.onClick
+              ? <button type="button" onClick={r.onClick} className="w-full min-h-12 flex items-center gap-3 py-2.5 hover:bg-muted/40 rounded-lg">{body}</button>
+              : <div className="flex items-center gap-3 py-2.5">{body}</div>}
+          </li>
+        )
+      })}
     </ul>
   )
 }
