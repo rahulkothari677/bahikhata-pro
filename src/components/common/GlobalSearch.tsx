@@ -11,6 +11,7 @@ import { offlineFetch } from '@/lib/offline-fetch'
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 6): GlobalSearch now renders commands from
 // the NavRegistry, filtered by surfaces: ['global-search'].
 import { NAV_REGISTRY, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
+import { searchableDestinations, searchDestinations } from '@/lib/nav-search'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSession } from 'next-auth/react'
@@ -157,25 +158,18 @@ export function GlobalSearch() {
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isOwner, isFounder, shopGst])
 
-  // Filter commands by query — match label, description, or keywords.
-  // 🔒 V26 N22: Also match the TRANSLATED label/description (via t(labelKey) /
-  // t(descKey)) so a Hindi user typing the Hindi label they see gets a match.
-  // Was: matched English `label`/`description`/`keywords` only — a Hindi user
-  // typing "बिक्री" (the visible label) got no match.
-  const filteredCommands = q
-    ? allCommands.filter(c => {
-        const ql = q.toLowerCase()
-        const tLabel = c.labelKey ? t(c.labelKey) : c.label
-        const tDesc = c.descKey ? t(c.descKey) : c.description
-        return (
-          c.label.toLowerCase().includes(ql) ||
-          (c.description?.toLowerCase().includes(ql)) ||
-          (c.keywords?.toLowerCase().includes(ql)) ||
-          (tLabel && tLabel.toLowerCase().includes(ql)) ||
-          (tDesc && tDesc.toLowerCase().includes(ql))
-        )
-      })
-    : allCommands
+  // #198 (Phase 5f-1): a query searches EVERY screen, report and settings section
+  // (lib/nav-search.ts), word by word, in English and the shop's language (V26 N22),
+  // ranked by how well the name matches — "stock report" finds the Stock Report, and
+  // "stock" puts it above New Purchase. With no query, the short list stays as it was.
+  const searchable = useMemo(() => filterByPermissions(
+    searchableDestinations(NAV_REGISTRY),
+    { canAccess, isFlagEnabled: (flag: string) => {
+      const features = useAppStore.getState().features
+      return features?.[flag as keyof typeof features] ?? false
+    }, isOwner, isFounder, gstStatus: shopGst }
+  ), [canAccess, isOwner, isFounder, shopGst])
+  const filteredCommands = q ? searchDestinations(searchable, q, t).slice(0, 8) : allCommands
 
   const handleSelect = (result: any) => {
     if (result.type === 'command') {
