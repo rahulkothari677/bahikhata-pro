@@ -251,6 +251,9 @@ export async function getReceivablePayable(
     salesOutstanding: number
     purchaseOutstanding: number
     transactionCount: number
+    /** customer | supplier | both — who the party IS (#261: sides come from this, never the sign). */
+    type: string
+    name: string
   }>
 }> {
   // Pre-aggregated subqueries: one row per party from each table, then join.
@@ -298,9 +301,13 @@ export async function getReceivablePayable(
     paymentsReceivedPaise: string
     paymentsPaidPaise: string
     transactionCount: bigint
+    type: string
+    name: string
   }>>`
     SELECT
       p."id" AS "partyId",
+      p."type" AS "type",
+      p."name" AS "name",
       p."openingBalance"::numeric AS "openingBalancePaise",
       COALESCE(t."salesOutstandingPaise", 0) AS "salesOutstandingPaise",
       COALESCE(t."purchaseOutstandingPaise", 0) AS "purchaseOutstandingPaise",
@@ -360,6 +367,8 @@ export async function getReceivablePayable(
     salesOutstanding: number
     purchaseOutstanding: number
     transactionCount: number
+    type: string
+    name: string
   }>()
 
   let totalReceivable = 0
@@ -435,8 +444,13 @@ export async function getReceivablePayable(
       salesOutstanding,
       purchaseOutstanding,
       transactionCount: Number(row.transactionCount),
+      type: row.type,
+      name: row.name,
     })
 
+    // The BOOKS' totals — every debit balance / every credit balance, whoever
+    // holds it (Reports' trial balance, reconciliation). Screens that say
+    // "to collect from customers" use khataSides() (lib/khata-list.ts, #261).
     if (balance > 0) {
       totalReceivable = roundMoney(totalReceivable + balance)
     } else if (balance < 0) {

@@ -8,6 +8,7 @@ import { withCache, noStore } from '@/lib/cache'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { getReceivablePayable } from '@/lib/party-balance'
+import { khataSides } from '@/lib/khata-list'
 import { istDayStart, istMonthStart, sameTimeLastWeek } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
@@ -490,17 +491,16 @@ export async function GET(req: NextRequest) {
     const todayCollections = roundMoney(todayPaymentsAgg._sum.amount || 0)
     const todayCollectionCount = todayPaymentsAgg._count
 
-    // Receivable/Payable
-    const { totalReceivable, totalPayable } = receivablePayable
-    // Phase 5b-2: "₹18,619 from 12 customers; ₹1,500 to 1 supplier". Counted
-    // from the same per-party balances the totals add (balance > 0 / < 0), so
-    // the count and the rupees can never describe different parties.
-    let receivableCount = 0
-    let payableCount = 0
-    for (const b of receivablePayable.partyBalances.values()) {
-      if (b.balance > 0) receivableCount++
-      else if (b.balance < 0) payableCount++
-    }
+    // To collect / To pay — "₹18,619 from 12 customers; ₹1,500 to 1 supplier".
+    // #261: by who the party IS (khataSides, the rule Khata's cards use), so the
+    // card and the Khata side it opens show the same rupees and the same people.
+    // It counted every positive balance as a customer and every negative one as
+    // a supplier. The count and the rupees come from the same parties.
+    const sides = khataSides([...receivablePayable.partyBalances.values()])
+    const totalReceivable = sides.collect.amount
+    const totalPayable = sides.pay.amount
+    const receivableCount = sides.collect.count
+    const payableCount = sides.pay.count
 
     // GST summary
     // 🔒 V17 PAISE MIGRATION Phase 2F-b: SQL returns paise; convert to rupees via fromPaise().
@@ -657,8 +657,8 @@ export async function GET(req: NextRequest) {
         netProfit: roundMoney(rangeProfit + rangeIncome - rangeExpenses),
         totalReceivable,
         totalPayable,
-        receivableCount,  // Phase 5b-2: parties with balance > 0
-        payableCount,     // Phase 5b-2: parties with balance < 0
+        receivableCount,  // customers who owe you (#261)
+        payableCount,     // suppliers you owe (#261)
         totalStockValue,
         productCount,
         partyCount,

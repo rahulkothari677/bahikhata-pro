@@ -88,7 +88,7 @@ export function UdhaarSection({ range, t }: { range: DateRange; t: (k: string) =
       )}
 
       {data.toPay.suppliers > 0 && (
-        <InsightCard title={t('ins.you_owe')} note={formatINR(data.toPay.total)}>
+        <InsightCard title={t('today.to_pay')} note={formatINR(data.toPay.total)}>
           <RankList rows={data.toPay.biggest.map((b) => ({ key: b.id, name: b.name, value: formatINR(b.balance), tone: 'bad' as const, onClick: () => openParty(b.id) }))} />
           {data.toPay.suppliers > data.toPay.biggest.length && (
             <button type="button" onClick={() => openKhata('supplier')} className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted">

@@ -21,6 +21,24 @@ describe('Khata', () => {
     expect(route).toMatch(/oldestDueSaleSql\(userId\)/)
     expect(route).toMatch(/khataList\(rows, \{ side, chip, search, sort, offset \}\)/)
   })
+  test('#261: Home and Insights take "to collect / to pay" from khataSides — the rule Khata\'s cards use — never from the sign', () => {
+    const dash = readCode('src/app/api/dashboard/route.ts')
+    const ins = readCode('src/app/api/insights/route.ts')
+    expect(dash).toMatch(/const sides = khataSides\(\[\.\.\.receivablePayable\.partyBalances\.values\(\)\]\)/)
+    expect(dash).toMatch(/const totalReceivable = sides\.collect\.amount/)
+    expect(dash).toMatch(/const receivableCount = sides\.collect\.count/)
+    expect(dash).not.toMatch(/\{\s*totalReceivable,\s*totalPayable\s*\}\s*=\s*receivablePayable/)
+    expect(dash).not.toMatch(/receivableCount\+\+|payableCount\+\+/)
+    expect(ins).toMatch(/const sides = khataSides\(balances\)/)
+    expect(ins).toMatch(/toCollect: sides\.collect\.amount/)
+    expect(ins).toMatch(/total: sides\.pay\.amount/)
+    expect(ins).toMatch(/udhaarAge\(owing, now\)/)
+    expect(ins).not.toMatch(/rp\.totalReceivable|rp\.totalPayable/)
+  })
+  test('#267: the counter-returns khata gets its own row, never a reminder', () => {
+    expect(screen).toMatch(/data\?\.counter && \(/)
+    expect(screen).toMatch(/handleViewParty\(data\.counter\.id\)/)
+  })
   test('every Khata word exists in English and Hindi', () => {
     const en = translations.en as unknown as Record<string, string>, hi = translations.hi as unknown as Record<string, string>
     const keys = Object.keys(en).filter((k) => k.startsWith('khata.'))

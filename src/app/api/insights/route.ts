@@ -11,6 +11,7 @@ import { fromPaise, roundMoney } from '@/lib/money'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 import { istLocal } from '@/lib/ist-sql'
 import { getReceivablePayable } from '@/lib/party-balance'
+import { khataSides } from '@/lib/khata-list'
 import { netSalesProfit, netSalesTaxable, netSalesTotal } from '@/lib/net-sales'
 import { rangeWindow } from '@/lib/period'
 import { trendBuckets } from '@/lib/trend-buckets'
@@ -317,17 +318,20 @@ async function udhaarSection({ userId, w, now }: Ctx) {
         AND "date" >= ${w.from} AND "date" <= ${w.to}`,
   ])
   const oldestMap = new Map(oldest.map((r) => [r.partyId, new Date(r.oldest)]))
-  const balances = [...rp.partyBalances].map(([id, b]) => ({ id, balance: b.balance, oldestUnpaid: oldestMap.get(id) ?? null }))
-  const age = udhaarAge(balances, now)
-  const owing = balances.filter((b) => b.balance > 0).sort((a, b) => b.balance - a.balance)
-  const owed = balances.filter((b) => b.balance < 0).sort((a, b) => a.balance - b.balance)
+  const balances = [...rp.partyBalances].map(([id, b]) => ({ id, type: b.type, name: b.name, balance: b.balance, oldestUnpaid: oldestMap.get(id) ?? null }))
+  // #261: customers who owe you / suppliers you owe — the khataSides rule Home and Khata use,
+  // so this card, Home's card and the Khata side show one figure. The ages add up to it.
+  const sides = khataSides(balances)
+  const owing = [...sides.collect.parties].sort((a, b) => b.balance - a.balance)
+  const owed = [...sides.pay.parties].sort((a, b) => a.balance - b.balance)
+  const age = udhaarAge(owing, now)
   const ids = [...owing.slice(0, TOP), ...owed.slice(0, 5)].map((b) => b.id)
   const names = new Map((await db.party.findMany({ where: { id: { in: ids }, userId }, select: { id: true, name: true } })).map((p) => [p.id, p.name]))
   return {
-    totals: { toCollect: rp.totalReceivable, customers: owing.length, collected: roundMoney(collected._sum.amount ?? 0), given: p2r(given[0]?.paise) },
+    totals: { toCollect: sides.collect.amount, customers: owing.length, collected: roundMoney(collected._sum.amount ?? 0), given: p2r(given[0]?.paise) },
     age,
     biggest: owing.slice(0, TOP).map((b) => ({ id: b.id, name: names.get(b.id) ?? '—', balance: b.balance, oldestUnpaid: b.oldestUnpaid })),
-    toPay: { total: rp.totalPayable, suppliers: owed.length, biggest: owed.slice(0, 5).map((b) => ({ id: b.id, name: names.get(b.id) ?? '—', balance: -b.balance })) },
+    toPay: { total: sides.pay.amount, suppliers: owed.length, biggest: owed.slice(0, 5).map((b) => ({ id: b.id, name: names.get(b.id) ?? '—', balance: -b.balance })) },
   }
 }
 

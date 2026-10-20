@@ -15,6 +15,8 @@
  * money the supplier owes you back.
  */
 
+import { isWalkInParty } from './walk-in-party'
+
 export type KhataSide = 'customer' | 'supplier'
 export const KHATA_CHIPS = ['all', 'due', 'old', 'settled', 'advance'] as const
 export type KhataChip = (typeof KHATA_CHIPS)[number]
@@ -49,6 +51,39 @@ export function onSide(type: string, side: KhataSide): boolean {
 
 const paise = (r: number) => Math.round((Number(r) || 0) * 100)
 
+export interface SidedBalance { type: string; name?: string | null; balance: number }
+
+/**
+ * #261 — who owes whom, by WHO the party is: the one rule Home's "To collect /
+ * To pay", Khata's cards and Insights' Udhaar share. It replaced counting every
+ * positive balance as "from N customers" and every negative one as "to N
+ * suppliers", which put an overpaid supplier among the customers who owe you
+ * and a customer's advance among the suppliers you owe (Cause 6).
+ *
+ * - collect: customers (and "both") who owe you
+ * - pay: suppliers (and "both") you owe
+ * - advance: customers whose money you hold (a negative customer balance)
+ * - refund: suppliers who owe you money back (a positive supplier balance)
+ *
+ * The walk-in khata (counter returns) is nobody: never counted as a customer
+ * (#267), and nobody can be asked to pay it. The BOOKS' totals — every debit
+ * or credit balance whoever holds it — stay getReceivablePayable's
+ * totalReceivable / totalPayable (Reports' trial balance, reconciliation).
+ */
+export function khataSides<T extends SidedBalance>(all: T[]) {
+  const people = all.filter((p) => !isWalkInParty(p))
+  const group = (keep: (p: T, b: number) => boolean) => {
+    const parties = people.filter((p) => keep(p, paise(p.balance)))
+    return { amount: parties.reduce((s, p) => s + Math.abs(paise(p.balance)), 0) / 100, count: parties.length, parties }
+  }
+  return {
+    collect: group((p, b) => b > 0 && onSide(p.type, 'customer')),
+    pay: group((p, b) => b < 0 && onSide(p.type, 'supplier')),
+    advance: group((p, b) => b < 0 && p.type === 'customer'),
+    refund: group((p, b) => b > 0 && p.type === 'supplier'),
+  }
+}
+
 /** Is this party in this chip, on this side? */
 export function inChip(p: KhataParty, side: KhataSide, chip: KhataChip): boolean {
   const b = paise(p.balance)
@@ -75,7 +110,9 @@ export function matchesSearch(p: KhataParty, q: string): boolean {
 
 /** The page, the counts of every chip and the side's totals — all over every party, never just the page. */
 export function khataList(all: KhataParty[], opts: { side: KhataSide; chip: KhataChip; search: string; sort: KhataSort; offset: number; limit?: number }) {
-  const side = all.filter((p) => onSide(p.type, opts.side))
+  // #267: the walk-in khata (counter returns) is not a customer — kept out of the list and every count, sent on its own.
+  const walkIn = all.find((p) => isWalkInParty(p)) ?? null
+  const side = all.filter((p) => onSide(p.type, opts.side) && p !== walkIn)
   const searched = side.filter((p) => matchesSearch(p, opts.search))
   const counts = Object.fromEntries(KHATA_CHIPS.map((c) => [c, searched.filter((p) => inChip(p, opts.side, c)).length])) as Record<KhataChip, number>
   const rows = searched.filter((p) => inChip(p, opts.side, opts.chip))
@@ -90,14 +127,19 @@ export function khataList(all: KhataParty[], opts: { side: KhataSide; chip: Khat
   }
   rows.sort(cmp[opts.sort])
   const limit = opts.limit ?? KHATA_PAGE
-  // Totals of the whole side (search ignored): what the card above the list says.
-  const owing = side.filter((p) => inChip(p, opts.side, 'due'))
-  const amount = owing.reduce((s, p) => s + Math.abs(paise(p.balance)), 0) / 100
+  // Totals of the whole side (search ignored): what the card above the list says — the
+  // shared khataSides rule, so Home's card that opens this side shows the same rupees.
+  const sides = khataSides(all)
+  const owing = opts.side === 'customer' ? sides.collect : sides.pay
   return {
     rows: rows.slice(opts.offset, opts.offset + limit),
     matched: rows.length,
     hasMore: opts.offset + limit < rows.length,
     counts,
-    totals: { amount, owing: owing.length, parties: side.length },
+    totals: { amount: owing.amount, owing: owing.count, parties: side.length },
+    // The counter-returns khata, customer side only, when it has ever been used.
+    counter: opts.side === 'customer' && walkIn && ((walkIn.transactionCount ?? 0) > 0 || paise(walkIn.balance) !== 0)
+      ? { id: walkIn.id, balance: walkIn.balance, transactionCount: walkIn.transactionCount ?? 0 }
+      : null,
   }
 }

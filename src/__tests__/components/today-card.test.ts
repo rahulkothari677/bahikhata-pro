@@ -51,12 +51,12 @@ describe('same time last week', () => {
 })
 
 describe('one definition each', () => {
-  test('the counts use the same per-party balances and signs as the totals', () => {
+  test('the counts and the rupees come from the same parties (#261: khataSides, by who the party is)', () => {
     const route = readCode('src/app/api/dashboard/route.ts')
-    expect(route).toMatch(/for \(const b of receivablePayable\.partyBalances\.values\(\)\)/)
-    expect(route).toMatch(/if \(b\.balance > 0\) receivableCount\+\+\s*else if \(b\.balance < 0\) payableCount\+\+/)
-    // …the same rule party-balance.ts uses to add the totals
-    expect(readCode('src/lib/party-balance.ts')).toMatch(/if \(balance > 0\) \{\s*totalReceivable[\s\S]{0,80}\} else if \(balance < 0\) \{\s*totalPayable/)
+    // One group per card: its amount and its count, never two separate loops that could drift.
+    expect(route).toMatch(/const totalReceivable = sides\.collect\.amount\s*const totalPayable = sides\.pay\.amount\s*const receivableCount = sides\.collect\.count\s*const payableCount = sides\.pay\.count/)
+    // …and the group's amount and count are worked out from one list of parties.
+    expect(readCode('src/lib/khata-list.ts')).toMatch(/return \{ amount: parties\.reduce\([^)]*\)[^}]*count: parties\.length, parties \}/)
   })
   test('cash in drawer: Home, its sheet and the Close-the-day dialog read useDaySummary', () => {
     for (const f of ['src/components/dashboard/Dashboard.tsx', 'src/components/dashboard/ProofSheet.tsx', 'src/components/dashboard/DayEndSummary.tsx']) {

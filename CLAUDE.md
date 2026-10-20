@@ -492,6 +492,15 @@ cause**, never as a new line at the bottom.
 
 **Cause 6 — Inferring a fact instead of reading it**
 · Settle direction from a balance sign · "1 supplier" from which way money pointed
+· **20 Oct (5e-3, #261): Home said "₹19,119 from 5 customers" and one of the
+  five was a supplier we had overpaid** — counted by the balance's sign. Fixed
+  by reading the party's type (`khataSides`). The deeper defect: one name doing
+  two jobs. `totalReceivable` is the BOOKS' figure (every debit balance — right
+  for a trial balance) and was also printed as "to collect from customers".
+  **When a number is shown under a label, check the label is true of every row
+  the number adds.** A 5b-2 guard had locked the sign rule in: a guard
+  enshrines whatever rule was current, so when a fix fails an old guard,
+  rewrite the guard to its intent — never delete it, never bend the fix to it.
 · **12 Aug: reported #67 as a bug from a screenshot** without testing the phrase.
   It already worked; the card was an older answer. Rahul had to tell me to just
   type it in.

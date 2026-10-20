@@ -39,10 +39,13 @@ import {
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { istDateString } from '@/lib/timezone'
+import { isWalkInParty } from '@/lib/walk-in-party'
+import { useTranslation } from '@/hooks/use-translation'
 
 export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features, setSelectedTransactionId, pendingSettle, setPendingSettle } = useAppStore()
   const queryClient = useQueryClient()
+  const { t } = useTranslation()
   const [sendingReminder, setSendingReminder] = useState(false)
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   // 🔒 FIX H3: Payment dialog state
@@ -788,9 +791,10 @@ export function PartyProfile() {
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <h2 className="text-2xl font-bold font-heading tracking-tight truncate">{party.name}</h2>
+              {/* #267: the reserved walk-in khata is named for what it holds, the same words as its Khata row — not a person. */}
+              <h2 className="text-2xl font-bold font-heading tracking-tight truncate">{isWalkInParty(party) ? t('khata.counter') : party.name}</h2>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-xs font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 capitalize">{party.type}</span>
+                {!isWalkInParty(party) && <span className="text-xs font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 capitalize">{party.type}</span>}
                 {party.phone && (
                   <span className="text-white/80 text-sm flex items-center gap-1">
                     <Phone className="w-3 h-3" /> {party.phone}
@@ -969,9 +973,12 @@ export function PartyProfile() {
             <User className="w-4 h-4" /> All Parties
           </Button>
           <div className="flex-1" />
-          <Button size="sm" variant="outline" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
-            <Trash2 className="w-4 h-4" /> Delete
-          </Button>
+          {/* The counter-returns khata is reserved (lib/walk-in-party.ts): every walk-in return lands here, so it is not deleted. */}
+          {!isWalkInParty(party) && (
+            <Button size="sm" variant="outline" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
+              <Trash2 className="w-4 h-4" /> Delete
+            </Button>
+          )}
       </div>
 
       {/* Stats grid — 🔒 V26 Phase 8 PB-7: Hide irrelevant cards by party type.

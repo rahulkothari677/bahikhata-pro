@@ -24,7 +24,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { ListItemSkeleton } from '@/components/common/Skeletons'
 import {
   Plus, Search, Users, Phone,
-  Building2, ChevronRight, Receipt, Send, Pencil,
+  Building2, ChevronRight, Receipt, Send, Pencil, RotateCcw,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
@@ -440,6 +440,30 @@ export function Parties() {
           className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted disabled:opacity-60"
         >
           {t('khata.more').replace('{n}', String(Math.min(60, (data?.matched ?? 0) - parties.length))).replace('{m}', String(data?.matched ?? 0))}
+        </button>
+      )}
+
+      {/* #267: the counter-returns khata (returns from customers with no khata). Not a person, so not in the
+          list or any count, no phone, no reminder — one row after the customers, opening its statement. */}
+      {side === 'customer' && chip === 'all' && !debouncedSearch && !hasNextPage && data?.counter && (
+        <button
+          type="button"
+          onClick={() => handleViewParty(data.counter.id)}
+          className="w-full min-h-16 rounded-xl border border-dashed border-border bg-card px-4 py-3 flex items-center gap-3 text-left hover:bg-muted/40 transition-colors"
+        >
+          <RotateCcw className="w-5 h-5 text-muted-foreground shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">{t('khata.counter')}</span>
+            {data.counter.transactionCount > 0 && (
+              <span className="block text-xs text-muted-foreground">{t('khata.counter_entries').replace('{n}', String(data.counter.transactionCount))}</span>
+            )}
+          </span>
+          {/* What the balance means, in words: a refund not yet given, or an old counter bill left unpaid. */}
+          <span className={cn('text-sm font-bold tabular-nums shrink-0', Math.round(data.counter.balance * 100) === 0 ? 'text-muted-foreground' : 'text-check')}>
+            {Math.round(data.counter.balance * 100) === 0
+              ? t('khata.chip.customer.settled')
+              : t(data.counter.balance < 0 ? 'khata.counter_refund' : 'khata.counter_unpaid').replace('{v}', formatINR(Math.abs(data.counter.balance)))}
+          </span>
         </button>
       )}
 
