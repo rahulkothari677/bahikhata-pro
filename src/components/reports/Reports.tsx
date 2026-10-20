@@ -201,7 +201,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
       // which is truthy, so it would render <PLReport data={data} /> and
       // crash on `data.summary.totalRevenue` (summary is undefined).
       if (!r.ok || json.error) {
-        throw new Error(json.error || json.message || `Request failed with status ${r.status}`)
+        throw new Error(json.message || json.error || `Request failed with status ${r.status}`)
       }
       return json
     },

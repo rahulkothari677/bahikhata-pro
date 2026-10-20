@@ -28,7 +28,7 @@ import { adHocWarningBoxCount } from '@/test-support/design-rules'
 import { stripComments } from '@/test-support/read-source'
 
 const SRC = path.resolve(process.cwd(), 'src')
-const PROSE_CEILING = 2347
+const PROSE_CEILING = 2271 // 5e-6 + 5f-2: the bahi page's cap box became a Notice; the Reports page lost its subtitle and tip (was 2347)
 const BOX_CEILING = 76
 /** Legal and marketing pages: long text is their job. */
 const NOT_SCREENS = ['app/terms', 'app/privacy', 'app/landing', 'app/dev']

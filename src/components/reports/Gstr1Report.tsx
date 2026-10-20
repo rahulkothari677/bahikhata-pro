@@ -24,11 +24,13 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatINR, cn } from '@/lib/utils'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { readError } from '@/lib/read-error'
+import { Notice } from '@/components/ui/notice'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
 import {
   ChevronLeft, ChevronRight, Download, FileCheck, Save,
-  FileText, Loader2, AlertCircle, FileJson, Table,
+  FileText, Loader2, AlertCircle, FileJson, Table, RefreshCw,
 } from 'lucide-react'
 
 export function Gstr1Report() {
@@ -42,10 +44,8 @@ export function Gstr1Report() {
     queryKey: ['gstr-1', month],
     queryFn: async () => {
       const r = await offlineFetch(`/api/gstr-1?month=${month}`)
-      if (!r.ok) {
-        const errBody = await r.json().catch(() => ({}))
-        throw new Error(errBody.error || errBody.message || `Failed to fetch GSTR-1 (HTTP ${r.status})`)
-      }
+      // #274: the server's sentence (what to do), not its short code — readError prefers `message`.
+      if (!r.ok) throw new Error(await readError(r))
       return r.json()
     },
   })
@@ -170,36 +170,21 @@ export function Gstr1Report() {
 
   // 🔒 V17 Audit Phase 3: Show error state instead of silently rendering zeros.
   // This happens when the API fails (e.g., migration not applied, Neon cold start).
+  // #274: the server says why and what to do ("Add your GSTIN or your state in Shop profile…").
+  // It showed the short code and a developer note about database migrations under every error.
   if (error || !data) {
     return (
-      <Card className="shadow-card border-rose-200 dark:border-rose-900/50">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-rose-800 dark:text-rose-200">
-                Couldn't load GSTR-1
-              </p>
-              <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
-                {error instanceof Error ? error.message : 'Unknown error'}
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                This usually means the database migration hasn't run yet. Wait for the Vercel
-                deploy to finish (the build runs migrations automatically), then refresh this page.
-                If the error persists, check that your shop has transactions in {month}.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3 gap-2"
-                onClick={() => queryClient.invalidateQueries({ queryKey: ['gstr-1', month] })}
-              >
-                <Loader2 className="w-4 h-4" /> Retry
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <Notice
+        level="act"
+        title="Couldn't load GSTR-1"
+        action={
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => queryClient.invalidateQueries({ queryKey: ['gstr-1', month] })}>
+            <RefreshCw className="w-4 h-4" aria-hidden /> Retry
+          </Button>
+        }
+      >
+        {error instanceof Error ? error.message : 'Something went wrong'}
+      </Notice>
     )
   }
 

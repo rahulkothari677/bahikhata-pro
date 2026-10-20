@@ -65,7 +65,7 @@ export function BankReconciliation() {
         body: JSON.stringify({ csv: text, bankName: bankName || file.name.replace('.csv', '') }),
       })
       const result = await r.json()
-      if (!r.ok) throw new Error(result.error || result.message || 'Import failed')
+      if (!r.ok) throw new Error(result.message || result.error || 'Import failed')
 
       haptic.success()
       sonnerToast.success(`Imported ${result.summary.txnCount} transactions`, {

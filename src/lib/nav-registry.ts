@@ -43,6 +43,9 @@ import type { ModuleKey } from '@/lib/staff-permissions'
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
+export const REPORT_GROUPS = ['money', 'people', 'stock', 'gst'] as const
+export type ReportGroup = (typeof REPORT_GROUPS)[number]
+
 export type NavActionKind =
   | 'navigate'              // setView(view) — the default
   | 'navigate-report'       // setPendingReportType + setView('reports')
@@ -233,6 +236,12 @@ export interface NavDestination {
    * neither, so it sees none of them.
    */
   gstNeeds?: 'regular' | 'composition'
+  /**
+   * Phase 5f-2 (ledger model v4 §9): the section of the one Reports page —
+   * Money, People ("udhaar age" and statements), Stock, GST (GST shops only).
+   * Every report-hub entry has one (nav-search / reports guard).
+   */
+  reportGroup?: ReportGroup
 }
 
 /**
@@ -706,10 +715,11 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'banking', // 🔒 V26 P8: moved from 'money-banking' to group with Cashflow + Consolidated
     frequency: 'secondary',
     surfaces: ['more', 'reports-hub'],
+    reportGroup: 'money',
     shortLabelKey: 'short.bank',
     moreGroup: 'books',
     moreOrder: 3,
-    sortOrder: 1,
+    sortOrder: 7,
     labelKey: 'nav.label.bank-reconciliation',
     descKey: 'nav.desc.bank-reconciliation',
     moduleKey: 'reports',  // 🔒 V26 N16: was missing — only ungated report
@@ -729,6 +739,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'financial',
     frequency: 'secondary',
     surfaces: ['reports-hub'],  // 🔒 V26 BUG-047: also surface in More
+    reportGroup: 'money',
     sortOrder: 1,
     moduleKey: 'reports',  // 🔒 V26 BUG-047: gate behind reports permission
     labelKey: 'nav.label.pl',
@@ -748,6 +759,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'financial',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'money',
     sortOrder: 2,
     moduleKey: 'reports',
     labelKey: 'nav.label.bill-profit',
@@ -767,6 +779,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'financial',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'money',
     sortOrder: 3,
     moduleKey: 'reports',
     labelKey: 'nav.label.item-profit',
@@ -786,7 +799,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'financial',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
-    sortOrder: 4,
+    reportGroup: 'people',
+    sortOrder: 1,
     moduleKey: 'reports',
     labelKey: 'nav.label.party-statement',
     descKey: 'nav.desc.party-statement',
@@ -805,7 +819,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'financial',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
-    sortOrder: 5,
+    reportGroup: 'people',
+    sortOrder: 2,
     moduleKey: 'reports',
     labelKey: 'nav.label.debt-aging',
     descKey: 'nav.desc.debt-aging',
@@ -824,7 +839,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'financial',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
-    sortOrder: 6,
+    reportGroup: 'money',
+    sortOrder: 4,
     moduleKey: 'reports',
     labelKey: 'nav.label.trial-balance',
     descKey: 'nav.desc.trial-balance',
@@ -853,6 +869,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'gst',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'gst',
     sortOrder: 6,
     moduleKey: 'reports',
   },
@@ -871,6 +888,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'gst',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'gst',
     sortOrder: 1,
     moduleKey: 'reports',
     labelKey: 'nav.label.gstr-1',
@@ -891,6 +909,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'gst',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'gst',
     sortOrder: 2,
     moduleKey: 'reports',
     labelKey: 'nav.label.gstr-3b',
@@ -911,6 +930,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'gst',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'gst',
     sortOrder: 3,
     moduleKey: 'reports',
     labelKey: 'nav.label.gstr-2b',
@@ -931,6 +951,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'gst',
     frequency: 'secondary',
     surfaces: ['reports-hub', 'home-tiles'],
+    reportGroup: 'gst',
     tileOrder: 6,
     shortLabelKey: 'short.gst',
     sortOrder: 4,
@@ -953,6 +974,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'gst',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'gst',
     sortOrder: 5,
     moduleKey: 'reports',
     labelKey: 'nav.label.hsn-summary',
@@ -973,6 +995,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'gst',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'gst',
     sortOrder: 6,
     moduleKey: 'reports',
     labelKey: 'nav.label.gstr-9',
@@ -993,6 +1016,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'inventory-reports',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'stock',
     sortOrder: 1,
     moduleKey: 'reports',
     labelKey: 'nav.label.stock-report',
@@ -1012,6 +1036,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'inventory-reports',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
+    reportGroup: 'stock',
     sortOrder: 2,
     moduleKey: 'reports',
     labelKey: 'nav.label.inventory-aging',
@@ -1032,7 +1057,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'banking',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
-    sortOrder: 2,
+    reportGroup: 'money',
+    sortOrder: 5,
     moduleKey: 'reports',
     labelKey: 'nav.label.cashflow',
     descKey: 'nav.desc.cashflow',
@@ -1051,7 +1077,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'banking',
     frequency: 'secondary',
     surfaces: ['reports-hub'],
-    sortOrder: 3,
+    reportGroup: 'money',
+    sortOrder: 6,
     moduleKey: 'reports',
     labelKey: 'nav.label.consolidated',
     descKey: 'nav.desc.consolidated',

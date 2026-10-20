@@ -1,143 +1,79 @@
 'use client'
 
 /**
- * 🔒 V22-5 (Phase 3) — ReportsHub
+ * The one Reports page (Phase 5f-2, ledger model v4 §9).
  *
- * Vyapar-style categorized grid of all available reports. Replaces the cramped
- * 11-tab horizontal scroll bar that was hard to browse on mobile.
+ * Four sections, each report once, by what the shopkeeper is asking about:
+ *   Money   — P&L, bill-wise and item-wise profit, account summary, cashflow, shops together, bank matching
+ *   People  — party statement, debt ageing ("udhaar age")
+ *   Stock   — stock report, inventory ageing
+ *   GST     — the returns and summaries, only for a shop that files them
+ * The section comes from the registry (`reportGroup` on each entry), so a new
+ * report lands in its section without touching this file, and a report with
+ * no section fails the guard instead of vanishing.
  *
- * 🔒 AUDIT V25 §6.1 (Batch 8 Phase 5): CATEGORIES array removed — now renders
- * from the NavRegistry, filtered by surfaces: ['reports-hub'] + grouped by
- * subcategory. Report card click uses shared handleNavAction().
- *
- * Layout:
- *   1. Page title "Reports" + subtitle
- *   2. Four categorized sections, each with its own accent color:
- *      - Financial Reports (rose)
- *      - GST & Tax (blue)
- *      - Inventory & Stock (amber)
- *      - Banking & Reconciliation (emerald)
- *   3. Each report is a tappable card with icon, name, description
+ * It was four cards per category ("Financial", "GST & Tax", "Inventory &
+ * Stock", "Banking & Reconciliation") with a sentence under the title and a
+ * tip at the foot (app, not a notebook).
  */
-
-import { useAppStore } from '@/store/app-store'
 import { haptic } from '@/lib/haptic'
 import { cn } from '@/lib/utils'
 import { useMemo } from 'react'
-// 🔒 AUDIT V25 §6.1 (Batch 8 Phase 5): ReportsHub now renders from the NavRegistry.
-import { NAV_REGISTRY, groupBySubcategory, showsForGstStatus, type NavDestination, type NavSubcategoryId } from '@/lib/nav-registry'
+import { NAV_REGISTRY, REPORT_GROUPS, showsForGstStatus, type NavDestination, type ReportGroup } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
-import { BarChart3, FileText, Package, Banknote, ChevronRight, type LucideIcon } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { useTranslation } from '@/hooks/use-translation'
-import { gstStatus } from '@/lib/shop-tax'
+import { gstStatus } from '@/lib/shop-tax'
 import { useSetting } from '@/hooks/use-setting'
 
-// Section metadata: maps subcategory → { title, titleIcon, accentColor } for ReportsHub.
-// Matches the 4 categories from the old CATEGORIES array.
-const CATEGORY_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon: LucideIcon; accentColor: string }>> = {
-  'financial':         { title: 'Financial Reports', titleIcon: BarChart3, accentColor: 'text-rose-600 dark:text-rose-400' },
-  'gst':               { title: 'GST & Tax', titleIcon: FileText, accentColor: 'text-blue-600 dark:text-blue-400' },
-  'inventory-reports': { title: 'Inventory & Stock', titleIcon: Package, accentColor: 'text-amber-600 dark:text-amber-400' },
-  'banking':           { title: 'Banking & Reconciliation', titleIcon: Banknote, accentColor: 'text-emerald-600 dark:text-emerald-400' }, // 🔒 V26 P8: now includes bank-reconciliation + cashflow + consolidated
+/** The reports of each section, in the registry's order, after the shop's GST status (Phase 1c-2). */
+export function reportSections(all: NavDestination[], shopGst: ReturnType<typeof gstStatus> | undefined): { group: ReportGroup; reports: NavDestination[] }[] {
+  const reports = all
+    .filter((d) => d.surfaces?.includes('reports-hub'))
+    .filter((d) => showsForGstStatus(d, shopGst))
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+  return REPORT_GROUPS
+    .map((group) => ({ group, reports: reports.filter((d) => d.reportGroup === group) }))
+    .filter((s) => s.reports.length > 0)
 }
 
 export function ReportsHub() {
   const { t } = useTranslation()
   const { setting: shopSetting } = useSetting()
   const shopGst = shopSetting ? gstStatus(shopSetting) : undefined
-  // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 5): Report items from NavRegistry, filtered
-  // by surfaces: ['reports-hub'] + grouped by subcategory.
-  const { categories } = useMemo(() => {
-    const reportItems = NAV_REGISTRY
-      .filter(d => d.surfaces?.includes('reports-hub'))
-      // Phase 1c-2: only this shop's GST returns (lib/shop-tax.ts).
-      .filter(d => showsForGstStatus(d, shopGst))
-      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-
-    const grouped = groupBySubcategory(reportItems)
-
-    // Build ordered category list based on CATEGORY_META keys
-    const cats: { subcategory: NavSubcategoryId; title: string; titleIcon: LucideIcon; accentColor: string; reports: NavDestination[] }[] = []
-    for (const [subcat, reports] of grouped) {
-      if (subcat && CATEGORY_META[subcat]) {
-        cats.push({
-          subcategory: subcat,
-          ...CATEGORY_META[subcat]!,
-          reports,
-        })
-      }
-    }
-    return { categories: cats }
-  }, [shopGst])
+  const sections = useMemo(() => reportSections(NAV_REGISTRY, shopGst), [shopGst])
 
   return (
     <div className="space-y-5">
-      {/* Page header */}
-      <div className="animate-fade-slide-up">
-        <h2 className="text-xl font-bold">Reports</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Pick a report — each opens as its own page with filters &amp; export.
-        </p>
-      </div>
-
-      {/* Categorized sections — rendered from NavRegistry (V25 §6.1 Phase 5) */}
-      {categories.map((category, catIdx) => {
-        const TitleIcon = category.titleIcon
-        return (
-          <div key={category.subcategory} className="animate-fade-slide-up" style={{ '--stagger-index': catIdx } as any}>
-            <div className="flex items-center gap-2 px-1 mb-2">
-              <TitleIcon className={cn('w-3.5 h-3.5', category.accentColor)} />
-              <p className={cn(
-                'text-xs font-semibold',
-                category.accentColor,
-              )}>
-                {category.title}
-              </p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {category.reports.map((report: NavDestination, repIdx: number) => {
-                const Icon = report.icon
-                return (
+      <h2 className="text-xl font-bold">{t('nav.label.reports')}</h2>
+      {sections.map(({ group, reports }) => (
+        <section key={group} aria-labelledby={`reports-${group}`} className="space-y-2">
+          <h3 id={`reports-${group}`} className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t(`reports.group.${group}`)}</h3>
+          <ul className="rounded-2xl bg-card border border-border/60 shadow-card divide-y divide-border/60 overflow-hidden">
+            {reports.map((report) => {
+              const Icon = report.icon
+              return (
+                <li key={report.id}>
                   <button
-                    key={report.id}
-                    onClick={() => {
-                      haptic.click()
-                      // 🔒 AUDIT V25 §6.1 (Phase 5): Shared handleNavAction handles
-                      // setPendingReportType + setView('reports') via the registry's
-                      // actionKind: 'navigate-report'. previousView is set to
-                      // currentView ('reports') so the back button returns here.
-                      handleNavAction(report)
-                    }}
-                    className="card-hover group flex items-start gap-3 p-3 bg-card rounded-2xl border border-border/60 shadow-card hover:border-primary/30 text-left active:bg-muted/50"
-                    style={{ '--stagger-index': repIdx } as any}
+                    type="button"
+                    onClick={() => { haptic.click(); handleNavAction(report) }}
+                    className="w-full min-h-14 flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40 active:bg-muted/60"
                   >
-                    <div className={cn(
-                      'w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition group-hover:scale-105',
-                      report.iconBg || 'bg-muted',
-                    )}>
-                      <Icon className={cn('w-5 h-5', report.iconColor || 'text-muted-foreground')} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm leading-tight">{report.labelKey ? t(report.labelKey) : report.label}</p>
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                        {report.descKey ? t(report.descKey) : report.description}
-                      </p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0 mt-0.5" />
+                    <span className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', report.iconBg || 'bg-muted')}>
+                      <Icon className={cn('w-5 h-5', report.iconColor || 'text-muted-foreground')} aria-hidden />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block font-semibold text-sm leading-tight">{report.labelKey ? t(report.labelKey) : report.label}</span>
+                      <span className="block text-xs text-muted-foreground mt-0.5 truncate">{report.descKey ? t(report.descKey) : report.description}</span>
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden />
                   </button>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })}
-
-      {/* Footer hint */}
-      <div className="pt-2 pb-1 text-center">
-        <p className="text-xs text-muted-foreground">
-          Tip: use the date picker at the top of each report to change the period.
-        </p>
-      </div>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ))}
     </div>
   )
 }

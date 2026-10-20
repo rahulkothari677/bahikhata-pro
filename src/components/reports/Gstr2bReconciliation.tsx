@@ -54,7 +54,7 @@ export function Gstr2bReconciliation() {
       const r = await offlineFetch(`/api/gstr-2b/reconcile?month=${month}`)
       if (!r.ok) {
         const json = await r.json().catch(() => ({}))
-        throw new Error(json.error || json.message || `Request failed (${r.status})`)
+        throw new Error(json.message || json.error || `Request failed (${r.status})`)
       }
       return r.json()
     },
@@ -88,7 +88,7 @@ export function Gstr2bReconciliation() {
 
       if (!r.ok) {
         const result = await r.json().catch(() => ({}))
-        sonnerToast.error(result.error || result.message || 'Upload failed')
+        sonnerToast.error(result.message || result.error || 'Upload failed')
         return
       }
 

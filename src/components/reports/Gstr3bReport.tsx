@@ -75,7 +75,7 @@ export function Gstr3bReport() {
       const r = await offlineFetch(`/api/gstr-3b?month=${month}`)
       if (!r.ok) {
         const json = await r.json().catch(() => ({}))
-        throw new Error(json.error || json.message || `Request failed (${r.status})`)
+        throw new Error(json.message || json.error || `Request failed (${r.status})`)
       }
       return r.json()
     },
@@ -99,7 +99,7 @@ export function Gstr3bReport() {
       })
       if (!r.ok) {
         const json = await r.json().catch(() => ({}))
-        sonnerToast.error(json.error || json.message || "Couldn\'t save")
+        sonnerToast.error(json.message || json.error || "Couldn\'t save")
         return
       }
       const result = await r.json()
@@ -131,7 +131,7 @@ export function Gstr3bReport() {
       const r = await offlineFetch(`/api/ca-pack?month=${month}`)
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        sonnerToast.error(j.error || j.message || 'Could not build the pack')
+        sonnerToast.error(j.message || j.error || 'Could not build the pack')
         return
       }
       const { text, warningCount } = await r.json()
