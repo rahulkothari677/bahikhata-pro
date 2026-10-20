@@ -115,6 +115,21 @@ export function Inventory() {
   const counts: Record<ItemChip, number> | undefined = data?.counts
   const totals: { items: number; stockValue: number | null; out: number; low: number; potentialProfit: number | null } | undefined = data?.totals
 
+  // #264: one item opened to change its price (Insights → Cost went up) — open its form with the sale
+  // price selected as soon as its row arrives, once per opening.
+  const [priceFocus, setPriceFocus] = useState(false)
+  const openedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!focus?.focus.startsWith('item:')) { openedFor.current = null; return }
+    if (openedFor.current === focus.focus) return
+    const row = products.find((p) => `item:${p.id}` === focus.focus)
+    if (!row) return
+    openedFor.current = focus.focus
+    setEditingProduct(row)
+    setPriceFocus(true)
+    setDialogOpen(true)
+  }, [focus, products])
+
   // Phase 5a-3: "Add Product" / + sheet "New item" from another screen.
   useNewEntryRequest('inventory', () => { setEditingProduct(null); setDialogOpen(true) })
 
@@ -402,8 +417,9 @@ export function Inventory() {
 
       <ProductDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(o) => { setDialogOpen(o); if (!o) setPriceFocus(false) }}
         product={editingProduct}
+        focusField={priceFocus ? 'salePrice' : undefined}
         onSuccess={() => triggerRefresh()}
       />
 

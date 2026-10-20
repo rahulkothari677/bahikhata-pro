@@ -11,7 +11,7 @@
 import fs from 'fs'
 import path from 'path'
 import { computeLineItems } from '@/lib/line-items'
-import { saleValueBeforeGst, unitProfit, stockPotentialProfit, todayMarginPct, earnPerUnit } from '@/lib/unit-profit'
+import { saleValueBeforeGst, unitProfit, stockPotentialProfit, todayMarginPct, earnPerUnit, customerPaysPerUnit, aboveMrp } from '@/lib/unit-profit'
 
 const toPaise = (r: number) => Math.round(r * 100)
 const ATTA = { salePrice: 255, purchasePrice: 230, gstRate: 5, priceIncludesGst: true }
@@ -41,6 +41,24 @@ describe('unitProfit() — the cases seen first-hand', () => {
     const r = unitProfit({ salePrice: 210, purchasePrice: 230, gstRate: 5, priceIncludesGst: true })
     expect(r.profit).toBe(-30)
     expect(r.margin).toBeLessThan(0)
+  })
+})
+
+describe('#264 — what the customer pays, and the MRP cap (Legal Metrology rule 18(2))', () => {
+  const gst = { chargesGst: true }, noGst = { chargesGst: false }
+  test('a GST shop pricing before GST adds the GST; an MRP price and a shop with no GST charge the price', () => {
+    expect(customerPaysPerUnit({ salePrice: 230, gstRate: 5 }, gst)).toBe(241.5)
+    expect(customerPaysPerUnit({ salePrice: 255, gstRate: 5, priceIncludesGst: true }, gst)).toBe(255)
+    expect(customerPaysPerUnit({ salePrice: 230, gstRate: 5 }, noGst)).toBe(230)
+  })
+  test('above MRP only when the customer would pay more than it; no MRP, nothing to break', () => {
+    expect(aboveMrp({ salePrice: 230, gstRate: 5, mrp: 240 }, gst)).toBe(true) // 241.50 > 240
+    expect(aboveMrp({ salePrice: 230, gstRate: 5, mrp: 241.5 }, gst)).toBe(false) // exactly MRP is allowed
+    expect(aboveMrp({ salePrice: 255, gstRate: 5, priceIncludesGst: true, mrp: 255 }, gst)).toBe(false)
+    expect(aboveMrp({ salePrice: 256, gstRate: 5, priceIncludesGst: true, mrp: 255 }, gst)).toBe(true)
+    expect(aboveMrp({ salePrice: 250, gstRate: 5, mrp: 255 }, noGst)).toBe(false) // a shop with no GST adds none
+    expect(aboveMrp({ salePrice: 999, gstRate: 18, mrp: null }, gst)).toBe(false)
+    expect(aboveMrp({ salePrice: 999, gstRate: 18, mrp: 0 }, gst)).toBe(false)
   })
 })
 

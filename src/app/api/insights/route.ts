@@ -14,7 +14,7 @@ import { khataSides } from '@/lib/khata-list'
 import { netSalesProfit, netSalesTaxable, netSalesTotal } from '@/lib/net-sales'
 import { rangeWindow } from '@/lib/period'
 import { trendBuckets } from '@/lib/trend-buckets'
-import { abcGroups, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMATCHED } from '@/lib/insights'
+import { abcGroups, costRose, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMATCHED } from '@/lib/insights'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
 import { customerActivityInPeriod, itemSalesInPeriod, SALE_LINES, SIGNED_LINE, SIGNED_PROFIT, SOLD_IN_WINDOW } from '@/lib/insights-queries'
 import { WALK_IN_PARTY_NAME } from '@/lib/walk-in-party'
@@ -323,9 +323,9 @@ async function profitSection({ userId, w }: Ctx) {
       FROM buys l
       JOIN buys pr ON pr.pid = l.pid AND pr.rn = 2
       JOIN "Product" p ON p."id" = l.pid
-      WHERE l.rn = 1 AND l.cost > pr.cost
-      ORDER BY (l.cost - pr.cost)::numeric / NULLIF(pr.cost, 0) DESC
-      LIMIT ${TOP}`,
+      -- #273: candidates whose price rose on the bill OR with the GST on top — which one is the shop's cost
+      -- depends on whether it claims the GST back, decided below with the shared rule. One row per product at most.
+      WHERE l.rn = 1 AND (l.cost > pr.cost OR l.cost * (100 + l.gst) > pr.cost * (100 + pr.gst))`,
   ])
   const sale = sums('sale'), ret = sums('credit-note')
   const netSales = netSalesTaxable(sale, ret)
@@ -364,6 +364,11 @@ async function profitSection({ userId, w }: Ctx) {
         earnNow: earnPerUnit(product, latestLine, opts(r.latestBlocked)), earnBefore: earnPerUnit(product, previousLine, opts(r.previousBlocked)),
         date: r.latestDate,
       }
-    }),
+    })
+      // #273: "cost went up" is the cost as the shop pays it — the figure this card prints. The raw bill price
+      // listed ₹240 + 5% (₹252 paid) → ₹245 + 0% as a rise for a shop that cannot claim the GST back.
+      .filter((x) => costRose(x.previous, x.latest))
+      .sort((a, b) => (b.latest - b.previous) / b.previous - (a.latest - a.previous) / a.previous || a.name.localeCompare(b.name))
+      .slice(0, TOP),
   }
 }

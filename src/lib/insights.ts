@@ -121,6 +121,17 @@ export function customerGroups(rows: CustomerActivity[], from: Date): Group[] {
   return ids.map((k) => ({ id: k, count: acc[k].count, amount: rupees(acc[k].amount), share: now.includes(k) ? pct[now.indexOf(k)] : 0 }))
 }
 
+// ─── Profit: cost went up ───────────────────────────────────────────────
+
+/**
+ * #273: did a unit's cost rise, as the shop pays it (lib/unit-profit.ts
+ * purchaseCostPerUnit — with the GST when it cannot claim it back)? In whole
+ * paise; a previous cost of 0 is no basis for "went up by %".
+ */
+export function costRose(previous: number, latest: number): boolean {
+  return paise(previous) > 0 && paise(latest) > paise(previous)
+}
+
 // ─── Udhaar: how old it is ──────────────────────────────────────────────
 
 /** Days between two instants in IST calendar days (a bill from yesterday 23:00 is 1 day old at 00:30). */

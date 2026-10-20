@@ -40,6 +40,29 @@ export function saleValueBeforeGst(p: PricedProduct, opts: ProfitOptions = {}): 
   return (price * 100) / (100 + rate)
 }
 
+/**
+ * What the CUSTOMER pays for one unit: the price with GST on top for a GST shop
+ * pricing before GST; the price itself for an MRP (GST-inclusive) price or a
+ * shop that charges no GST. Rounded to the paisa.
+ */
+export function customerPaysPerUnit(p: PricedProduct, opts: ProfitOptions = {}): number {
+  const price = Number(p.salePrice) || 0
+  const rate = opts.chargesGst === false ? 0 : (Number(p.gstRate) || 0)
+  return roundMoney(p.priceIncludesGst || rate <= 0 ? price : price * (100 + rate) / 100)
+}
+
+/**
+ * Phase 5e-5 (#264): is the customer's price above the printed MRP? Legal
+ * Metrology (Packaged Commodities) Rules 2011, rule 18(2): no sale of a packed
+ * commodity above its retail sale price (MRP). The bill engine keeps an MRP
+ * line exactly at MRP (line-items.ts, #98); this tells the product form when
+ * the price itself would break it. No MRP → nothing to break.
+ */
+export function aboveMrp(p: PricedProduct & { mrp?: number | null }, opts: ProfitOptions = {}): boolean {
+  const mrp = Number(p.mrp) || 0
+  return mrp > 0 && Math.round(customerPaysPerUnit(p, opts) * 100) > Math.round(mrp * 100)
+}
+
 /** Profit and margin on one unit. Profit is rounded to the paisa; margin is a %. */
 export function unitProfit(p: PricedProduct, opts: ProfitOptions = {}): { profit: number; margin: number } {
   const sale = saleValueBeforeGst(p, opts)

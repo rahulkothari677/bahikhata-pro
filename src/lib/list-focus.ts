@@ -5,6 +5,7 @@
  *
  *   Items  abc:a · abc:b · abc:c · abc:none   (Insights' ABC grades, over its period)
  *          unsold                             (in stock, not sold in the period)
+ *          item:<id>                          (one item, its price to change — #264)
  *   Khata  group:new · group:regular · group:occasional · group:quiet · group:inactive
  *          age:d15 · age:d30 · age:d60 · age:over · age:opening   (as of today)
  *
@@ -17,12 +18,15 @@ import { AGE_BANDS, CUSTOMER_GROUPS, type AgeBand, type CustomerGroup } from './
 export const ABC_IDS = ['a', 'b', 'c', 'none'] as const
 export type AbcId = (typeof ABC_IDS)[number]
 
-export type ItemsFocus = { kind: 'abc'; id: AbcId } | { kind: 'unsold' }
+/** One item, opened to change its price (#264: Insights → Profit → Cost went up). A database id: letters and digits. */
+export type ItemsFocus = { kind: 'abc'; id: AbcId } | { kind: 'unsold' } | { kind: 'item'; id: string }
 export type KhataFocus = { kind: 'group'; id: CustomerGroup } | { kind: 'age'; id: AgeBand }
 
 /** Parse an Items focus; anything unknown is no focus (never a guess). */
 export function parseItemsFocus(raw: string | null | undefined): ItemsFocus | null {
   if (raw === 'unsold') return { kind: 'unsold' }
+  const item = /^item:([a-z0-9]{8,40})$/i.exec(raw ?? '')
+  if (item) return { kind: 'item', id: item[1] }
   const m = /^abc:(\w+)$/.exec(raw ?? '')
   return m && (ABC_IDS as readonly string[]).includes(m[1]) ? { kind: 'abc', id: m[1] as AbcId } : null
 }

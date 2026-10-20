@@ -15,10 +15,11 @@ import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { haptic } from '@/lib/haptic'
 import { track, EVENTS } from '@/lib/analytics'
 import { TrendingUp } from 'lucide-react'
-import { formatINR } from '@/lib/utils'
+import { formatINR, cn } from '@/lib/utils'
+import { InfoHint } from '@/components/common/InfoHint'
 import { readError } from '@/lib/read-error'
 import { useSetting } from '@/hooks/use-setting'
-import { unitProfit } from '@/lib/unit-profit'
+import { aboveMrp, customerPaysPerUnit, unitProfit } from '@/lib/unit-profit'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { defaultTracksInventory } from '@/lib/inventory-tracking'
 import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
@@ -45,11 +46,13 @@ const EMPTY_FORM = {
   tracksInventory: true,
 }
 
-export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
+export function ProductDialog({ open, onOpenChange, product, onSuccess, focusField }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   product: any
   onSuccess?: () => void
+  /** #264: opened to change the price (Insights → Cost went up → Price): the sale price is selected, the MRP beside it. */
+  focusField?: 'salePrice'
 }) {
   const [form, setForm] = useState(EMPTY_FORM)
   // Has the shopkeeper answered the goods/service question themselves? Once
@@ -122,6 +125,18 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
 
   /* A different item is a different question — never inherit the last answer. */
   useEffect(() => { setConditionAnswers({}) }, [form.hsn, form.gstRate])
+
+  // #264: opened to change the price — select the sale price once the form holds the product's values.
+  useEffect(() => {
+    if (!open || focusField !== 'salePrice') return
+    const id = setTimeout(() => {
+      const el = document.getElementById('field-sale-price') as HTMLInputElement | null
+      el?.scrollIntoView({ block: 'center' })
+      el?.focus()
+      el?.select()
+    }, 250)
+    return () => clearTimeout(id)
+  }, [open, focusField, product?.id])
 
   // Sync form when dialog opens or product changes
   useEffect(() => {
@@ -302,6 +317,10 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
     { salePrice, purchasePrice, gstRate: parseFloat(form.gstRate) || 0, priceIncludesGst: form.priceIncludesGst },
     { chargesGst: chargesGstOnSales(gstStatus(setting)) },
   )
+  const mrpNumber = parseFloat(form.mrp) || 0
+  const priced = { salePrice, gstRate: parseFloat(form.gstRate) || 0, priceIncludesGst: form.priceIncludesGst, mrp: mrpNumber }
+  const customerPays = customerPaysPerUnit(priced, { chargesGst: chargesGstOnSales(gstStatus(setting)) })
+  const overMrp = aboveMrp(priced, { chargesGst: chargesGstOnSales(gstStatus(setting)) })
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -313,6 +332,28 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           <div className="sm:col-span-2">
             <Label htmlFor="field-product-name">Product Name *</Label>
             <Input id="field-product-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Aashirvaad Atta 5kg" />
+          </div>
+          {/* #270: the prices — the fields changed most — come straight after the name (they sat below SKU,
+              barcode, category, HSN and unit, under the fold on a phone). */}
+          <div>
+            <Label htmlFor="field-sale-price">Sale Price (₹) *</Label>
+            <NumberField id="field-sale-price" value={form.salePrice} onValueChange={(v) => setForm({ ...form, salePrice: v })} placeholder="0" min={0} step={1} decimals={2} />
+            {/* #264: the MRP cap beside the price; a price the customer would pay above it is flagged (lib/unit-profit.ts aboveMrp). */}
+            {mrpNumber > 0 && (
+              <p className={cn('text-xs mt-1', overMrp ? 'text-check font-semibold' : 'text-muted-foreground')}>
+                {overMrp
+                  ? `Customer pays ${formatINR(customerPays)} — above MRP ${formatINR(mrpNumber)}`
+                  : `MRP ${formatINR(mrpNumber)} — the most a customer can pay`}
+              </p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="field-purchase-price">Purchase Price (₹) *</Label>
+            <NumberField id="field-purchase-price" value={form.purchasePrice} onValueChange={(v) => setForm({ ...form, purchasePrice: v })} placeholder="0" min={0} step={1} decimals={2} />
+          </div>
+          <div>
+            <Label htmlFor="field-mrp">MRP (₹)</Label>
+            <NumberField id="field-mrp" value={form.mrp} onValueChange={(v) => setForm({ ...form, mrp: v })} placeholder="optional" min={0} step={1} decimals={2} />
           </div>
           <div>
             <Label htmlFor="field-sku-code">SKU / Code</Label>
@@ -333,7 +374,10 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
            * point of a barcode is not typing it.
            */}
           <div>
-            <Label htmlFor="field-barcode">Barcode</Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="field-barcode">Barcode</Label>
+              <InfoHint text="Scan it once here and this product comes up instantly at billing." label="barcode" />
+            </div>
             <div className="flex gap-2 mt-1">
               <Input
                 id="field-barcode"
@@ -360,9 +404,6 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                 <span className="hidden sm:inline">Scan</span>
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Scan it once here and this product comes up instantly at billing.
-            </p>
           </div>
           <div>
             <Label htmlFor="field-category">Category</Label>
@@ -397,18 +438,6 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                 {UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
               </SelectContent>
             </Select>
-          </div>
-          <div>
-            <Label htmlFor="field-purchase-price">Purchase Price (₹) *</Label>
-            <NumberField id="field-purchase-price" value={form.purchasePrice} onValueChange={(v) => setForm({ ...form, purchasePrice: v })} placeholder="0" min={0} step={1} decimals={2} />
-          </div>
-          <div>
-            <Label htmlFor="field-sale-price">Sale Price (₹) *</Label>
-            <NumberField id="field-sale-price" value={form.salePrice} onValueChange={(v) => setForm({ ...form, salePrice: v })} placeholder="0" min={0} step={1} decimals={2} />
-          </div>
-          <div>
-            <Label htmlFor="field-mrp">MRP (₹)</Label>
-            <NumberField id="field-mrp" value={form.mrp} onValueChange={(v) => setForm({ ...form, mrp: v })} placeholder="optional" min={0} step={1} decimals={2} />
           </div>
           <div>
             <Label htmlFor="field-gst-rate">GST Rate (%)</Label>

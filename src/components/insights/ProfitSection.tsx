@@ -9,6 +9,7 @@
  */
 import { formatINR } from '@/lib/utils'
 import { useInsights } from '@/hooks/use-insights'
+import { useOpenList } from '@/hooks/use-open-list'
 import { changeVsBefore } from '@/lib/insights-view'
 import { categoryLabel } from '@/components/insights/SalesSection'
 import { InsightCard, InsightsState, RankList, SECTION_GRID, StatRows, TotalsStrip } from '@/components/insights/InsightsKit'
@@ -18,6 +19,7 @@ const pct = (n: number) => `${Math.round(n * 10) / 10}%`
 
 export function ProfitSection({ range, t }: { range: DateRange; t: (k: string) => string }) {
   const { data, isLoading, isError, refetch } = useInsights('profit', range)
+  const openList = useOpenList()
   if (isLoading && !data) return <InsightsState kind="loading" t={t} />
   if (isError || !data) return <InsightsState kind="error" onRetry={() => refetch()} t={t} />
 
@@ -68,6 +70,9 @@ export function ProfitSection({ range, t }: { range: DateRange; t: (k: string) =
               .replace('{now}', formatINR(x.earnNow)).replace('{before}', formatINR(x.earnBefore)),
             value: x.previous > 0 ? `+${pct(((x.latest - x.previous) / x.previous) * 100)}` : formatINR(x.latest),
             tone: 'bad' as const,
+            // #264: "Price" — that item's form, sale price selected, MRP beside it.
+            action: t('ins.price'),
+            onClick: () => openList('items', `item:${x.id}`, x.name),
           }))} />
         </InsightCard>
       )}

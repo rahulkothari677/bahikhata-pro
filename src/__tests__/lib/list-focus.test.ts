@@ -15,6 +15,12 @@ describe('the focus vocabulary', () => {
     for (const g of ['new', 'regular', 'occasional', 'quiet', 'inactive']) expect(focusParam(parseKhataFocus(`group:${g}`)!)).toBe(`group:${g}`)
     for (const a of ['d15', 'd30', 'd60', 'over', 'opening']) expect(focusParam(parseKhataFocus(`age:${a}`)!)).toBe(`age:${a}`)
   })
+  test('#264: one item by its database id', () => {
+    expect(parseItemsFocus('item:cmupjok3l0017g5swvz9ax342')).toEqual({ kind: 'item', id: 'cmupjok3l0017g5swvz9ax342' })
+    expect(focusParam(parseItemsFocus('item:cmupjok3l0017g5swvz9ax342')!)).toBe('item:cmupjok3l0017g5swvz9ax342')
+    for (const bad of ['item:', 'item:short', "item:abc' OR 1=1", 'item:../../x', 'item:' + 'a'.repeat(41)]) expect(parseItemsFocus(bad)).toBeNull()
+    expect(parseKhataFocus('item:cmupjok3l0017g5swvz9ax342')).toBeNull()
+  })
   test('anything else is no focus — refused, never guessed', () => {
     for (const bad of [null, '', 'abc:d', 'abc:', 'ABC:a', 'unsold:1', 'group:a', 'age:d90', 'chip:out', 'abc:a;drop', 'group:quiet ']) {
       expect(parseItemsFocus(bad)).toBeNull()
@@ -66,6 +72,22 @@ describe('the servers find the group with Insights\' own rules', () => {
     expect(khata).toMatch(/customerGroupOf\(acts\.get\(p\.id\)/)
     expect(khata).toMatch(/khataSides\(rows\)\.collect\.parties\.filter\(\(p\) => ageBandOf\(p\.oldestDays\) === focus\.id\)/)
     expect(khata).toMatch(/khataList\(rows, \{[^}]*focusIds \}\)/)
+  })
+  test('#264: Cost went up → "Price" opens that one item, its form on the sale price', () => {
+    const profit = readCode('src/components/insights/ProfitSection.tsx')
+    expect(profit).toMatch(/action: t\('ins\.price'\),\s*onClick: \(\) => openList\('items', `item:\$\{x\.id\}`, x\.name\)/)
+    expect(items).toMatch(/focus\?\.kind === 'item'\) \{\s*focusIds = new Set\(products\.filter\(\(p\) => p\.id === focus\.id\)/)
+    const screen = readCode('src/components/inventory/Inventory.tsx')
+    expect(screen).toMatch(/focusField=\{priceFocus \? 'salePrice' : undefined\}/)
+    const dialog = readCode('src/components/inventory/ProductDialog.tsx')
+    expect(dialog).toMatch(/document\.getElementById\('field-sale-price'\)/)
+    // #270: the prices come straight after the name, before SKU and barcode; the barcode sentence is behind ⓘ.
+    const at = (s: string) => dialog.indexOf(s)
+    expect(at('id="field-product-name"')).toBeLessThan(at('id="field-sale-price"'))
+    expect(at('id="field-sale-price"')).toBeLessThan(at('id="field-purchase-price"'))
+    expect(at('id="field-mrp"')).toBeLessThan(at('id="field-sku-code"'))
+    expect(dialog).toMatch(/<InfoHint text="Scan it once here and this product comes up instantly at billing\."/)
+    expect(dialog).toMatch(/aboveMrp\(priced, /)
   })
   test('every Insights group with members opens its list', () => {
     expect(readCode('src/components/insights/ItemsSection.tsx')).toMatch(/openList\('items', `abc:\$\{g\.id\}`/)

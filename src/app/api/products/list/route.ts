@@ -82,6 +82,9 @@ export async function GET(req: NextRequest) {
     if (focus?.kind === 'abc' && focusSales) {
       const { classOf } = abcGroups(focusSales, products.length)
       focusIds = new Set(products.filter((p) => (classOf.get(p.id) ?? 'none') === focus.id).map((p) => p.id))
+    } else if (focus?.kind === 'item') {
+      // One item of THIS shop (products are already the shop's own): an id from elsewhere finds nothing.
+      focusIds = new Set(products.filter((p) => p.id === focus.id).map((p) => p.id))
     } else if (focus?.kind === 'unsold' && soldInWindow) {
       // Insights' "not sold this period": goods in stock today with no sale inside the period.
       focusIds = new Set(products.filter((p) => p.tracksInventory === true && p.currentStock > 0 && !soldInWindow.has(p.id)).map((p) => p.id))

@@ -6,7 +6,7 @@
  * own numbers) and on random sweeps.
  */
 import { describe, test, expect } from '@jest/globals'
-import { abcGroups, ageBandOf, customerGroupOf, customerGroups, istDaysBetween, remainder, shares, split, udhaarAge, CUSTOMER_GROUPS, type CustomerActivity } from '@/lib/insights'
+import { abcGroups, ageBandOf, costRose, customerGroupOf, customerGroups, istDaysBetween, remainder, shares, split, udhaarAge, CUSTOMER_GROUPS, type CustomerActivity } from '@/lib/insights'
 import { multiplyPaise } from '@/lib/money'
 import { readCode } from '@/test-support/read-source'
 
@@ -93,6 +93,22 @@ describe('Customers: each customer once', () => {
       expect({ i, count: g.reduce((s, x) => s + x.count, 0), amount: inPeriod.reduce((s, x) => s + Math.round(x.amount * 100), 0) })
         .toEqual({ i, count: rows.length, amount: nowSales })
     }
+  })
+})
+
+describe('#273 cost went up — the cost as the shop pays it, not the bill price', () => {
+  test('the case found: ₹240 + 5% (₹252 paid, no credit) then ₹245 + 0% is a fall, not a rise', () => {
+    expect(costRose(252, 245)).toBe(false)
+    expect(costRose(240, 245)).toBe(true) // the same bills for a shop that claims the GST back
+    expect(costRose(230, 230)).toBe(false)
+    expect(costRose(230, 230.01)).toBe(true)
+    expect(costRose(0, 10)).toBe(false) // no basis for a percentage
+  })
+  test('the engine keeps only rises by that rule, and the database no longer decides them by bill price', () => {
+    const code = readCode('src/app/api/insights/route.ts')
+    expect(code).toMatch(/\.filter\(\(x\) => costRose\(x\.previous, x\.latest\)\)/)
+    expect(code).toMatch(/l\.cost \* \(100 \+ l\.gst\) > pr\.cost \* \(100 \+ pr\.gst\)/)
+    expect(code).not.toMatch(/WHERE l\.rn = 1 AND l\.cost > pr\.cost\s/)
   })
 })
 

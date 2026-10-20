@@ -100,7 +100,7 @@ export function GroupBar({ rows, ariaLabel }: { rows: GroupRow[]; ariaLabel: str
   )
 }
 
-export interface RankRow { key: string; name: string; line?: string; value: string; tone?: 'good' | 'bad'; onClick?: () => void }
+export interface RankRow { key: string; name: string; line?: string; value: string; tone?: 'good' | 'bad'; onClick?: () => void; /** The row's tap named as an action, e.g. "Price". */ action?: string }
 
 export interface StatRow { id: string; label: string; sub?: string; value: string; small?: string; dot: string; onClick?: () => void }
 
@@ -148,7 +148,9 @@ export function RankList({ rows }: { rows: RankRow[] }) {
               {r.line && <span className="block text-xs text-muted-foreground">{r.line}</span>}
             </span>
             <span className={cn('text-sm font-bold tabular-nums whitespace-nowrap', r.tone === 'good' && 'text-good', r.tone === 'bad' && 'text-bad')}>{r.value}</span>
-            {r.onClick && <ChevronRight aria-hidden className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+            {/* An action named next to its number (ledger model v4: "Price" next to a cost that went up). */}
+            {r.onClick && r.action && <span className="shrink-0 rounded-full border border-primary px-3 py-1 text-xs font-semibold text-primary">{r.action}</span>}
+            {r.onClick && !r.action && <ChevronRight aria-hidden className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
           </>
         )
         return (
