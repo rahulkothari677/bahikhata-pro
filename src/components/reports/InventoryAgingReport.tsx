@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Notice } from '@/components/ui/notice'
 import { formatINR, cn } from '@/lib/utils'
+import { ReportRows } from '@/components/reports/ReportRows'
 import { ageBucket, stockAgeDays, type AgeBucket } from '@/lib/stock-aging'
 import { Package } from 'lucide-react'
 
@@ -92,7 +93,24 @@ export function InventoryAgingReport({ data }: { data: any }) {
           <p className="text-xs text-muted-foreground">{agedProducts.length} products in stock</p>
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto max-h-[60vh] thin-scrollbar">
+          {/* #241: on a phone each item is one row — days since a sale, the rest on tap; the table from sm up. */}
+          <ReportRows
+            className="sm:hidden"
+            rows={[...agedProducts].sort((a, b) => (b.ageDays ?? -1) - (a.ageDays ?? -1)).map((p) => ({
+              key: p.id,
+              title: p.name,
+              sub: `${p.currentStock} ${p.unit}${p.bucket === 'dead' ? ' · Dead stock' : p.bucket === 'slow' ? ' · Slow' : ''}`,
+              value: p.ageDays === null ? '—' : p.neverSold ? `${p.ageDays} days, never sold` : `${p.ageDays} days`,
+              tone: p.bucket === 'dead' ? 'bad' : p.bucket === 'slow' ? 'check' : undefined,
+              details: [
+                { label: 'Category', value: p.category || '—' },
+                { label: 'Stock', value: `${p.currentStock} ${p.unit}` },
+                ...(totalValue > 0 ? [{ label: 'Stock value', value: formatINR(p.stockValue || 0) }] : []),
+              ],
+            }))}
+            total={totalValue > 0 ? { label: 'Stock value', value: formatINR(totalValue) } : undefined}
+          />
+          <div className="hidden sm:block overflow-auto max-h-[60vh] thin-scrollbar">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-card z-10">
                 <tr className="border-b border-border text-left">

@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn, formatDate } from '@/lib/utils'
+import { ReportRows } from '@/components/reports/ReportRows'
 import { TrendingUp, TrendingDown, FileText, AlertTriangle } from 'lucide-react'
 
 interface BillWiseProfitProps {
@@ -59,7 +60,26 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
           <p className="text-xs text-muted-foreground">Avg margin: {summary.avgMargin}%</p>
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto max-h-[60vh]">
+          {/* #241: on a phone each bill is one row — its profit, the rest on tap; the table from sm up. */}
+          <ReportRows
+            className="sm:hidden"
+            empty="No sales in this period"
+            rows={bills.map((bill: any) => ({
+              key: bill.id,
+              title: `${bill.type === 'credit-note' ? 'Return · ' : ''}${bill.invoiceNo ?? '—'}`,
+              sub: `${formatDate(bill.date)} · ${bill.partyName ?? '—'}`,
+              value: formatINR(bill.profit),
+              tone: bill.profit < 0 ? 'bad' : undefined,
+              details: [
+                { label: 'Items', value: String(bill.itemCount ?? 0) },
+                { label: 'Revenue', value: formatINR(bill.revenue) },
+                { label: 'Cost', value: formatINR(bill.cogs) },
+                { label: 'Margin', value: `${bill.margin}%` },
+              ],
+            }))}
+            total={{ label: 'Total profit', value: formatINR(summary.totalProfit) }}
+          />
+          <div className="hidden sm:block overflow-auto max-h-[60vh]">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-card z-10">
                 <tr className="border-b border-border text-left">

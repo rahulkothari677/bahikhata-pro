@@ -15,6 +15,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn } from '@/lib/utils'
+import { ReportRows } from '@/components/reports/ReportRows'
 import { roundMoney } from '@/lib/money'
 import { AlertTriangle, Clock, User } from 'lucide-react'
 
@@ -115,7 +116,25 @@ export function DebtAgingReport({ data }: { data: any }) {
           </p>
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto max-h-[60vh] thin-scrollbar">
+          {/* #241: on a phone each customer is one row — total due, the age split on tap; the table from sm up. */}
+          <ReportRows
+            className="sm:hidden"
+            rows={agedParties.map((p: any) => ({
+              key: p.party.id,
+              title: p.party.name,
+              sub: p.buckets.critical > 0 ? `${formatINR(p.buckets.critical)} over 90 days` : p.buckets.serious > 0 ? `${formatINR(p.buckets.serious)} 61–90 days` : undefined,
+              value: formatINR(p.totalDue),
+              tone: p.buckets.critical > 0 ? 'bad' : p.buckets.serious > 0 ? 'check' : undefined,
+              details: [
+                { label: '0–30 days', value: p.buckets.current > 0 ? formatINR(p.buckets.current) : '—' },
+                { label: '31–60 days', value: p.buckets.overdue > 0 ? formatINR(p.buckets.overdue) : '—' },
+                { label: '61–90 days', value: p.buckets.serious > 0 ? formatINR(p.buckets.serious) : '—' },
+                { label: '90+ days', value: p.buckets.critical > 0 ? formatINR(p.buckets.critical) : '—' },
+              ],
+            }))}
+            total={{ label: 'Total due', value: formatINR(totalDue) }}
+          />
+          <div className="hidden sm:block overflow-auto max-h-[60vh] thin-scrollbar">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-card z-10">
                 <tr className="border-b border-border text-left">

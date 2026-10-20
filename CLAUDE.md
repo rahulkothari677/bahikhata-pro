@@ -581,6 +581,12 @@ proves it.**
   find one row I know I wrote** (the known-good input), and SQL windows on
   these columns use `now() AT TIME ZONE 'UTC'` — or a time passed from the app.
 
+· 20 Oct (5f-3), caught before commit: a guard sliced the source from a
+  COMMENT, which `readCode` strips — `indexOf` gave −1, the slice was empty,
+  and `not.toMatch` passed on nothing. **A slice-based check asserts its
+  anchors were found and the slice holds what it should** before asserting
+  anything about it.
+
 **The rule this earned: a guard must be RUNNABLE against a known-good and a
 known-bad input.** Four of the five were rules buried inside a directory walk
 or a regex sweep, so the only way to exercise them was to commit a real bug.

@@ -14,6 +14,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { formatINR, cn } from '@/lib/utils'
+import { ReportRows } from '@/components/reports/ReportRows'
 import { TrendingUp, TrendingDown, Package } from 'lucide-react'
 
 interface ItemWiseProfitProps {
@@ -46,7 +47,25 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
           <p className="text-xs text-muted-foreground">Avg margin: {summary.avgMargin}% • Sorted by revenue (high to low)</p>
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto max-h-[60vh]">
+          {/* #241: on a phone each item is one row — its profit, the rest on tap; the table from sm up. */}
+          <ReportRows
+            className="sm:hidden"
+            empty="No items sold in this period"
+            rows={items.map((item: any, idx: number) => ({
+              key: `${idx}-${item.productName}`,
+              title: item.productName,
+              sub: `${item.totalQty} sold`,
+              value: formatINR(item.profit),
+              tone: item.profit < 0 ? 'bad' : undefined,
+              details: [
+                { label: 'Revenue', value: formatINR(item.revenue) },
+                { label: 'Cost', value: formatINR(item.cogs) },
+                { label: 'Margin', value: `${item.margin}%` },
+              ],
+            }))}
+            total={{ label: 'Total profit', value: formatINR(summary.totalProfit) }}
+          />
+          <div className="hidden sm:block overflow-auto max-h-[60vh]">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-card z-10">
                 <tr className="border-b border-border text-left">
