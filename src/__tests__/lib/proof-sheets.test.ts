@@ -25,27 +25,65 @@ describe('proofGap (good and bad input)', () => {
   })
 })
 
-describe('Sales: bills − returns, split by what was paid at the counter', () => {
+/** Bills one by one → the groups salePaymentSplit returns: paid up to each bill's total, the rest unpaid on a khata or on none. */
+const groupBills = (bills: { type: string; mode: string | null; total: number; paid: number; khata: boolean }[]): SalesGroup[] => {
+  const m = new Map<string, SalesGroup>()
+  for (const b of bills) {
+    const k = `${b.type}|${b.mode}`
+    const g = m.get(k) ?? { type: b.type, paymentMode: b.mode, total: 0, paid: 0, udhaar: 0, nobody: 0, count: 0 }
+    const cents = (x: number) => Math.round(x * 100)
+    const paid = Math.min(cents(b.paid), cents(b.total)), unpaid = Math.max(cents(b.total) - cents(b.paid), 0)
+    g.total = (cents(g.total) + cents(b.total)) / 100
+    g.paid = (cents(g.paid) + paid) / 100
+    if (b.khata) g.udhaar = (cents(g.udhaar) + unpaid) / 100
+    else g.nobody = (cents(g.nobody) + unpaid) / 100
+    g.count += 1
+    m.set(k, g)
+  }
+  return [...m.values()]
+}
+
+describe('Sales: bills − returns, split per bill by what was paid at the counter (#258)', () => {
   test('a ₹600 cash bill with ₹200 paid is ₹200 cash and ₹400 udhaar (the drawer double-count case)', () => {
-    const p = salesProof([{ type: 'sale', paymentMode: 'cash', total: 600, paid: 200, count: 1 }])
+    const p = salesProof(groupBills([{ type: 'sale', mode: 'cash', total: 600, paid: 200, khata: true }]))
     expect(p.total).toBe(600)
     expect(p.rows).toEqual([{ key: 'proof.paid_cash', amount: 200 }, { key: 'proof.on_udhaar', amount: 400 }])
     expect(p.bills).toBe(1)
     expect(proofGap(p)).toBe(0)
   })
 
+  test('#258: money paid beyond one bill does not hide another bill\'s udhaar', () => {
+    // Bill A ₹500, ₹700 paid (₹200 is change/advance); bill B ₹300 on udhaar.
+    // Netting all bills said "Paid more than the bills ₹200" — the udhaar vanished.
+    const p = salesProof(groupBills([
+      { type: 'sale', mode: 'cash', total: 500, paid: 700, khata: true },
+      { type: 'sale', mode: 'cash', total: 300, paid: 0, khata: true },
+    ]))
+    expect(p.rows).toEqual([{ key: 'proof.paid_cash', amount: 500 }, { key: 'proof.on_udhaar', amount: 300 }])
+    expect(proofGap(p)).toBe(0)
+  })
+
+  test('#258: a walk-in bill left unpaid is not udhaar — nobody owes it', () => {
+    const p = salesProof(groupBills([
+      { type: 'sale', mode: 'cash', total: 400, paid: 150, khata: false },
+      { type: 'sale', mode: 'upi', total: 200, paid: 0, khata: true },
+    ]))
+    expect(p.rows).toEqual([{ key: 'proof.paid_cash', amount: 150 }, { key: 'proof.on_udhaar', amount: 200 }, { key: 'ins.mode.nobody', amount: 250 }])
+    expect(proofGap(p)).toBe(0)
+  })
+
   test('returns come off as a minus line; a credit bill is all udhaar; unknown modes are "other"', () => {
-    const p = salesProof([
-      { type: 'sale', paymentMode: 'upi', total: 1380, paid: 1380, count: 4 },
-      { type: 'sale', paymentMode: 'credit', total: 2120, paid: 0, count: 3 },
-      { type: 'sale', paymentMode: 'mixed', total: 100, paid: 100, count: 1 },
-      { type: 'credit-note', paymentMode: 'cash', total: 150, paid: 150, count: 1 },
-      { type: 'purchase', paymentMode: 'cash', total: 999, paid: 999, count: 1 },
-    ])
+    const p = salesProof(groupBills([
+      { type: 'sale', mode: 'upi', total: 1380, paid: 1380, khata: true },
+      { type: 'sale', mode: 'credit', total: 2120, paid: 0, khata: true },
+      { type: 'sale', mode: 'mixed', total: 100, paid: 100, khata: true },
+      { type: 'credit-note', mode: 'cash', total: 150, paid: 150, khata: true },
+      { type: 'purchase', mode: 'cash', total: 999, paid: 999, khata: true },
+    ]))
     expect(p.total).toBe(1380 + 2120 + 100 - 150)
     expect(p.rows.map((r) => r.key)).toEqual(['proof.paid_upi', 'proof.paid_other', 'proof.on_udhaar', 'proof.returns'])
     expect(p.rows.find((r) => r.key === 'proof.returns')!.amount).toBe(-150)
-    expect(p.bills).toBe(8)
+    expect(p.bills).toBe(3)
     expect(proofGap(p)).toBe(0)
   })
 
@@ -53,16 +91,17 @@ describe('Sales: bills − returns, split by what was paid at the counter', () =
     expect(salesProof([])).toEqual({ total: 0, rows: [], bills: 0 })
   })
 
-  test('sweep: 500 random days always add up to the paise', () => {
+  test('sweep: 500 random days of single bills always add up to the paise', () => {
     let seed = 7
     const rnd = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n }
     const modes = ['cash', 'upi', 'card', 'bank', 'credit', null, 'mixed']
     for (let i = 0; i < 500; i++) {
-      const groups: SalesGroup[] = Array.from({ length: rnd(9) }, () => {
+      const bills = Array.from({ length: rnd(12) }, () => {
         const total = rnd(5_000_000) / 100
-        return { type: rnd(5) === 0 ? 'credit-note' : 'sale', paymentMode: modes[rnd(modes.length)], total, paid: rnd(2) ? total : rnd(Math.round(total * 100) + 1) / 100, count: 1 + rnd(5) }
+        const paid = [total, 0, rnd(Math.round(total * 100) + 1) / 100, total + rnd(50_000) / 100][rnd(4)]
+        return { type: rnd(5) === 0 ? 'credit-note' : 'sale', mode: modes[rnd(modes.length)], total, paid, khata: rnd(3) > 0 }
       })
-      const p = salesProof(groups)
+      const p = salesProof(groupBills(bills))
       expect({ i, gap: proofGap(p) }).toEqual({ i, gap: 0 })
     }
   })
@@ -177,7 +216,10 @@ describe('the route uses Home\'s definitions and never caps silently', () => {
   const code = readCode('src/app/api/dashboard/explain/route.ts')
   test('sales and profit come from the shared net-sales helpers', () => {
     for (const fn of ['netSalesTotal(', 'netSalesProfit(', 'netSalesTaxable(']) expect(code).toContain(fn)
-    expect(code).toMatch(/type: \{ in: \['sale', 'credit-note'\] \}/)
+    // #258: the Sales sheet's lines come from the per-bill split Insights → Sales reads.
+    expect(code).toMatch(/salePaymentSplit\(userId, w\.from, w\.to\)/)
+    expect(readCode('src/app/api/insights/route.ts')).toMatch(/salePaymentSplit\(userId, w\.from, w\.to\)/)
+    expect(readCode('src/lib/insights-queries.ts')).toMatch(/"type" IN \('sale', 'credit-note'\)/)
   })
   test('the only list is capped AND carries the rest through listProof', () => {
     expect(code).toMatch(/take: PROOF_LIST_LIMIT/)
@@ -190,12 +232,12 @@ describe('the route uses Home\'s definitions and never caps silently', () => {
 
 describe('every line a sheet can show has words in English and Hindi', () => {
   const sample: Proof[] = [
-    salesProof([
-      { type: 'sale', paymentMode: 'cash', total: 10, paid: 5, count: 1 }, { type: 'sale', paymentMode: 'upi', total: 1, paid: 1, count: 1 },
-      { type: 'sale', paymentMode: 'card', total: 1, paid: 1, count: 1 }, { type: 'sale', paymentMode: 'bank', total: 1, paid: 1, count: 1 },
-      { type: 'sale', paymentMode: 'x', total: 1, paid: 2, count: 1 }, { type: 'credit-note', paymentMode: 'cash', total: 1, paid: 1, count: 1 },
-    ]),
-    salesProof([{ type: 'sale', paymentMode: 'cash', total: 1, paid: 2, count: 1 }]),
+    salesProof(groupBills([
+      { type: 'sale', mode: 'cash', total: 10, paid: 5, khata: true }, { type: 'sale', mode: 'upi', total: 1, paid: 1, khata: true },
+      { type: 'sale', mode: 'card', total: 1, paid: 1, khata: true }, { type: 'sale', mode: 'bank', total: 1, paid: 1, khata: true },
+      { type: 'sale', mode: 'x', total: 1, paid: 2, khata: true }, { type: 'credit-note', mode: 'cash', total: 1, paid: 1, khata: true },
+      { type: 'sale', mode: 'cash', total: 3, paid: 1, khata: false },
+    ])),
     netProfitProof({ netSales: 2, profit: 1, noCost: 1, income: 1, expenses: 1 }),
     listProof([], 5, 2),
     purchasesProof({ total: 2, paid: 1 }),

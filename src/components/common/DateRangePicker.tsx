@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, ChevronDown, X } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
+import { useTranslation } from '@/hooks/use-translation'
 
 export type DateRange = {
   from: Date
@@ -107,6 +108,15 @@ export function getPresetLabel(preset: DatePreset): string {
   return PRESETS.find(p => p.id === preset)?.label || 'Custom'
 }
 
+/**
+ * #272 (Phase 5f-4): the period's NAME in the shop's language, for the screen.
+ * getPresetLabel stays the English name, because two screens match a period
+ * handed over from Ask by that name (Bills, Reports) — an id, not a word to show.
+ */
+export function presetName(preset: DatePreset, t: (k: string) => string): string {
+  return t(`period.${preset}`)
+}
+
 export function DateRangePicker({
   value,
   onChange,
@@ -163,7 +173,8 @@ export function DateRangePicker({
     }
   }
 
-  const currentPresetLabel = getPresetLabel(preset)
+  const { t } = useTranslation()
+  const currentPresetLabel = presetName(preset, t)
 
   return (
     <div className={cn('relative', className)} ref={ref}>
@@ -207,7 +218,7 @@ export function DateRangePicker({
                     : 'hover:bg-muted'
                 )}
               >
-                {p.label}
+                {presetName(p.id, t)}
               </button>
             ))}
             <button

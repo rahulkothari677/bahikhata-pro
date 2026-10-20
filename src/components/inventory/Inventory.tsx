@@ -208,8 +208,9 @@ export function Inventory() {
         chips={(['all', 'low', 'out', 'dead'] as ItemChip[]).map((c) => ({ value: c, label: t(`items.chip.${c}`), count: counts?.[c] }))}
       />
 
-      {/* Search, category, order. A category is a picker, not a wall of buttons: a shop with 80 categories still fits. */}
-      <Card className="shadow-card border-border/60">
+      {/* Search, category, order. A category is a picker, not a wall of buttons: a shop with 80 categories still fits.
+          #269: py-0 — the card's own padding doubled the content's (≈30 px of the first phone screen). */}
+      <Card className="shadow-card border-border/60 py-0">
         <CardContent className="p-3 lg:p-4 space-y-3">
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
             <div className="relative flex-1 w-full min-w-0">

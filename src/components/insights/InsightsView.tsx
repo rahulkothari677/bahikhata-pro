@@ -7,7 +7,7 @@
  */
 import { useAppStore } from '@/store/app-store'
 import { ChipRow } from '@/components/common/ChipRow'
-import { DateRangePicker, getPresetLabel, type DatePreset, type DateRange } from '@/components/common/DateRangePicker'
+import { DateRangePicker, presetName, type DatePreset, type DateRange } from '@/components/common/DateRangePicker'
 import { formatDate } from '@/lib/utils'
 import { visibleSections, type InsightSection } from '@/lib/insights-view'
 import { SalesSection } from '@/components/insights/SalesSection'
@@ -29,7 +29,7 @@ export function InsightsView({ range, preset, onChange, onPresetChange, hideProf
   const sections = visibleSections(hideProfit)
   const section: InsightSection = (sections as readonly string[]).includes(stored) ? (stored as InsightSection) : 'sales'
   // The period's name for a list opened from a group ("A items · This Month"); a custom range says its dates.
-  const period = preset === 'custom' ? `${formatDate(range.from)} – ${formatDate(range.to)}` : getPresetLabel(preset)
+  const period = preset === 'custom' ? `${formatDate(range.from)} – ${formatDate(range.to)}` : presetName(preset, t)
   return (
     <div className="space-y-3">
       <ChipRow

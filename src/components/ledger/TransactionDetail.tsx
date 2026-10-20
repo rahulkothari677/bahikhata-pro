@@ -101,7 +101,7 @@ export function TransactionDetail() {
       const r = await offlineFetch(`/api/transactions/${selectedTransactionId}`)
       const json = await r.json()
       if (!r.ok || json.error) {
-        throw new Error(json.error || json.message || `Request failed (${r.status})`)
+        throw new Error(json.message || json.error || `Request failed (${r.status})`)
       }
       return json
     },
@@ -598,7 +598,7 @@ export function TransactionDetail() {
                       duration: 8000,
                     })
                   } else {
-                    throw new Error(result.error || result.message || 'Conversion failed')
+                    throw new Error(result.message || result.error || 'Conversion failed')
                   }
                   return
                 }
@@ -1952,7 +1952,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
     try {
       const r = await offlineFetch(`/api/e-invoice/irn?transactionId=${txn.id}`)
       const data = await r.json()
-      if (!r.ok) throw new Error(data.error || data.message || 'Failed')
+      if (!r.ok) throw new Error(data.message || data.error || 'Failed')
 
       if (!data.eligible) {
         sonnerToast.error('Not eligible for e-Invoicing', {
@@ -2002,7 +2002,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
         }),
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.error || data.message || 'Failed')
+      if (!r.ok) throw new Error(data.message || data.error || 'Failed')
       sonnerToast.success('E-invoice number saved')
       setShowStoreForm(false)
       setIrnInput('')

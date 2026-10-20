@@ -56,7 +56,12 @@ export interface SalesGroup {
   type: string            // 'sale' | 'credit-note' (others ignored)
   paymentMode: string | null
   total: number           // Σ totalAmount (the bill value)
-  paid: number            // Σ paidAmount (what changed hands at billing)
+  /** Σ what each bill had paid at the counter, at most its own total (lib/insights-queries salePaymentSplit). */
+  paid: number
+  /** Σ unpaid on bills with a khata. */
+  udhaar: number
+  /** Σ unpaid on bills with no khata (a walk-in bill left unpaid). */
+  nobody: number
   count: number
 }
 
@@ -64,32 +69,36 @@ export interface SalesGroup {
  * Sales = bills − returns, the same definition as Home's figure (dashboard
  * route: sale totalAmount minus credit-note totalAmount).
  *
- * Lines: what was paid at the counter, by mode (paidAmount, never the bill
- * value — a ₹600 cash bill with ₹200 paid is ₹200 cash and ₹400 udhaar);
- * then what is still on udhaar; then returns as a minus.
+ * Lines, split PER BILL (#258, the rule Insights → Sales uses): what each
+ * bill had paid at the counter, by mode (never more than the bill — a ₹600
+ * cash bill with ₹200 paid is ₹200 cash and ₹400 udhaar); what is unpaid on
+ * a customer's khata; what is unpaid on no khata; then returns as a minus.
+ * It used to net all bills, so money paid beyond one bill hid another bill's
+ * udhaar and a walk-in bill left unpaid counted as udhaar.
  */
 export function salesProof(groups: SalesGroup[]): Proof & { bills: number } {
   const sales = groups.filter((g) => g.type === 'sale')
   const returns = groups.filter((g) => g.type === 'credit-note')
   const byMode = new Map<string, number>()
-  let billPaise = 0
-  let paidPaise = 0
+  let udhaarPaise = 0
+  let nobodyPaise = 0
   let bills = 0
   for (const g of sales) {
     const mode = (PROOF_MODES as readonly string[]).includes(g.paymentMode ?? '') ? g.paymentMode! : 'other'
     byMode.set(mode, (byMode.get(mode) ?? 0) + paise(g.paid))
-    billPaise += paise(g.total)
-    paidPaise += paise(g.paid)
+    udhaarPaise += paise(g.udhaar)
+    nobodyPaise += paise(g.nobody)
     bills += g.count
   }
+  const billPaise = sales.reduce((s, g) => s + paise(g.total), 0)
   const returnPaise = returns.reduce((s, g) => s + paise(g.total), 0)
   const rows: ProofRow[] = []
   for (const mode of [...PROOF_MODES, 'other']) {
     const p = byMode.get(mode) ?? 0
     if (p !== 0) rows.push({ key: `proof.paid_${mode}`, amount: rupees(p) })
   }
-  const udhaar = billPaise - paidPaise
-  if (udhaar !== 0) rows.push({ key: udhaar > 0 ? 'proof.on_udhaar' : 'proof.paid_extra', amount: rupees(udhaar) })
+  if (udhaarPaise !== 0) rows.push({ key: 'proof.on_udhaar', amount: rupees(udhaarPaise) })
+  if (nobodyPaise !== 0) rows.push({ key: 'ins.mode.nobody', amount: rupees(nobodyPaise) }) // Insights' words for it: one vocabulary
   if (returnPaise !== 0) rows.push({ key: 'proof.returns', amount: rupees(-returnPaise) })
   return { total: rupees(billPaise - returnPaise), rows, bills }
 }

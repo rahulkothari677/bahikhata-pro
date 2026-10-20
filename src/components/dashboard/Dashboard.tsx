@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+import { DateRangePicker, getPresetRange, presetName, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
@@ -347,7 +347,7 @@ export function Dashboard() {
   // sees no GST wording and no GST cards here (lib/shop-tax.ts).
   const showsGst = chargesGstOnSales(gstStatus(setting))
 
-  const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
+  const rangeLabel = datePreset === 'custom' ? 'Selected Period' : presetName(datePreset, t)
 
   // Find the last sale transaction (for "Repeat Last Sale" feature)
   const lastSale = recentTransactions.find((t: any) => t.type === 'sale')

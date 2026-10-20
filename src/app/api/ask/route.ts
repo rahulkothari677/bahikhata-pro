@@ -10,7 +10,8 @@ import { computePartyBalance, getReceivablePayable } from '@/lib/party-balance'
 import { computeInvoiceDue, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { shouldHideProfit } from '@/lib/profit-visibility'
 import { buildBalanceActions } from '@/lib/ask-actions'
-import { describeParties } from '@/lib/describe-parties'
+import { COUNTER_RETURNS_LABEL, describeOwing } from '@/lib/describe-parties'
+import { isWalkInParty } from '@/lib/walk-in-party'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { routeWithAi } from '@/lib/ask-router'
 import { getCapability } from '@/lib/ask-capabilities'
@@ -852,13 +853,18 @@ export async function POST(req: NextRequest) {
            * show, say so plainly rather than letting the reader assume the
            * list is the whole of it.
            */
+          /*
+           * #271 (Phase 5f-4): the walk-in khata (counter returns) is nobody — not
+           * "a customer". It is named for what it holds and counted on its own,
+           * the way Khata and the party screen show it (#267).
+           */
           detail: owing.length
-            ? `Across ${owing.length} ${describeParties(owing)}.${
+            ? `${describeOwing(owing)}.${
                 owing.length > parties.length ? ` Showing the ${parties.length} largest.` : ' Largest first.'
               }`
             : 'Nobody has an outstanding balance.',
           sources: parties.slice(0, 10).map(p => ({
-            kind: 'party', id: p.id, label: p.name, amount: Math.abs(p.balance),
+            kind: 'party', id: p.id, label: isWalkInParty(p) ? COUNTER_RETURNS_LABEL : p.name, amount: Math.abs(p.balance),
           })),
         })
       }

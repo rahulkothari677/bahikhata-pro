@@ -52,6 +52,48 @@ export async function itemIdsSoldInPeriod(userId: string, from: Date, to: Date):
   return new Set(rows.map((r) => r.pid))
 }
 
+/** What a bill left unpaid at the counter (never below 0) — the one rule for Sales → udhaar, Udhaar → given, Home's sheet. */
+export const UNPAID_ON_BILL = Prisma.sql`GREATEST("totalAmount" - "paidAmount", 0)`
+
+export interface SalePaymentRow {
+  type: string
+  mode: string | null
+  /** Σ bill totals. */
+  total: number
+  /** Σ what each bill had paid at the counter, never more than its own total (the rest is change or an advance). */
+  paid: number
+  /** Σ unpaid on bills with a khata — udhaar. */
+  udhaar: number
+  /** Σ unpaid on bills with no khata (a walk-in bill left unpaid). */
+  nobody: number
+  count: number
+}
+
+/**
+ * #258 (Phase 5f-4): how the period's bills were paid, split PER BILL —
+ * paid at the counter (up to the bill's total), unpaid on a khata, unpaid on
+ * no khata. paid + udhaar + nobody = total exactly, bill by bill. Insights →
+ * Sales and Home's "Today's sales" sheet both read it; the sheet used to net
+ * all bills, so money paid beyond one bill hid another bill's udhaar.
+ * Sales and returns, by type and payment mode.
+ */
+export async function salePaymentSplit(userId: string, from: Date, to: Date): Promise<SalePaymentRow[]> {
+  const rows = await db.$queryRaw<Array<{ type: string; mode: string | null; total: Num; paid: Num; udhaar: Num; nobody: Num; count: bigint }>>`
+    SELECT "type", "paymentMode" AS "mode",
+           COALESCE(SUM("totalAmount"), 0)::numeric AS "total",
+           COALESCE(SUM(LEAST("paidAmount", "totalAmount")), 0)::numeric AS "paid",
+           COALESCE(SUM(${UNPAID_ON_BILL}) FILTER (WHERE "partyId" IS NOT NULL), 0)::numeric AS "udhaar",
+           COALESCE(SUM(${UNPAID_ON_BILL}) FILTER (WHERE "partyId" IS NULL), 0)::numeric AS "nobody",
+           COUNT(*)::bigint AS "count"
+    FROM "Transaction"
+    WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "type" IN ('sale', 'credit-note')
+      AND "date" >= ${from} AND "date" <= ${to}
+    GROUP BY 1, 2`
+  return rows.map((r) => ({
+    type: r.type, mode: r.mode, total: p2r(r.total), paid: p2r(r.paid), udhaar: p2r(r.udhaar), nobody: p2r(r.nobody), count: Number(r.count),
+  }))
+}
+
 export interface ItemPeriodRow { id: string; name: string; sales: number; qty: number; profit: number }
 
 /** Every item sold or returned in the window: sales before GST, quantity and profit, net of returns. */

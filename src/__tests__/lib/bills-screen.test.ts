@@ -68,7 +68,8 @@ describe('the screen', () => {
     expect(ledger).toMatch(/useArrivalRequest\('sales', 'show-estimates', \(\) => setChip\('est'\)\)/)
   })
   test('the totals strip names its period ("All time" when none is chosen)', () => {
-    expect(ledger).toMatch(/dateRange \? getPresetLabel\(datePreset\) : t\('bills\.all_time'\)/)
+    // #272: in the shop's language (presetName), not the English name other screens match on.
+    expect(ledger).toMatch(/dateRange \? presetName\(datePreset, t\) : t\('bills\.all_time'\)/)
   })
   test('an empty chip says "none of these", before the first-run "no sales yet" state', () => {
     const chipEmpty = ledger.indexOf("filtered.length === 0 && chip !== 'all'")

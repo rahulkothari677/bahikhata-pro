@@ -21,6 +21,7 @@ import { useTranslation } from '@/hooks/use-translation'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn, getInitials, formatINRCompact } from '@/lib/utils'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ListItemSkeleton } from '@/components/common/Skeletons'
 import {
@@ -70,6 +71,7 @@ export function Parties() {
   }, [search])
   useEffect(() => { setChip('all') }, [side])
   // Phase 5e-4b: opened from an Insights customer group or udhaar age (lib/list-focus.ts) — customers only.
+  const isMobile = useIsMobile()
   const listFocus = useAppStore((s) => s.listFocus)
   const setListFocus = useAppStore((s) => s.setListFocus)
   const focus = listFocus?.screen === 'khata' && side === 'customer' ? listFocus : null
@@ -186,7 +188,7 @@ export function Parties() {
       />
 
       {/* Toolbar - removed duplicate Add Party button (it's in header now) */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 py-0">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <div className="relative flex-1 w-full">
@@ -198,19 +200,20 @@ export function Parties() {
                 className="pl-9"
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground w-full sm:w-auto">
               <span className="sr-only sm:not-sr-only">{t('khata.sort')}</span>
               <select
                 aria-label={t('khata.sort')}
                 value={sort}
                 onChange={(e) => setSort(e.target.value as KhataSort)}
-                className="min-h-12 rounded-xl border border-border bg-card px-3 text-sm text-foreground"
+                className="min-h-12 w-full sm:w-auto rounded-xl border border-border bg-card px-3 text-sm text-foreground"
               >
                 {/* Sales and oldest unpaid bill are about customers; a supplier list sorts by what you owe, recent or name. */}
                 {KHATA_SORTS.filter((k) => side === 'customer' || !(k === 'sales' || k === 'oldest')).map((k) => <option key={k} value={k}>{t(`khata.sort.${k}`)}</option>)}
               </select>
             </label>
-            <ViewModeToggle mode={partiesViewMode} onChange={setPartiesViewMode} />
+            {/* #269: a phone always gets the cards (the table is a wide-screen choice), as on Items — no toggle row. */}
+            {!isMobile && <ViewModeToggle mode={partiesViewMode} onChange={setPartiesViewMode} />}
             {/* Bulk reminders: "Plan reminders" on the card above (customers), and More / search / the Home tile. */}
           </div>
         </CardContent>
@@ -255,7 +258,7 @@ export function Parties() {
             )}
           </CardContent>
         </Card>
-      ) : partiesViewMode === 'grid' ? (
+      ) : (isMobile ? 'grid' : partiesViewMode) === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {filtered.map((p) => (
             <Card

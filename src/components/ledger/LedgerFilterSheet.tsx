@@ -37,7 +37,8 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+import { getPresetRange, presetName, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+import { useTranslation } from '@/hooks/use-translation'
 import { Calendar, IndianRupee, User, Receipt, LayoutGrid, List, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -65,13 +66,13 @@ const PERIOD_IDS: (DatePreset | 'all')[] = [
 ]
 
 /**
- * Labels come from getPresetLabel, not a list written out here.
+ * Labels come from presetName (the picker's own names, in the shop's language — #272), not a list written out here.
  *
  * A hand-written copy drifts: the first version of this file said "This month"
  * while the chip it produces — which reads getPresetLabel — said "This Month".
  * Two names for one filter, three inches apart on the same screen.
  */
-const periodLabel = (id: DatePreset | 'all') => (id === 'all' ? 'All time' : getPresetLabel(id))
+const periodLabel = (id: DatePreset | 'all', t: (k: string) => string) => (id === 'all' ? t('bills.all_time') : presetName(id, t))
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -136,6 +137,7 @@ export function LedgerFilterSheet({
    * sheet. Same body, same behaviour, two containers.
    */
   const isMobile = useIsMobile()
+  const { t } = useTranslation()
 
   const description = 'Choose how the ledger is ordered, which period it covers, and how it is laid out.'
 
@@ -169,7 +171,7 @@ export function LedgerFilterSheet({
                   }}
                 >
                   {activePeriod === id && <Check className="w-3.5 h-3.5" />}
-                  {periodLabel(id)}
+                  {periodLabel(id, t)}
                 </Choice>
               ))}
             </div>

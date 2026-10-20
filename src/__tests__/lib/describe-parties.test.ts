@@ -18,7 +18,7 @@
  */
 
 import { describe, test, expect } from '@jest/globals'
-import { describeParties } from '@/lib/describe-parties'
+import { describeOwing, describeParties, COUNTER_RETURNS_LABEL } from '@/lib/describe-parties'
 
 describe('describeParties', () => {
   test('THE BUG: a customer you owe is still a customer', () => {
@@ -69,5 +69,18 @@ describe('describeParties', () => {
     // balance" instead), but the function must not be the thing that breaks if
     // that ever changes.
     expect(describeParties([])).toBe('parties')
+  })
+})
+
+describe('#271: the walk-in khata is nobody — counted on its own, never "a customer"', () => {
+  const walkIn = { type: 'customer', name: 'Walk-in Customer' }
+  test('people first, the counter-returns khata named separately', () => {
+    expect(describeOwing([{ type: 'customer', name: 'Ramesh' }, { type: 'customer', name: 'Sunita' }])).toBe('Across 2 customers')
+    expect(describeOwing([{ type: 'customer', name: 'Ramesh' }, walkIn])).toBe('Across 1 customer and the counter-returns khata')
+    expect(describeOwing([walkIn])).toBe('Only the counter-returns khata')
+    expect(describeOwing([])).toBe('Nobody')
+  })
+  test('its label is the app\'s own words for it (Khata, the party page)', () => {
+    expect(COUNTER_RETURNS_LABEL).toBe('Counter returns (walk-in)')
   })
 })

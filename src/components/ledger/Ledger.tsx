@@ -29,7 +29,7 @@ import { useSubscription } from '@/hooks/use-subscription'
 // ViewModeToggle, DateRangePicker and getPresetRange moved into
 // LedgerFilterSheet with the controls themselves; only the label helper and
 // the types are still needed out here, for the active-filter chips.
-import { getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+import { getPresetLabel, presetName, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import { EmptyState } from '@/components/common/EmptyState'
 import { WakingUpState } from '@/components/common/WakingUpState'
 import { SwipeToDelete } from '@/components/common/SwipeToDelete'
@@ -477,7 +477,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           label: t(isSale ? 'bills.total_sales' : 'bills.total_purchases'),
           value: billTotals ? formatINR(billTotals.total) : '…',
           sub: billTotals
-            ? [dateRange ? getPresetLabel(datePreset) : t('bills.all_time'),
+            ? [dateRange ? presetName(datePreset, t) : t('bills.all_time'),
                 t(billTotals.bills === 1 ? 'ins.bill_1' : 'ins.bills_n').replace('{n}', String(billTotals.bills)),
                 isSale && showsGst ? t('dash.incl_gst') : null,
                 isSale && billTotals.profit !== null ? t('bills.profit_amt').replace('{amount}', formatINR(billTotals.profit)) : null].filter(Boolean).join(' · ')
@@ -553,7 +553,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                   className="flex-shrink-0 flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
                 >
                   <Calendar className="w-3 h-3" />
-                  {getPresetLabel(datePreset)}
+                  {presetName(datePreset, t)}
                   <X className="w-3 h-3" />
                 </button>
               )}

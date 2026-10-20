@@ -1673,7 +1673,7 @@ export function Settings({
                         offline: { queueable: false, timeoutMs: 120_000 },
                       })
                       const result = await r.json()
-                      if (!r.ok) throw new Error(result.error || result.message || 'Restore failed')
+                      if (!r.ok) throw new Error(result.message || result.error || 'Restore failed')
                       // Success — clear the session marker so a future restore starts fresh.
                       localStorage.removeItem('bahikhata:restore-session')
                       /*

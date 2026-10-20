@@ -62,6 +62,12 @@ describe('Khata', () => {
     expect(page).toMatch(/<Notice level="note"[^>]*title=\{t\('bahi\.truncated'\)/)
     expect(page).not.toMatch(/border-amber-300 bg-amber-50/)
   })
+  test('#269: the toolbar has one padding, and a phone gets the cards with no toggle row (as Items)', () => {
+    expect(screen).toMatch(/<Card className="shadow-card border-border\/60 py-0">\s*<CardContent className="p-3 lg:p-4">/)
+    expect(screen).toMatch(/\{!isMobile && <ViewModeToggle/)
+    expect(screen).toMatch(/\(isMobile \? 'grid' : partiesViewMode\) === 'grid'/)
+    expect(readCode('src/components/inventory/Inventory.tsx')).toMatch(/<Card className="shadow-card border-border\/60 py-0">\s*<CardContent className="p-3 lg:p-4 space-y-3">/)
+  })
   test('every Khata word exists in English and Hindi', () => {
     const en = translations.en as unknown as Record<string, string>, hi = translations.hi as unknown as Record<string, string>
     const keys = Object.keys(en).filter((k) => k.startsWith('khata.') || k.startsWith('bahi.') || k === 'list.clear_focus')

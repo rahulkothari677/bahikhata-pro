@@ -18,6 +18,9 @@
  * shopkeeper scanning "3 customers" should not find a supplier in the list.
  */
 
+import { translations } from './i18n'
+import { isWalkInParty } from './walk-in-party'
+
 export type PartyKind = string | null | undefined
 
 /**
@@ -44,4 +47,20 @@ export function describeParties(parties: readonly { type?: PartyKind }[]): strin
    * say so is how the original bug read.
    */
   return plural ? 'parties' : 'party'
+}
+
+/** What the walk-in khata is called wherever it is shown — the app's own words (i18n 'khata.counter', #267). */
+export const COUNTER_RETURNS_LABEL: string = translations.en['khata.counter']
+
+/**
+ * #271 (Phase 5f-4): "who owes / is owed" in one phrase, with the walk-in khata
+ * counted on its own — it holds counter returns and is nobody, never "a customer".
+ * "Across 4 customers", "Across 4 customers and the counter-returns khata",
+ * "Only the counter-returns khata".
+ */
+export function describeOwing(parties: readonly { type?: PartyKind; name?: string | null }[]): string {
+  const people = parties.filter((p) => !isWalkInParty(p))
+  const counter = people.length < parties.length
+  if (people.length === 0) return counter ? 'Only the counter-returns khata' : 'Nobody'
+  return `Across ${people.length} ${describeParties(people)}${counter ? ' and the counter-returns khata' : ''}`
 }

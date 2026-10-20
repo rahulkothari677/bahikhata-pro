@@ -16,7 +16,7 @@ import { rangeWindow } from '@/lib/period'
 import { trendBuckets } from '@/lib/trend-buckets'
 import { abcGroups, costRose, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMATCHED } from '@/lib/insights'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
-import { customerActivityInPeriod, itemSalesInPeriod, SALE_LINES, SIGNED_LINE, SIGNED_PROFIT, SOLD_IN_WINDOW } from '@/lib/insights-queries'
+import { customerActivityInPeriod, itemSalesInPeriod, salePaymentSplit, SALE_LINES, SIGNED_LINE, SIGNED_PROFIT, SOLD_IN_WINDOW, UNPAID_ON_BILL } from '@/lib/insights-queries'
 import { WALK_IN_PARTY_NAME } from '@/lib/walk-in-party'
 import { DEAD_DAYS } from '@/lib/stock-aging'
 import { earnPerUnit, purchaseCostPerUnit } from '@/lib/unit-profit'
@@ -101,8 +101,6 @@ async function sumsByType(userId: string, from: Date, to: Date, types: string[])
 
 // SIGNED_LINE, SIGNED_PROFIT and SALE_LINES live in lib/insights-queries.ts with the period
 // queries, shared with the Items and Khata lists (Phase 5e-4).
-/** What a bill left unpaid at the counter (never below 0). One rule for Sales → udhaar and Udhaar → given on credit. */
-const UNPAID_ON_BILL = Prisma.sql`GREATEST("totalAmount" - "paidAmount", 0)`
 
 // ─── Sales ──────────────────────────────────────────────────────────────
 
@@ -111,16 +109,9 @@ async function salesSection({ userId, w }: Ctx) {
     sumsByType(userId, w.from, w.to, ['sale', 'credit-note']),
     sumsByType(userId, w.prevFrom, w.prevTo, ['sale', 'credit-note']),
     // Each bill splits exactly: paid at the counter (up to its total), and the rest unpaid —
-    // on a customer's khata (udhaar), or on no khata at all (a walk-in bill left unpaid).
-    db.$queryRaw<Array<{ mode: string | null; paid: Num; udhaar: Num; nobody: Num }>>`
-      SELECT "paymentMode" AS "mode",
-             COALESCE(SUM(LEAST("paidAmount", "totalAmount")), 0)::numeric AS "paid",
-             COALESCE(SUM(${UNPAID_ON_BILL}) FILTER (WHERE "partyId" IS NOT NULL), 0)::numeric AS "udhaar",
-             COALESCE(SUM(${UNPAID_ON_BILL}) FILTER (WHERE "partyId" IS NULL), 0)::numeric AS "nobody"
-      FROM "Transaction"
-      WHERE "userId" = ${userId} AND "deletedAt" IS NULL AND "type" = 'sale'
-        AND "date" >= ${w.from} AND "date" <= ${w.to}
-      GROUP BY 1`,
+    // on a customer's khata (udhaar), or on no khata at all. The shared per-bill split (#258),
+    // the same one Home's Sales sheet reads.
+    salePaymentSplit(userId, w.from, w.to).then((rows) => rows.filter((r) => r.type === 'sale')),
     w.days <= 62 ? db.$queryRaw<Array<{ day: Date; paise: Num }>>`
       SELECT DATE_TRUNC('day', ${istLocal('"date"')}) AS "day",
              SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE -"totalAmount" END)::numeric AS "paise"
@@ -148,9 +139,9 @@ async function salesSection({ userId, w }: Ctx) {
   let udhaar = 0, nobody = 0
   for (const m of modes) {
     const mode = ['cash', 'upi', 'card', 'bank'].includes(m.mode ?? '') ? m.mode! : 'other'
-    byMode.set(mode, roundMoney((byMode.get(mode) ?? 0) + p2r(m.paid)))
-    udhaar = roundMoney(udhaar + p2r(m.udhaar))
-    nobody = roundMoney(nobody + p2r(m.nobody))
+    byMode.set(mode, roundMoney((byMode.get(mode) ?? 0) + m.paid))
+    udhaar = roundMoney(udhaar + m.udhaar)
+    nobody = roundMoney(nobody + m.nobody)
   }
   const payments = split([...[...byMode].map(([id, amount]) => ({ id, amount })), { id: 'udhaar', amount: udhaar }, { id: 'nobody', amount: nobody }])
   const dayMap = new Map<string, number>(days.map((d) => [new Date(d.day).toISOString(), p2r(d.paise)] as [string, number]))

@@ -60,9 +60,12 @@ describe('#274 a report error says what to do', () => {
     expect(codeBeforeSentence("throw new Error(json.message || json.error || 'x')\nawait readError(r)")).toEqual([])
     expect(codeBeforeSentence("ok\nthrow new Error(errBody.error || errBody.message || 'x')")).toEqual([2])
   })
-  test('no report screen puts the code first; GSTR-1 shows the sentence in a Notice, not a migration note', () => {
-    const dir = 'src/components/reports'
-    const bad = (fs.readdirSync(dir) as string[]).filter((f) => f.endsWith('.tsx')).flatMap((f) => codeBeforeSentence(readCode(`${dir}/${f}`)).map((n) => `${f}:${n}`))
+  test('no screen or hook puts the code first (#275 widened it from Reports); GSTR-1 shows the sentence in a Notice', () => {
+    const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true })
+      .flatMap((e) => (e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.(tsx?|jsx?)$/.test(e.name) ? [`${dir}/${e.name}`] : []))
+    const files = [...walk('src/components'), ...walk('src/hooks')]
+    expect(files.length).toBeGreaterThan(100)
+    const bad = files.flatMap((f) => codeBeforeSentence(readCode(f)).map((n) => `${f}:${n}`))
     expect(bad).toEqual([])
     const g1 = readCode('src/components/reports/Gstr1Report.tsx')
     expect(g1).toMatch(/if \(!r\.ok\) throw new Error\(await readError\(r\)\)/)

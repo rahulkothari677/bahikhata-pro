@@ -12,6 +12,7 @@ import { netSalesProfit, netSalesTaxable, netSalesTotal } from '@/lib/net-sales'
 import { fromPaise, roundMoney } from '@/lib/money'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 import { listProof, netProfitProof, profitProof, purchasesProof, salesProof, type Proof, type ProofRow } from '@/lib/proof-sheets'
+import { salePaymentSplit } from '@/lib/insights-queries'
 
 /**
  * GET /api/dashboard/explain?metric=sales|profit|got|purchases|expenses|stock&scope=today|range[&from&to]
@@ -106,17 +107,12 @@ export async function GET(req: NextRequest) {
 
     if (metric === 'sales') {
       const [groups, prev] = await withConnectionRetry(() => Promise.all([
-        db.transaction.groupBy({
-          by: ['type', 'paymentMode'],
-          where: activeTransactionWhere(userId, { type: { in: ['sale', 'credit-note'] }, date: { gte: w.from, lte: w.to } }),
-          _sum: { totalAmount: true, paidAmount: true },
-          _count: { _all: true },
-        }),
+        // #258: split per bill — the query Insights → Sales reads (lib/insights-queries.ts).
+        salePaymentSplit(userId, w.from, w.to),
         sumsByType(userId, w.prevFrom, w.prevTo, ['sale', 'credit-note']),
       ]))
       const s = salesProof(groups.map((g) => ({
-        type: g.type, paymentMode: g.paymentMode,
-        total: g._sum.totalAmount ?? 0, paid: g._sum.paidAmount ?? 0, count: g._count._all,
+        type: g.type, paymentMode: g.mode, total: g.total, paid: g.paid, udhaar: g.udhaar, nobody: g.nobody, count: g.count,
       })))
       proof = { total: s.total, rows: s.rows }
       count = s.bills

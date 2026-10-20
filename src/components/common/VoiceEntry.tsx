@@ -269,7 +269,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
       if (!r.ok) {
         const errData = await r.json().catch(() => ({}))
         // Prefer 'detail' over 'error' — 'detail' has the actual provider error message
-        const errorDetail = errData.detail || errData.error || errData.message || r.statusText || 'Unknown server error'
+        const errorDetail = errData.detail || errData.message || errData.error || r.statusText || 'Unknown server error'
         sonnerToast.error(`Voice parse failed (HTTP ${r.status})`, {
           description: errorDetail,
           duration: 10000,
