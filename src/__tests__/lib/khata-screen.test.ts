@@ -39,9 +39,33 @@ describe('Khata', () => {
     expect(screen).toMatch(/data\?\.counter && \(/)
     expect(screen).toMatch(/handleViewParty\(data\.counter\.id\)/)
   })
+  test('5e-6: a customer\'s page is a bahi page — the balance in words, the main actions, then the bahi as ruled rows', () => {
+    const page = readCode('src/components/parties/PartyProfile.tsx')
+    const at = (s: string) => { const i = page.indexOf(s); expect({ s, found: i >= 0 }).toEqual({ s, found: true }); return i }
+    // The order: balance → actions → the bahi → the smaller things → figures and chart → leave / delete.
+    expect(at('{balanceWords}')).toBeLessThan(at('{settleLabel}'))
+    expect(at('{settleLabel}')).toBeLessThan(at('id="bahi-title"'))
+    expect(at('id="bahi-title"')).toBeLessThan(at('<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">'))
+    expect(at("onClick={() => setView('parties')}")).toBeGreaterThan(at('id="bahi-title"'))
+    // No chat bubbles, no box that scrolls inside the page, no bare + / − on a balance.
+    expect(page).not.toMatch(/max-h-\[500px\] overflow-y-auto/)
+    expect(page).not.toMatch(/rounded-br-md|rounded-bl-md/)
+    expect(page).not.toMatch(/Bal: \{entry\.runningBalance >= 0 \? '\+' : ''\}/)
+    expect(page).toMatch(/\{balWords\(entry\.runningBalance\)\}/)
+    // 60 lines, then "Show 60 more" — the lists' rule, not a page 500 lines long.
+    expect(page).toMatch(/statement\.slice\(0, bahiShown\)\.map/)
+    expect(page).toMatch(/setBahiShown\(\(n\) => n \+ 60\)/)
+    // Who owes whom from the party's type (#261), in words.
+    expect(page).toMatch(/t\(party\.type === 'supplier' \? 'bahi\.owe_back' : 'stat\.they_owe'\)/)
+    expect(page).toMatch(/t\(party\.type === 'customer' \? 'bahi\.advance' : 'stat\.you_owe'\)/)
+    // The cap warning is a Notice with the reason behind ⓘ, not a hand-drawn amber box.
+    expect(page).toMatch(/<Notice level="note"[^>]*title=\{t\('bahi\.truncated'\)/)
+    expect(page).not.toMatch(/border-amber-300 bg-amber-50/)
+  })
   test('every Khata word exists in English and Hindi', () => {
     const en = translations.en as unknown as Record<string, string>, hi = translations.hi as unknown as Record<string, string>
-    const keys = Object.keys(en).filter((k) => k.startsWith('khata.'))
+    const keys = Object.keys(en).filter((k) => k.startsWith('khata.') || k.startsWith('bahi.') || k === 'list.clear_focus')
+    expect(keys.filter((k) => k.startsWith('bahi.')).length).toBeGreaterThanOrEqual(20)
     expect(keys.length).toBeGreaterThanOrEqual(24)
     expect(keys.filter((k) => !hi[k])).toEqual([])
   })

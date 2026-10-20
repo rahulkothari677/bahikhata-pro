@@ -191,7 +191,12 @@ save.
   committing. `git branch --show-current` before touching a file. **Broken
   again 5 Oct (Phase 4c)**: a new day started on `main` and I edited 25 files
   before noticing; moved to a branch before any commit. The check goes in the
-  same command as the first look at the repo, every phase.
+  same command as the first look at the repo, every phase. **Broken again
+  20 Oct (5e-6):** the merge command ended on `main` with no new branch
+  (every earlier merge command that day had created one), and the bahi page
+  was written there; caught at the next git command, moved before any
+  commit. **The merge command itself ends with `git checkout -b <next>`** —
+  when the next step's name is not yet known, name it `next-step` and rename.
 - **Do not push unfinished branches** until it is confirmed that Vercel Preview
   builds use a separate database: `npm run build` runs migrations, so a preview
   on the production `DATABASE_URL` would change the live database before merge.
@@ -566,6 +571,15 @@ proves it.**
   **passed 9 of 9**. Then the guard-on-guards built to catch that class was
   caught by the same defect — it skipped files whose *comments* mentioned
   `readCode`, so it stayed silent on the very revert used to test it.
+
+· **20 Oct (5e-6), the same defect in a CHECK, not a test.** My "nothing else
+  was written" query compared `createdAt` (stored UTC, no time zone) with the
+  local database's `now()` — which runs on Asia/Calcutta — so "the last 40
+  minutes" pointed 5½ hours back and could never find a fresh row. It printed
+  "nothing" in three phases running. Found only when it could not find a ₹100
+  payment I could see on screen. **A "nothing was written" check must first
+  find one row I know I wrote** (the known-good input), and SQL windows on
+  these columns use `now() AT TIME ZONE 'UTC'` — or a time passed from the app.
 
 **The rule this earned: a guard must be RUNNABLE against a known-good and a
 known-bad input.** Four of the five were rules buried inside a directory walk

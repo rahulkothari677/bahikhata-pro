@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { Fragment, useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -41,11 +41,14 @@ import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { istDateString } from '@/lib/timezone'
 import { isWalkInParty } from '@/lib/walk-in-party'
 import { useTranslation } from '@/hooks/use-translation'
+import { Notice } from '@/components/ui/notice'
 
 export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features, setSelectedTransactionId, pendingSettle, setPendingSettle } = useAppStore()
   const queryClient = useQueryClient()
   const { t } = useTranslation()
+  // 5e-6: the bahi shows 60 lines, then "Show 60 more" — the lists' rule (a khata can hold 500 lines).
+  const [bahiShown, setBahiShown] = useState(60)
   const [sendingReminder, setSendingReminder] = useState(false)
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   // 🔒 FIX H3: Payment dialog state
@@ -770,106 +773,183 @@ export function PartyProfile() {
 
   const isCustomer = party.type === 'customer' || party.type === 'both'
   const isSupplier = party.type === 'supplier' || party.type === 'both'
+  // Phase 5e-6: the balance in words, by who the party is (#261) — a customer's negative balance is their
+  // advance, a supplier's positive one is money they owe you back.
+  const balancePaise = Math.round((stats.balance ?? 0) * 100)
+  const balanceZero = balancePaise === 0
+  const balanceWords = balanceZero ? t('khata.chip.customer.settled')
+    : balancePaise > 0 ? t(party.type === 'supplier' ? 'bahi.owe_back' : 'stat.they_owe')
+    : t(party.type === 'customer' ? 'bahi.advance' : 'stat.you_owe')
+  const balanceTone = balanceZero ? 'text-muted-foreground' : balancePaise > 0 ? 'text-good' : party.type === 'customer' ? 'text-check' : 'text-bad'
+  const balWords = (b: number) => {
+    const pz = Math.round((b ?? 0) * 100)
+    return pz === 0 ? t('khata.chip.customer.settled') : t(pz > 0 ? 'bahi.bal_they' : 'bahi.bal_you').replace('{v}', formatINR(Math.abs(b)))
+  }
+  const settleLabel = party.type === 'customer' ? t('bahi.got') : party.type === 'supplier' ? t('bahi.gave') : t('bahi.settle')
+  const showRemind = isCustomer && balancePaise > 0 && !!features?.paymentReminders && !isWalkInParty(party)
 
   return (
     <div className="space-y-4">
-      {/* Profile header — premium gradient banner */}
-      <div className={cn(
-        'rounded-2xl shadow-card overflow-hidden text-white relative',
-        party.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
-        party.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
-        'bg-gradient-to-br from-violet-500 to-purple-600'
-      )}>
-        {/* Decorative circles */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
-        <div className="absolute bottom-0 right-20 w-24 h-24 bg-white/5 rounded-full -mb-12 pointer-events-none" />
-        <div className="relative p-5">
-          <div className="flex items-start gap-4 flex-wrap">
-            <Avatar className="w-16 h-16 border-4 border-white/30 flex-shrink-0">
-              <AvatarFallback className="bg-white/20 backdrop-blur-sm text-white text-xl font-bold">
-                {getInitials(party.name)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              {/* #267: the reserved walk-in khata is named for what it holds, the same words as its Khata row — not a person. */}
-              <h2 className="text-2xl font-bold font-heading tracking-tight truncate">{isWalkInParty(party) ? t('khata.counter') : party.name}</h2>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {!isWalkInParty(party) && <span className="text-xs font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 capitalize">{party.type}</span>}
-                {party.phone && (
-                  <span className="text-white/80 text-sm flex items-center gap-1">
-                    <Phone className="w-3 h-3" /> {party.phone}
-                  </span>
-                )}
-                {party.state && (
-                  <span className="text-white/80 text-sm flex items-center gap-1">
-                    <MapPin className="w-3 h-3" /> {party.state}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-white/70 text-xs">Outstanding</p>
-              <p className={cn('text-2xl font-bold tabular-nums', stats.balance >= 0 ? 'text-white' : 'text-red-200')}>
-                {stats.balance >= 0 ? '+' : ''}{formatINR(animatedBalance)}
-              </p>
-              <p className="text-white/70 text-xs mt-0.5">
-                {/* 🔒 V26 Phase 8 PB-6: Better label for supplier balances.
-                    Was: "They owe you" even for suppliers → confusing when you
-                    paid them and it shows as a receivable. Now: context-aware. */}
-                {stats.balance > 0
-                  ? party?.type === 'supplier'
-                    ? 'Advance paid (they owe you)'
-                    : 'They owe you'
-                  : stats.balance < 0
-                    ? party?.type === 'supplier'
-                      ? 'You owe them'
-                      : 'You owe them'
-                    : 'Settled'}
-              </p>
+      {/*
+        * Phase 5e-6 — the bahi page (Phase 5 plan, 5e: "the bahi page"; ledger model v4: money is the largest
+        * thing on screen, lists are plain ruled rows "like a bahi page"). Who they are, what the balance means in
+        * words, the two or three things done most — then the bahi itself: every bill and payment as one ruled
+        * line with the balance after it. It opened as a gradient banner, eight equal buttons, four cards, a chart
+        * and top products, with the statement last, drawn as chat bubbles in a box that scrolled on its own.
+        */}
+      <section className="rounded-2xl bg-card border border-border/60 shadow-card p-4 space-y-4">
+        <div className="flex items-start gap-3">
+          <Avatar className="w-12 h-12 flex-shrink-0">
+            <AvatarFallback className="bg-primary/10 text-primary font-bold">{getInitials(isWalkInParty(party) ? t('khata.counter') : party.name)}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            {/* #267: the reserved walk-in khata is named for what it holds, the same words as its Khata row — not a person. */}
+            <h2 className="text-xl font-bold font-heading tracking-tight truncate">{isWalkInParty(party) ? t('khata.counter') : party.name}</h2>
+            <div className="flex items-center gap-x-3 gap-y-1 mt-0.5 flex-wrap text-sm text-muted-foreground">
+              {!isWalkInParty(party) && <span className="capitalize">{party.type}</span>}
+              {party.phone && (
+                <span className="inline-flex items-center gap-1"><Phone className="w-3.5 h-3.5" aria-hidden /> {party.phone}</span>
+              )}
+              {party.state && (
+                <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" aria-hidden /> {party.state}</span>
+              )}
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Quick actions */}
-      <div className="flex flex-wrap gap-2">
-          {isCustomer && (
-            <Button size="sm" onClick={() => handleNewTransaction('sale')} className="bg-gradient-emerald gap-2">
-              <Plus className="w-4 h-4" /> New Sale
-            </Button>
-          )}
-          {isSupplier && (
-            <Button size="sm" onClick={() => handleNewTransaction('purchase')} className="bg-gradient-saffron gap-2">
-              <Plus className="w-4 h-4" /> New Purchase
-            </Button>
-          )}
-          {/* 🔒 FIX H3: Receive Payment / Make Payment button */}
-          <Button size="sm" variant="outline" onClick={() => {
-            // 🔒 V26 Phase 8 PB-3: Default payment direction based on party type.
-            // Was: always 'received' — opening Settle on a supplier pre-selected
-            // "received" → one careless tap recorded the payment in the wrong direction.
-            // 🔒 AUDIT C5: Settle is a full PAGE now. As a dialog, nine open
-            // bills pushed Payment Mode, Notes and the Record button off-screen
-            // — the shopkeeper could see the bills or the save button, never
-            // both. The page also sets its own payment direction from the
-            // party type, so that logic lives in one place.
+        {/* The balance in words — who owes whom, read from the party's type and the sign (#261), never a bare + or −. */}
+        <div>
+          <p className="text-sm text-muted-foreground">{balanceWords}</p>
+          <p className={cn('text-3xl font-bold tabular-nums', balanceTone)}>
+            {balanceZero ? t('khata.chip.customer.settled') : formatINR(Math.abs(animatedBalance))}
+          </p>
+        </div>
+        {/* On a phone Remind is a 48px WhatsApp button so "Got payment" and "New sale" keep their words. */}
+        <div className={cn('grid gap-2', showRemind ? 'grid-cols-[1fr_1fr_auto] sm:grid-cols-3' : 'grid-cols-2')}>
+          <Button onClick={() => {
+            // 🔒 V26 Phase 8 PB-3 / AUDIT C5: Settle is a full page that sets its own payment
+            // direction from the party type, so that logic lives in one place.
             setPreviousView('party-profile')
             setView('party-settle')
-          }} className="gap-2">
-            <HandCoins className="w-4 h-4" /> Settle
+          }} className="min-h-12 gap-1.5">
+            <HandCoins className="w-4 h-4" aria-hidden /> {settleLabel}
           </Button>
-          {isCustomer && stats.balance > 0 && features?.paymentReminders && (
+          {isCustomer ? (
+            <Button variant="outline" onClick={() => handleNewTransaction('sale')} className="min-h-12 gap-1.5">
+              <Plus className="w-4 h-4" aria-hidden /> {t('bahi.new_sale')}
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => handleNewTransaction('purchase')} className="min-h-12 gap-1.5">
+              <Plus className="w-4 h-4" aria-hidden /> {t('bahi.new_purchase')}
+            </Button>
+          )}
+          {showRemind && (
+            <Button variant="outline" onClick={handleSendReminder} disabled={sendingReminder} aria-label={t('bahi.remind')} className="min-h-12 min-w-12 gap-1.5 px-3">
+              {sendingReminder ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <MessageCircle className="w-4 h-4" aria-hidden />}
+              <span className="hidden sm:inline">{t('bahi.remind')}</span>
+            </Button>
+          )}
+        </div>
+      </section>
+
+      {/* The bahi: newest first, a day at a time, one ruled line per bill or payment, the balance after it. */}
+      <section aria-labelledby="bahi-title" className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
+        <div className="flex items-center justify-between px-4 pt-4 pb-1">
+          <h3 id="bahi-title" className="text-base font-semibold">{t('bahi.title')}</h3>
+          <span className="text-xs text-muted-foreground">{t('bahi.entries').replace('{n}', String(statement.length))}</span>
+        </div>
+        {/* 🔒 V15 M-2 / V16 M3: the statement holds the latest {cap} bills and payments; the balance after each
+            line covers only the lines shown. Said plainly, the reason behind ⓘ. */}
+        {statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap) && (
+          <Notice level="note" className="mx-4 my-2" title={t('bahi.truncated').replace('{n}', String(statementTotals.cap))} info={t('bahi.truncated_info')} />
+        )}
+        {statement.length === 0 ? (
+          <p className="px-4 pt-2 pb-5 text-sm text-muted-foreground">{t('bahi.empty')}</p>
+        ) : (
+          <ol className="pb-1">
+            {statement.slice(0, bahiShown).map((entry: any, index: number) => {
+              const prev = statement[index - 1]
+              const newDay = !prev || new Date(prev.date).toDateString() !== new Date(entry.date).toDateString()
+              const kind = entry.isPayment
+                ? (entry.type === 'payment-received' ? 'got' : 'gave')
+                : ({ sale: 'sale', purchase: 'purchase', 'credit-note': 'return_in', 'debit-note': 'return_out' } as Record<string, string>)[entry.type] ?? null
+              // Money that came IN to the shop reads green; everything else is plain — the words say what it was.
+              const moneyIn = kind === 'got' || kind === 'return_out'
+              // The payment mode in the words Insights uses for it (one vocabulary); a mode it has no word for stays as stored.
+              const mode = entry.paymentMode && ['cash', 'upi', 'card', 'bank', 'other'].includes(entry.paymentMode) ? t(`ins.mode.${entry.paymentMode}`) : entry.paymentMode
+              const sub = entry.isPayment
+                ? [mode, entry.notes].filter(Boolean).join(' · ')
+                // "paid" says why a bill left the balance where it was; "₹X due" is what it added.
+                : [entry.invoiceNo, t('bahi.items_n').replace('{n}', String(entry.itemCount ?? 0)), entry.due > 0 ? t('bahi.due').replace('{v}', formatINR(entry.due)) : t('bahi.paid')].filter(Boolean).join(' · ')
+              const body = (
+                <>
+                  <span className="min-w-0 flex-1 text-left">
+                    <span className="block text-sm font-semibold">{kind ? t(`bahi.${kind}`) : entry.type}</span>
+                    {sub && <span className="block text-xs text-muted-foreground truncate">{sub}</span>}
+                  </span>
+                  <span className="text-right shrink-0">
+                    <span className={cn('block text-sm font-bold tabular-nums', moneyIn && 'text-good')}>{formatINR(entry.amount)}</span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">{balWords(entry.runningBalance)}</span>
+                  </span>
+                </>
+              )
+              return (
+                <Fragment key={`${entry.isPayment ? 'pay' : 'txn'}-${entry.id}`}>
+                  {newDay && <li className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground">{formatDate(entry.date)}</li>}
+                  <li className="border-t border-border/60">
+                    {entry.isPayment ? (
+                      <div className="flex items-center gap-3 px-4 py-2.5">{body}</div>
+                    ) : (
+                      <button type="button" onClick={() => handleViewTransaction(entry.id)} className="w-full min-h-12 flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40">{body}</button>
+                    )}
+                  </li>
+                </Fragment>
+              )
+            })}
+          </ol>
+        )}
+        {statement.length > bahiShown && (
+          <div className="px-4 pb-4">
+            <button
+              type="button"
+              onClick={() => setBahiShown((n) => n + 60)}
+              className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted"
+            >
+              {t('khata.more').replace('{n}', String(Math.min(60, statement.length - bahiShown))).replace('{m}', String(statement.length))}
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* The smaller things, one row: bills, payment link, print and share the statement. */}
+      <div className="flex flex-wrap gap-2">
+          {/*
+            🔒 AUDIT C5: Bills opens on its OWN page rather than expanding here.
+            As a card inline, a customer with many bills pushed the statement,
+            chart and top-products below the fold and turned this screen into a
+            scroll marathon — a new section that makes the existing screen worse
+            is not an improvement. On its own page it also gets search and
+            filtering, which would not fit in a card.
+          */}
+          {unpaidBillRows.length > 0 || billRows.length > 0 ? (
             <Button
               size="sm"
               variant="outline"
-              onClick={handleSendReminder}
-              disabled={sendingReminder}
-              className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
+              onClick={() => {
+                setPreviousView('party-profile')
+                setView('party-bills')
+              }}
+              className="gap-2"
+              title="View every bill for this party and settle individually"
             >
-              {sendingReminder ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
-              Send Reminder
+              <Receipt className="w-4 h-4" />
+              Bills
+              {unpaidBillRows.length > 0 && (
+                <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-0.5">
+                  {unpaidBillRows.length}
+                </Badge>
+              )}
             </Button>
-          )}
+          ) : null}
           {/* 🔒 V19-031 FIX: Show "Notify Supplier" button when we owe them (balance < 0) */}
           {isSupplier && stats.balance < 0 && (
             <Button
@@ -941,44 +1021,6 @@ export function PartyProfile() {
             <MessageCircle className="w-4 h-4" />
             Send PDF
           </Button>
-          {/*
-            🔒 AUDIT C5: Bills opens on its OWN page rather than expanding here.
-            As a card inline, a customer with many bills pushed the statement,
-            chart and top-products below the fold and turned this screen into a
-            scroll marathon — a new section that makes the existing screen worse
-            is not an improvement. On its own page it also gets search and
-            filtering, which would not fit in a card.
-          */}
-          {unpaidBillRows.length > 0 || billRows.length > 0 ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setPreviousView('party-profile')
-                setView('party-bills')
-              }}
-              className="gap-2"
-              title="View every bill for this party and settle individually"
-            >
-              <Receipt className="w-4 h-4" />
-              Bills
-              {unpaidBillRows.length > 0 && (
-                <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-0.5">
-                  {unpaidBillRows.length}
-                </Badge>
-              )}
-            </Button>
-          ) : null}
-          <Button size="sm" variant="outline" onClick={() => setView('parties')} className="gap-2">
-            <User className="w-4 h-4" /> All Parties
-          </Button>
-          <div className="flex-1" />
-          {/* The counter-returns khata is reserved (lib/walk-in-party.ts): every walk-in return lands here, so it is not deleted. */}
-          {!isWalkInParty(party) && (
-            <Button size="sm" variant="outline" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
-              <Trash2 className="w-4 h-4" /> Delete
-            </Button>
-          )}
       </div>
 
       {/* Stats grid — 🔒 V26 Phase 8 PB-7: Hide irrelevant cards by party type.
@@ -1159,184 +1201,20 @@ export function PartyProfile() {
         </Card>
       )}
 
-      {/* 🔒 UI/UX 2: Account Statement — merged transactions + payments timeline
-          Sales (inflow) = right-aligned green bubbles
-          Purchases (outflow) = left-aligned amber bubbles
-          Payments received = right-aligned blue bubbles
-          Payments paid = left-aligned blue bubbles
-          Date separators between days, running balance sticky at top */}
-      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="w-4 h-4" /> Account Statement
-            </CardTitle>
-            <Badge variant="secondary">{statement.length} entries</Badge>
-          </div>
-          {/* 🔒 V15 M-2: Truncation warning. The statement caps at 500
-              transactions + 500 payments to bound memory. If a party exceeds
-              that, older entries are cut off — the shopkeeper needs to use
-              the printable / exportable statement for the full history. */}
-          {statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap) && (
-            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              <strong>Showing the latest {statementTotals.cap} entries.</strong> This party has{' '}
-              {statementTotals.transactionTotal} transactions and {statementTotals.paymentTotal} payments total.
-              Use the <em>Print / Share Statement</em> button below for the complete history.
-            </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          {statement.length === 0 ? (
-            <p className="text-center py-8 text-sm text-muted-foreground">No transactions or payments yet with this party</p>
-          ) : (
-            <div className="max-h-[500px] overflow-y-auto rounded-xl bg-muted/20 p-3 space-y-1">
-              {/* Running balance banner at top.
-                  🔒 V16 M3: When the statement is truncated (>500 entries),
-                  per-entry "Bal: ₹X" badges reflect only the latest 500
-                  entries — NOT the true historical balance at that point.
-                  We surface this honestly so the user doesn't think the
-                  last visible badge should equal the current balance. */}
-              <div className="sticky top-0 z-10 -mx-3 px-3 py-2 mb-2 bg-primary/10 backdrop-blur-sm border-y border-primary/20 text-center">
-                <span className="text-xs text-muted-foreground">Current Balance: </span>
-                <span className={cn('text-xs font-bold', stats.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : stats.balance < 0 ? 'text-rose-600' : 'text-muted-foreground')}>
-                  {stats.balance >= 0 ? '+' : ''}{formatINR(stats.balance)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {' '}· {stats.balance > 0 ? 'They owe you' : stats.balance < 0 ? 'You owe them' : 'Settled'}
-                </span>
-                {statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap) && (
-                  <span className="block text-xs text-amber-700 dark:text-amber-300 mt-1">
-                    Per-entry balances below reflect only the latest {statementTotals.cap} entries — use Print Statement for the complete audited history.
-                  </span>
-                )}
-              </div>
+      {/* Leaving and removing, kept away from the everyday buttons. */}
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => setView('parties')} className="gap-2">
+          <User className="w-4 h-4" /> All Parties
+        </Button>
+        <div className="flex-1" />
+        {/* The counter-returns khata is reserved (lib/walk-in-party.ts): every walk-in return lands here, so it is not deleted. */}
+        {!isWalkInParty(party) && (
+          <Button size="sm" variant="outline" onClick={handleDelete} className="gap-2 text-bad hover:bg-bad-soft">
+            <Trash2 className="w-4 h-4" /> Delete
+          </Button>
+        )}
+      </div>
 
-              {statement.map((entry: any, index: number) => {
-                const isSale = entry.type === 'sale'
-                const isPurchase = entry.type === 'purchase'
-                const isPayReceived = entry.type === 'payment-received'
-                const isPayPaid = entry.type === 'payment-paid'
-                // 🔒 V19-015 FIX: Credit notes are OUTFLOW (money returned to customer).
-                // Debit notes are INFLOW (money received from supplier).
-                const isCreditNote = entry.type === 'credit-note'
-                const isDebitNote = entry.type === 'debit-note'
-                const isInflow = isSale || isPayReceived || isDebitNote
-                const entryDate = new Date(entry.date)
-                const prevEntry = statement[index - 1]
-                const showDateSeparator = !prevEntry || new Date(prevEntry.date).toDateString() !== entryDate.toDateString()
-
-                return (
-                  <div key={`${entry.isPayment ? 'pay' : 'txn'}-${entry.id}`}>
-                    {/* Date separator */}
-                    {showDateSeparator && (
-                      <div className="flex justify-center my-3">
-                        <span className="text-xs font-medium text-muted-foreground bg-background px-3 py-1 rounded-full border border-border">
-                          {formatDate(entry.date)}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Chat bubble */}
-                    {entry.isPayment ? (
-                      // Payment entry — blue/teal bubble, not clickable
-                      <div className={cn('flex w-full', isInflow ? 'justify-end' : 'justify-start')}>
-                        <div
-                          className={cn(
-                            'max-w-[80%] rounded-2xl px-3 py-2 shadow-sm',
-                            isInflow
-                              ? 'bg-blue-500 text-white rounded-br-md'
-                              : 'bg-teal-600 text-white rounded-bl-md'
-                          )}
-                        >
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <HandCoins className="w-3 h-3" />
-                            <span className="text-xs font-semibold opacity-90">
-                              {isPayReceived ? 'Received' : 'Paid'}
-                            </span>
-                            <span className="text-xs opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
-                              {entry.paymentMode}
-                            </span>
-                          </div>
-                          <p className="text-base font-bold tabular-nums">
-                            {isInflow ? '+' : '-'}{formatINR(entry.amount)}
-                          </p>
-                          {entry.notes && (
-                            <p className="text-xs opacity-75 mt-0.5">{entry.notes}</p>
-                          )}
-                          {/* 🔒 V15 M-2: Running balance after this entry —
-                              the historical balance AT THIS POINT, not the
-                              current balance. This is what a real ledger
-                              statement shows so the reader can follow the
-                              money from oldest to newest. */}
-                          <div className="flex items-center justify-between gap-2 mt-0.5">
-                            <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded tabular-nums">
-                              Bal: {entry.runningBalance >= 0 ? '+' : ''}{formatINR(entry.runningBalance)}
-                            </span>
-                            <span className="text-xs opacity-75">
-                              {entryDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      // Transaction entry — clickable, green/amber bubble
-                      <button
-                        onClick={() => handleViewTransaction(entry.id)}
-                        className={cn(
-                          'flex w-full group',
-                          isInflow ? 'justify-end' : 'justify-start',
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            'max-w-[80%] rounded-2xl px-3 py-2 shadow-sm transition group-hover:shadow-md group-active:scale-95',
-                            isInflow
-                              ? 'bg-emerald-500 text-white rounded-br-md'
-                              : 'bg-amber-500 text-white rounded-bl-md'
-                          )}
-                        >
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <span className="text-xs font-semibold opacity-90">
-                              {entry.type}
-                            </span>
-                            {entry.invoiceNo && (
-                              <span className="text-xs opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
-                                {entry.invoiceNo}
-                              </span>
-                            )}
-                            <span className="text-xs opacity-75">
-                              {entry.itemCount} items
-                            </span>
-                          </div>
-                          <p className="text-base font-bold tabular-nums">
-                            {isInflow ? '+' : '-'}{formatINR(entry.amount)}
-                          </p>
-                          <div className="flex items-center justify-between gap-2 mt-1">
-                            {entry.due > 0 ? (
-                              <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded">
-                                Due: {formatINR(entry.due)}
-                              </span>
-                            ) : (
-                              <span className="text-xs opacity-75">✓ Paid</span>
-                            )}
-                            {/* 🔒 V15 M-2: Running balance after this entry. */}
-                            <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded tabular-nums">
-                              Bal: {entry.runningBalance >= 0 ? '+' : ''}{formatINR(entry.runningBalance)}
-                            </span>
-                            <span className="text-xs opacity-75">
-                              {entryDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                        </div>
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
       {/* 🔒 FIX H3: Payment dialog */}
 
       {/* 🔒 UI/UX 2: Payment History card removed — payments now appear in the
