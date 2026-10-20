@@ -46,6 +46,10 @@ describe('the list', () => {
   test('best sellers first', () => {
     expect(r.rows.slice(0, 3).map((p) => p.id)).toEqual(['Atta', 'Dal', 'Lays'])
   })
+  test('most profit this month first (5e-4)', () => {
+    const withProfit = shop.map((p, i) => ({ ...p, profitNow: [120, 30, 800, 0, -40, 5, 60][i] }))
+    expect(itemsList(withProfit, { chip: 'all', search: '', category: null, sort: 'profit', offset: 0, now }).rows.slice(0, 3).map((p) => p.id)).toEqual(['Lays', 'Atta', 'Haircut'])
+  })
   test('lowest stock first: stocked items by stock, a service (no stock) last', () => {
     const s = itemsList(shop, { chip: 'all', search: '', category: null, sort: 'stock', offset: 0, now }).rows.map((p) => p.id)
     expect(s.slice(0, 2)).toEqual(['Soap', 'Lays'])

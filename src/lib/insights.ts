@@ -90,15 +90,28 @@ export const REGULAR_MIN_BILLS = 3
  *  inactive   — no bill in either (including never bought)
  * Amounts: sales in the period; for "quiet", what they bought in the period before.
  */
+export const CUSTOMER_GROUPS = ['new', 'regular', 'occasional', 'quiet', 'inactive'] as const
+export type CustomerGroup = (typeof CUSTOMER_GROUPS)[number]
+
+/**
+ * Which group one customer is in — the ONE rule Insights' Customers groups and
+ * Khata's Regular / Gone quiet / New chips share (Phase 5e-4), so "Gone quiet 14"
+ * in Insights opens a Khata chip of exactly those 14. A customer with no bill in
+ * either period is not in the activity rows at all: "inactive".
+ */
+export function customerGroupOf(r: Pick<CustomerActivity, 'billsNow' | 'billsPrev' | 'firstBill'>, from: Date): CustomerGroup {
+  return r.firstBill && r.firstBill >= from && r.billsNow > 0 ? 'new'
+    : r.billsNow >= REGULAR_MIN_BILLS ? 'regular'
+    : r.billsNow > 0 ? 'occasional'
+    : r.billsPrev > 0 ? 'quiet'
+    : 'inactive'
+}
+
 export function customerGroups(rows: CustomerActivity[], from: Date): Group[] {
-  const ids = ['new', 'regular', 'occasional', 'quiet', 'inactive'] as const
+  const ids = CUSTOMER_GROUPS
   const acc = Object.fromEntries(ids.map((k) => [k, { count: 0, amount: 0 }])) as Record<(typeof ids)[number], { count: number; amount: number }>
   for (const r of rows) {
-    const k = r.firstBill && r.firstBill >= from && r.billsNow > 0 ? 'new'
-      : r.billsNow >= REGULAR_MIN_BILLS ? 'regular'
-      : r.billsNow > 0 ? 'occasional'
-      : r.billsPrev > 0 ? 'quiet'
-      : 'inactive'
+    const k = customerGroupOf(r, from)
     acc[k].count += 1
     acc[k].amount += paise(k === 'quiet' ? r.salesPrev : r.salesNow)
   }
@@ -128,15 +141,25 @@ export interface Balance { id: string; balance: number; oldestUnpaid: Date | nul
  * with no unpaid bill on record (an opening balance) gets its own group rather
  * than being called "new". Buckets: 0–15, 16–30, 31–60, over 60 days.
  */
+export const AGE_BANDS = ['d15', 'd30', 'd60', 'over', 'opening'] as const
+export type AgeBand = (typeof AGE_BANDS)[number]
+
+/**
+ * How old one customer's udhaar is, by their oldest unpaid bill (days, IST) —
+ * the ONE rule Insights' age bars and Khata's age chips share. No unpaid bill
+ * (the balance is an opening balance) → "opening".
+ */
+export function ageBandOf(oldestDays: number | null): AgeBand {
+  if (oldestDays === null) return 'opening'
+  return oldestDays <= UDHAAR_EDGES[0] ? 'd15' : oldestDays <= UDHAAR_EDGES[1] ? 'd30' : oldestDays <= UDHAAR_EDGES[2] ? 'd60' : 'over'
+}
+
 export function udhaarAge(rows: Balance[], now: Date): Group[] {
-  const ids = ['d15', 'd30', 'd60', 'over', 'opening'] as const
+  const ids = AGE_BANDS
   const acc = Object.fromEntries(ids.map((k) => [k, { count: 0, amount: 0 }])) as Record<(typeof ids)[number], { count: number; amount: number }>
   for (const r of rows) {
     if (paise(r.balance) <= 0) continue
-    const k = !r.oldestUnpaid ? 'opening' : (() => {
-      const d = istDaysBetween(r.oldestUnpaid, now)
-      return d <= UDHAAR_EDGES[0] ? 'd15' : d <= UDHAAR_EDGES[1] ? 'd30' : d <= UDHAAR_EDGES[2] ? 'd60' : 'over'
-    })()
+    const k = ageBandOf(r.oldestUnpaid ? istDaysBetween(r.oldestUnpaid, now) : null)
     acc[k].count += 1
     acc[k].amount += paise(r.balance)
   }

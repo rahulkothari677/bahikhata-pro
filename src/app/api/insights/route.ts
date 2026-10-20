@@ -8,7 +8,6 @@ import { noStore } from '@/lib/cache'
 import { apiError } from '@/lib/api-error'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { fromPaise, roundMoney } from '@/lib/money'
-import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 import { istLocal } from '@/lib/ist-sql'
 import { getReceivablePayable } from '@/lib/party-balance'
 import { khataSides } from '@/lib/khata-list'
@@ -17,6 +16,7 @@ import { rangeWindow } from '@/lib/period'
 import { trendBuckets } from '@/lib/trend-buckets'
 import { abcGroups, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMATCHED } from '@/lib/insights'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
+import { customerActivityInPeriod, itemSalesInPeriod, SALE_LINES, SIGNED_LINE, SIGNED_PROFIT } from '@/lib/insights-queries'
 import { WALK_IN_PARTY_NAME } from '@/lib/walk-in-party'
 import { DEAD_DAYS } from '@/lib/stock-aging'
 import { earnPerUnit, purchaseCostPerUnit } from '@/lib/unit-profit'
@@ -99,25 +99,10 @@ async function sumsByType(userId: string, from: Date, to: Date, types: string[])
   }
 }
 
-/** Per-line value before GST, signed: + for a sale, − for a return. Table aliases ti / t. */
-const SIGNED_LINE = Prisma.sql`(CASE WHEN t."type" = 'sale' THEN ${LINE_TAXABLE_SQL} ELSE -${LINE_TAXABLE_SQL} END)`
-/**
- * Per-line profit, signed — exactly what lib/line-items.ts booked on the line:
- * value − Math.round(qty × cost at sale). FLOOR(x + 0.5) on the float product
- * is Math.round to the bit (both IEEE doubles); ROUND on a numeric would round
- * 100.49999999999999 up, and ROUND on a double rounds 50.5 to even.
- * A typed-in line (no item) booked no profit, so it is 0 here too.
- */
-const SIGNED_PROFIT = Prisma.sql`(CASE WHEN ti."productId" IS NULL THEN 0 WHEN t."type" = 'sale' THEN 1 ELSE -1 END) * (${LINE_TAXABLE_SQL} - FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)::numeric)`
+// SIGNED_LINE, SIGNED_PROFIT and SALE_LINES live in lib/insights-queries.ts with the period
+// queries, shared with the Items and Khata lists (Phase 5e-4).
 /** What a bill left unpaid at the counter (never below 0). One rule for Sales → udhaar and Udhaar → given on credit. */
 const UNPAID_ON_BILL = Prisma.sql`GREATEST("totalAmount" - "paidAmount", 0)`
-const SALE_LINES = (userId: string, from: Date, to: Date) => Prisma.sql`
-  FROM "TransactionItem" ti
-  JOIN "Transaction" t ON t."id" = ti."transactionId"
-  LEFT JOIN "Product" p ON p."id" = ti."productId"
-  WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL
-    AND t."type" IN ('sale', 'credit-note')
-    AND t."date" >= ${from} AND t."date" <= ${to}`
 
 // ─── Sales ──────────────────────────────────────────────────────────────
 
@@ -191,14 +176,8 @@ async function salesSection({ userId, w }: Ctx) {
 async function itemsSection({ userId, w, now, hideProfit }: Ctx) {
   // Dead stock: the shared rule (lib/stock-aging.ts) — no sale in DEAD_DAYS, and on the books that long.
   const since90 = new Date(now.getTime() - DEAD_DAYS * 86_400_000)
-  const [perItem, productStats, notSold, productCount] = await Promise.all([
-    db.$queryRaw<Array<{ id: string; name: string; sales: Num; qty: Num; profit: Num }>>`
-      SELECT ti."productId" AS "id", MAX(p."name") AS "name",
-             SUM(${SIGNED_LINE})::numeric AS "sales",
-             SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END)::numeric AS "qty",
-             SUM(${SIGNED_PROFIT})::numeric AS "profit"
-      ${SALE_LINES(userId, w.from, w.to)} AND ti."productId" IS NOT NULL
-      GROUP BY ti."productId"`,
+  const [items, productStats, notSold, productCount] = await Promise.all([
+    itemSalesInPeriod(userId, w.from, w.to),
     db.$queryRaw<Array<{ outCount: bigint; lowCount: bigint; stockPaise: Num }>>`
       SELECT
         COUNT(*) FILTER (WHERE "tracksInventory" = true AND "currentStock" <= 0)::bigint AS "outCount",
@@ -229,7 +208,6 @@ async function itemsSection({ userId, w, now, hideProfit }: Ctx) {
       WHERE p."userId" = ${userId} AND p."tracksInventory" = true AND p."currentStock" > 0`,
     db.product.count({ where: { userId } }),
   ])
-  const items = perItem.map((r) => ({ id: r.id, name: r.name ?? '—', sales: p2r(r.sales), qty: Number(r.qty ?? 0), profit: p2r(r.profit) }))
   const { groups } = abcGroups(items, productCount)
   const sold = items.filter((x) => x.sales > 0).length
   const st = productStats[0], ns = notSold[0]
@@ -251,23 +229,8 @@ async function itemsSection({ userId, w, now, hideProfit }: Ctx) {
 // ─── Customers ──────────────────────────────────────────────────────────
 
 async function customersSection({ userId, w, hideProfit }: Ctx) {
-  const [activity, customerCount, walkIn] = await Promise.all([
-    db.$queryRaw<Array<{ id: string; name: string; billsNow: bigint; salesNow: Num; profitNow: Num; billsPrev: bigint; salesPrev: Num; firstBill: Date | null }>>`
-      WITH a AS (
-        SELECT t."partyId" AS pid,
-          COUNT(*) FILTER (WHERE t."type" = 'sale' AND t."date" >= ${w.from} AND t."date" <= ${w.to})::bigint AS "billsNow",
-          COALESCE(SUM(CASE WHEN t."type" = 'sale' THEN t."totalAmount" ELSE -t."totalAmount" END) FILTER (WHERE t."date" >= ${w.from} AND t."date" <= ${w.to}), 0)::numeric AS "salesNow",
-          COALESCE(SUM(t."grossProfit") FILTER (WHERE t."date" >= ${w.from} AND t."date" <= ${w.to}), 0)::numeric AS "profitNow",
-          COUNT(*) FILTER (WHERE t."type" = 'sale' AND t."date" >= ${w.prevFrom} AND t."date" <= ${w.prevTo})::bigint AS "billsPrev",
-          COALESCE(SUM(CASE WHEN t."type" = 'sale' THEN t."totalAmount" ELSE -t."totalAmount" END) FILTER (WHERE t."date" >= ${w.prevFrom} AND t."date" <= ${w.prevTo}), 0)::numeric AS "salesPrev"
-        FROM "Transaction" t
-        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" IN ('sale', 'credit-note')
-          AND t."partyId" IS NOT NULL AND t."date" >= ${w.prevFrom} AND t."date" <= ${w.to}
-        GROUP BY t."partyId"
-      )
-      SELECT a.pid AS "id", p."name" AS "name", a."billsNow", a."salesNow", a."profitNow", a."billsPrev", a."salesPrev",
-        (SELECT MIN(t2."date") FROM "Transaction" t2 WHERE t2."userId" = ${userId} AND t2."partyId" = a.pid AND t2."deletedAt" IS NULL AND t2."type" = 'sale') AS "firstBill"
-      FROM a JOIN "Party" p ON p."id" = a.pid AND p."deletedAt" IS NULL AND LOWER(p."name") <> LOWER(${WALK_IN_PARTY_NAME})`,
+  const [rows, customerCount, walkIn] = await Promise.all([
+    customerActivityInPeriod(userId, w),
     db.party.count({ where: { userId, deletedAt: null, type: { in: ['customer', 'both'] }, NOT: { name: { equals: WALK_IN_PARTY_NAME, mode: 'insensitive' } } } }),
     sumsByType(userId, w.from, w.to, ['sale', 'credit-note']).then(async (all) => {
       const named = await db.transaction.groupBy({
@@ -279,10 +242,6 @@ async function customersSection({ userId, w, hideProfit }: Ctx) {
       return { total: netSalesTotal(all('sale'), all('credit-note')), named: netSalesTotal(n('sale'), n('credit-note')) }
     }),
   ])
-  const rows = activity.map((r) => ({
-    id: r.id, name: r.name, billsNow: Number(r.billsNow), salesNow: p2r(r.salesNow), profitNow: p2r(r.profitNow),
-    billsPrev: Number(r.billsPrev), salesPrev: p2r(r.salesPrev), firstBill: r.firstBill ? new Date(r.firstBill) : null,
-  }))
   const groups = customerGroups(rows, w.from)
   // Customers with no bill in either period are not in `activity`; they are inactive.
   const counted = groups.reduce((s, g) => s + g.count, 0)

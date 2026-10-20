@@ -209,7 +209,7 @@ export function Inventory() {
                 onChange={(e) => setSort(e.target.value as ItemSort)}
                 className="min-h-12 min-w-0 flex-1 sm:flex-none sm:w-44 rounded-xl border border-border bg-card px-3 text-sm text-foreground"
               >
-                {ITEM_SORTS.filter((k) => !(hideProfit && k === 'value')).map((k) => <option key={k} value={k}>{t(`items.sort.${k}`)}</option>)}
+                {ITEM_SORTS.filter((k) => !(hideProfit && (k === 'value' || k === 'profit'))).map((k) => <option key={k} value={k}>{t(`items.sort.${k}`)}</option>)}
               </select>
               {!isMobile && <ViewModeToggle mode={inventoryViewMode} onChange={setInventoryViewMode} />}
             </div>
@@ -459,6 +459,8 @@ function ProductRow({ product: p, sort, onEdit }: { product: any; sort: ItemSort
 
   const right = sort === 'value' && p.stockValue !== undefined && state !== 'service'
     ? <span className="tabular-nums shrink-0">{t('items.worth').replace('{v}', formatINR(p.stockValue))}</span>
+    : sort === 'profit' && p.profitNow !== undefined
+      ? <span className={cn('tabular-nums shrink-0 font-semibold', p.profitNow < 0 ? 'text-bad' : 'text-good')}>{t('items.profit_month').replace('{v}', formatINR(p.profitNow))}</span>
     : !hideProfit
       ? <span className={cn('tabular-nums shrink-0 font-semibold', profit < 0 ? 'text-bad' : 'text-good')}>{profit >= 0 ? '+' : ''}{formatINR(profit)} · {margin.toFixed(0)}%</span>
       : null

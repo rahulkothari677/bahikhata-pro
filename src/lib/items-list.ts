@@ -17,7 +17,8 @@ import { tracksStock } from './inventory-tracking'
 
 export const ITEM_CHIPS = ['all', 'low', 'out', 'dead'] as const
 export type ItemChip = (typeof ITEM_CHIPS)[number]
-export const ITEM_SORTS = ['sales', 'name', 'stock', 'value'] as const
+/** Ledger model v4: by sales, profit, stock value or name — and lowest stock first, for reordering. */
+export const ITEM_SORTS = ['sales', 'profit', 'value', 'name', 'stock'] as const
 export type ItemSort = (typeof ITEM_SORTS)[number]
 export const ITEMS_PAGE = 60
 export const NO_CATEGORY = 'Uncategorized'
@@ -36,6 +37,8 @@ export interface ItemRow {
   /** This month's sales before GST, net of returns, and quantity. */
   salesNow: number
   qtyNow: number
+  /** This month's profit; undefined for staff who may not see profit. */
+  profitNow?: number
   barcode?: string | null
   sku?: string | null
   hsn?: string | null
@@ -70,6 +73,7 @@ export function itemsList(all: ItemRow[], opts: { chip: ItemChip; search: string
   const byName = (a: ItemRow, b: ItemRow) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
   const cmp: Record<ItemSort, (a: ItemRow, b: ItemRow) => number> = {
     sales: (a, b) => b.salesNow - a.salesNow || byName(a, b),
+    profit: (a, b) => (b.profitNow ?? 0) - (a.profitNow ?? 0) || byName(a, b),
     name: byName,
     // A service has no stock: it goes after every stocked item, never at the top of "lowest stock".
     stock: (a, b) => Number(!tracksStock(a)) - Number(!tracksStock(b)) || a.currentStock - b.currentStock || byName(a, b),

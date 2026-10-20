@@ -63,10 +63,32 @@ describe('#261 to collect / to pay — by who the party is (khataSides, shared b
   })
 })
 
+describe('5e-4: Regular / Gone quiet / New (Insights\' groups) and the sales sort', () => {
+  const grouped: KhataParty[] = [
+    P('Reg', 'customer', 0, { group: 'regular', salesNow: 9000 }),
+    P('Quiet', 'customer', 500, { group: 'quiet', salesNow: 0 }),
+    P('Fresh', 'both', 0, { group: 'new', salesNow: 1200 }),
+    P('Occ', 'customer', 0, { group: 'occasional', salesNow: 300 }),
+    P('Supp', 'supplier', -50),
+  ]
+  test('each chip holds its group, customers only; a supplier is never in one', () => {
+    const r = khataList(grouped, { side: 'customer', chip: 'all', search: '', sort: 'sales', offset: 0 })
+    expect([r.counts.regular, r.counts.quiet, r.counts.new]).toEqual([1, 1, 1])
+    expect(khataList(grouped, { side: 'customer', chip: 'quiet', search: '', sort: 'name', offset: 0 }).rows.map((p) => p.id)).toEqual(['Quiet'])
+    const s = khataList(grouped, { side: 'supplier', chip: 'all', search: '', sort: 'balance', offset: 0 })
+    // "Fresh" is type both, so it is on the supplier side too — but a supplier list has no customer groups.
+    expect(s.rows.map((p) => p.id)).toContain('Fresh')
+    expect([s.counts.regular, s.counts.quiet, s.counts.new]).toEqual([0, 0, 0])
+  })
+  test('sales sort: most sales this month first', () => {
+    expect(khataList(grouped, { side: 'customer', chip: 'all', search: '', sort: 'sales', offset: 0 }).rows.map((p) => p.id)).toEqual(['Reg', 'Fresh', 'Occ', 'Quiet'])
+  })
+})
+
 describe('customers', () => {
   const r = khataList(shop, { side: 'customer', chip: 'all', search: '', sort: 'balance', offset: 0 })
   test('every chip counted over all customers; the chips add up the way they should', () => {
-    expect(r.counts).toEqual({ all: 5, due: 3, old: 2, settled: 1, advance: 1 })
+    expect(r.counts).toEqual({ all: 5, due: 3, old: 2, regular: 0, quiet: 0, new: 0, settled: 1, advance: 1 })
     expect(r.counts.due + r.counts.settled + r.counts.advance).toBe(r.counts.all)
   })
   test('the card: what you will collect, from how many, of all', () => {

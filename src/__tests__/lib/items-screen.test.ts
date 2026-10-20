@@ -24,9 +24,24 @@ describe('Items', () => {
     expect(route).toMatch(/withStockView\(p, hideProfit\)/)
     expect(route).toMatch(/itemsList\(rows, \{ chip, search, category, sort, offset, now \}\)/)
     expect(route).toMatch(/hideProfit \? null : roundMoney\(products\.reduce\(\(s, p\) => s \+ stockPotentialProfit\(p, profitOpts\)/)
-    expect(route).toMatch(/\$\{LINE_TAXABLE_SQL\}/)
     // The pickers' list shows stock the same way — one view, two routes.
     expect(products).toMatch(/withStockView\(/)
+  })
+  test('5e-4: one per-item and one per-customer period query — Insights, Items and Khata all call them', () => {
+    const ins = readCode('src/app/api/insights/route.ts')
+    const khata = readCode('src/app/api/parties/list/route.ts')
+    expect(route).toMatch(/itemSalesInPeriod\(userId, monthStart, now\)/)
+    expect(ins).toMatch(/itemSalesInPeriod\(userId, w\.from, w\.to\)/)
+    expect(ins).toMatch(/customerActivityInPeriod\(userId, w\)/)
+    expect(khata).toMatch(/customerActivityInPeriod\(userId, w\)/)
+    expect(khata).toMatch(/customerGroupOf\(/)
+    // No copy of the line-value sum or the signed definitions outside the shared module.
+    for (const code of [route, ins, khata]) {
+      expect(code).not.toMatch(/const SIGNED_LINE\s*=|const SIGNED_PROFIT\s*=|const SALE_LINES\s*=/)
+      expect(code).not.toMatch(/THEN \$\{LINE_TAXABLE_SQL\} ELSE -\$\{LINE_TAXABLE_SQL\}/)
+    }
+    // Staff who may not see profit can neither see nor sort by it.
+    expect(route).toMatch(/hideProfit && \(asked === 'profit' \|\| asked === 'value'\) \? 'sales' : asked/)
   })
   test('every Items word exists in English and Hindi', () => {
     const en = translations.en as unknown as Record<string, string>, hi = translations.hi as unknown as Record<string, string>

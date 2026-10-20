@@ -162,9 +162,10 @@ export function Parties() {
         value={chip}
         onChange={setChip}
         chips={(side === 'customer'
-          ? (['all', 'due', 'old', 'settled', 'advance'] as KhataChip[])
+          ? (['all', 'due', 'old', 'regular', 'quiet', 'new', 'settled', 'advance'] as KhataChip[])
           : (['all', 'due', 'settled', 'advance'] as KhataChip[])
-        ).map((c) => ({ value: c, label: t(`khata.chip.${side}.${c}`), count: counts?.[c] }))}
+          // Regular / Gone quiet / New are Insights' customer groups: Insights' own words, one vocabulary.
+        ).map((c) => ({ value: c, label: c === 'regular' || c === 'quiet' || c === 'new' ? t(`ins.seg.${c}`) : t(`khata.chip.${side}.${c}`), count: counts?.[c] }))}
       />
 
       {/* Toolbar - removed duplicate Add Party button (it's in header now) */}
@@ -188,7 +189,8 @@ export function Parties() {
                 onChange={(e) => setSort(e.target.value as KhataSort)}
                 className="min-h-12 rounded-xl border border-border bg-card px-3 text-sm text-foreground"
               >
-                {KHATA_SORTS.map((k) => <option key={k} value={k}>{t(`khata.sort.${k}`)}</option>)}
+                {/* Sales and oldest unpaid bill are about customers; a supplier list sorts by what you owe, recent or name. */}
+                {KHATA_SORTS.filter((k) => side === 'customer' || !(k === 'sales' || k === 'oldest')).map((k) => <option key={k} value={k}>{t(`khata.sort.${k}`)}</option>)}
               </select>
             </label>
             <ViewModeToggle mode={partiesViewMode} onChange={setPartiesViewMode} />

@@ -6,7 +6,7 @@
  * own numbers) and on random sweeps.
  */
 import { describe, test, expect } from '@jest/globals'
-import { abcGroups, customerGroups, istDaysBetween, remainder, shares, split, udhaarAge, type CustomerActivity } from '@/lib/insights'
+import { abcGroups, ageBandOf, customerGroupOf, customerGroups, istDaysBetween, remainder, shares, split, udhaarAge, CUSTOMER_GROUPS, type CustomerActivity } from '@/lib/insights'
 import { multiplyPaise } from '@/lib/money'
 import { readCode } from '@/test-support/read-source'
 
@@ -96,6 +96,24 @@ describe('Customers: each customer once', () => {
   })
 })
 
+describe('one rule per group, shared with Khata (5e-4)', () => {
+  test('age band edges: 15 / 30 / 60 days, and no unpaid bill = opening balance', () => {
+    expect([0, 15, 16, 30, 31, 60, 61, 400].map(ageBandOf)).toEqual(['d15', 'd15', 'd30', 'd30', 'd60', 'd60', 'over', 'over'])
+    expect(ageBandOf(null)).toBe('opening')
+  })
+  test('sweep: the group totals are exactly the one-by-one rule', () => {
+    const from = new Date('2026-10-01T00:00:00+05:30')
+    for (let n = 0; n < 200; n++) {
+      const rows: CustomerActivity[] = Array.from({ length: rnd(25) }, (_, i) => ({
+        id: `c${i}`, billsNow: rnd(4), salesNow: rnd(900), billsPrev: rnd(3), salesPrev: rnd(900),
+        firstBill: rnd(3) ? new Date(from.getTime() + (rnd(40) - 30) * 86_400_000) : null,
+      }))
+      const byRule = Object.fromEntries(CUSTOMER_GROUPS.map((g) => [g, rows.filter((r) => customerGroupOf(r, from) === g).length]))
+      expect(Object.fromEntries(customerGroups(rows, from).map((g) => [g.id, g.count]))).toEqual(byRule)
+    }
+  })
+})
+
 describe('Udhaar: the whole receivable, by age', () => {
   const now = new Date('2026-10-13T15:00:00+05:30')
   test('IST days: a bill at 23:00 yesterday is 1 day old at 00:30', () => {
@@ -171,9 +189,12 @@ describe('rows that must add up to a figure shown elsewhere', () => {
     const at = (s: string) => { const i = code.indexOf(s); expect({ s, found: i > 0 }).toEqual({ s, found: true }); return i }
     const sales = code.slice(at('async function salesSection'), at('async function itemsSection'))
     const profit = code.slice(at('async function profitSection'))
-    expect(code).toContain('FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)')
-    expect(code).toContain('WHEN ti."productId" IS NULL THEN 0')
-    expect(code).not.toMatch(/ROUND\(ti\."quantity"/)
+    // The per-line profit rule lives with the shared period queries (5e-4); the route imports it.
+    const queries = readCode('src/lib/insights-queries.ts')
+    expect(queries).toContain('FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)')
+    expect(queries).toContain('WHEN ti."productId" IS NULL THEN 0')
+    expect(code + queries).not.toMatch(/ROUND\(ti\."quantity"/)
+    expect(code).toMatch(/import \{[^}]*SIGNED_PROFIT[^}]*\} from '@\/lib\/insights-queries'/)
     expect({ sales: sales.split('remainder(').length - 1, profit: profit.split('remainder(').length - 1 }).toEqual({ sales: 1, profit: 2 })
     expect(profit).toContain('TYPED_IN')
   })
@@ -206,9 +227,12 @@ describe('period filters have both ends', () => {
     expect(openEndedPeriodLines('const g = customerGroups(rows, w.from)')).toEqual([])
     expect(openEndedPeriodLines('AND t."date" >= ${w.prevFrom} AND t."date" <= ${w.to}')).toEqual([])
   })
-  test('the insights engine', () => {
-    const code = readCode('src/app/api/insights/route.ts')
+  test('the insights engine — the route and the period queries it shares with Items and Khata (5e-4)', () => {
+    const route = readCode('src/app/api/insights/route.ts')
+    const queries = readCode('src/lib/insights-queries.ts')
+    const code = route + '\n' + queries
     expect(code.split(/\r?\n/).filter((l) => /\bw\.from\b/.test(l)).length).toBeGreaterThan(8)
-    expect(openEndedPeriodLines(code)).toEqual([])
+    expect(openEndedPeriodLines(route)).toEqual([])
+    expect(openEndedPeriodLines(queries)).toEqual([])
   })
 })

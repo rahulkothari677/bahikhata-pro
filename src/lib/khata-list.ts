@@ -16,11 +16,19 @@
  */
 
 import { isWalkInParty } from './walk-in-party'
+import type { CustomerGroup } from './insights'
 
 export type KhataSide = 'customer' | 'supplier'
-export const KHATA_CHIPS = ['all', 'due', 'old', 'settled', 'advance'] as const
+/**
+ * Ledger model v4: All · Owes you · Over 30 days · Regular · Gone quiet · New ·
+ * Settled (+ Advance, #261). Regular / Gone quiet / New are customers only and
+ * use Insights' rule (customerGroupOf), over the same period.
+ */
+export const KHATA_CHIPS = ['all', 'due', 'old', 'regular', 'quiet', 'new', 'settled', 'advance'] as const
 export type KhataChip = (typeof KHATA_CHIPS)[number]
-export const KHATA_SORTS = ['balance', 'name', 'recent', 'oldest'] as const
+/** Chips that only mean something for customers. */
+export const CUSTOMER_ONLY_CHIPS: readonly KhataChip[] = ['old', 'regular', 'quiet', 'new']
+export const KHATA_SORTS = ['balance', 'sales', 'recent', 'name', 'oldest'] as const
 export type KhataSort = (typeof KHATA_SORTS)[number]
 /** "Over 30 days": the oldest unpaid bill is older than this. */
 export const OLD_DAYS = 30
@@ -43,6 +51,10 @@ export interface KhataParty {
   state?: string | null
   openingBalance?: number
   transactionCount?: number
+  /** Insights' customer group over the period (customerGroupOf); undefined for a supplier. */
+  group?: CustomerGroup
+  /** Sales in the period (sale − return totals), for the sales sort. */
+  salesNow?: number
 }
 
 export function onSide(type: string, side: KhataSide): boolean {
@@ -94,6 +106,7 @@ export function inChip(p: KhataParty, side: KhataSide, chip: KhataChip): boolean
     case 'old': return side === 'customer' && owedToYou && (p.oldestDays ?? 0) > OLD_DAYS
     case 'settled': return b === 0
     case 'advance': return side === 'customer' ? youOwe : owedToYou
+    case 'regular': case 'quiet': case 'new': return side === 'customer' && p.group === chip
   }
 }
 
@@ -123,6 +136,7 @@ export function khataList(all: KhataParty[], opts: { side: KhataSide; chip: Khat
     balance: (a, b) => owedSize(b) - owedSize(a) || byName(a, b),
     name: byName,
     recent: (a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '') || byName(a, b),
+    sales: (a, b) => (b.salesNow ?? 0) - (a.salesNow ?? 0) || byName(a, b),
     oldest: (a, b) => (b.oldestDays ?? -1) - (a.oldestDays ?? -1) || byName(a, b),
   }
   rows.sort(cmp[opts.sort])
