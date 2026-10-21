@@ -87,12 +87,19 @@ test.describe('Critical Flow: record a sale and find it in the ledger', () => {
     await expect(page.getByText(new RegExp(`₹\\s*${EXPECTED_TOTAL}(\\.00)?\\b`)).first())
       .toBeVisible({ timeout: 10_000 })
 
-    // ── Save ──────────────────────────────────────────────────────────────
-    await page.getByRole('button', { name: /^Save$/ }).first().click()
+    // ── Pay and save ──────────────────────────────────────────────────────
+    // Phase 6d: the Counter's bar says "Pay ₹300", which opens the Pay sheet;
+    // its button names the amount ("Save ₹300"). After saving, the Counter
+    // stays open with a "Saved" sheet; Next bill clears it.
+    await page.getByRole('button', { name: /^Pay ₹/ }).first().click()
+    await page.getByRole('button', { name: new RegExp(`^Save ₹\\s*${EXPECTED_TOTAL}(\\.00)?$`) }).click()
+    await expect(page.getByText(/^Saved/).first()).toBeVisible({ timeout: 30_000 })
+    await page.getByRole('button', { name: /Next bill/ }).click()
 
     // ── The sale must now be in the ledger ────────────────────────────────
-    // Back on a list screen, the customer and the amount both appear. Asserting
-    // both together is what makes this about THIS sale rather than any row.
+    // On Bills, the customer and the amount both appear. Asserting both
+    // together is what makes this about THIS sale rather than any row.
+    await page.getByRole('button', { name: 'Bills', exact: true }).first().click()
     await expect(page.getByText(E2E_CUSTOMER.name).first()).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText(new RegExp(`₹\\s*${EXPECTED_TOTAL}(\\.00)?\\b`)).first())
       .toBeVisible({ timeout: 30_000 })

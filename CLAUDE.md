@@ -517,7 +517,12 @@ cause**, never as a new line at the bottom.
   line's "Remove …" — the second click removed the item; e2e went red on
   main while every unit test was green. **When a screen's ORDER changes,
   grep the e2e specs for `.first()` and substring names on that screen**, and
-  make each locator say what it means ("^Add (another )?<name>").
+  make each locator say what it means ("^Add (another )?<name>"). **And the
+  same day (6d) I changed the Counter's Save to "Pay ₹…" without grepping —
+  an hour after writing that line — and e2e went red again on "Save".** The
+  rule is wider than order: **whenever a screen's controls change (a label,
+  a button, the order, what happens after a tap), grep `e2e/` for that
+  screen BEFORE pushing**, and replay the spec's steps on the local copy.
 · **2 Oct: the new "Rates include GST" switch passed 18 tests and verify, and
   was invisible on a new purchase** — its condition needed at least one line,
   and a new bill starts with none. Only opening the screen showed it. **Open
