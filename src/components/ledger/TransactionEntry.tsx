@@ -140,7 +140,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
    */
   const [purchaseRatesIncludeGst, setPurchaseRatesIncludeGst] = useState(false)
   const isPurchaseSide = actualType === 'purchase' || actualType === 'debit-note'
-  const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features, triggerVoiceOpen, triggerBarcodeOpen } = useAppStore()
+  const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features, triggerVoiceOpen, triggerBarcodeOpen, setEntryType } = useAppStore()
 
   const queryClient = useQueryClient()
   // 🔒 ROUND 10b (2026-07-22): the New Sale screen printed "Gross Profit
@@ -193,7 +193,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // 🔒 AUDIT V24 §1: For credit/debit notes, paidAmount means "cash refunded".
   // Default OFF = pure khata adjustment (send paidAmount 0). See the refund
   // toggle in the payment card below.
-  const [cashRefund, setCashRefund] = useState(false)
+  // #278 (Phase 6b): null until the shopkeeper chooses. A counter return (no customer) then defaults
+  // to "cash refunded" — there is no khata to adjust, and the screen used to show "₹100 due" to nobody.
+  const [cashRefund, setCashRefund] = useState<boolean | null>(null)
+  const cashRefundOn = cashRefund ?? (isCreditNote && !partyId)
+  // #277: the header names what this screen is making (a return, not "New Sale").
+  useEffect(() => { setEntryType(actualType); return () => setEntryType(null) }, [actualType, setEntryType])
   const [discountAmount, setDiscountAmount] = useState('')
   const [notes, setNotes] = useState('')
 
@@ -397,7 +402,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       originalTransactionId,
       // 🔒 R10b-4 (Phase 3): Persist cashRefund in autosave. Was: not saved →
       // restoring a draft silently flipped a cash refund to a khata adjustment.
-      cashRefund,
+      cashRefund: cashRefund ?? undefined,
       purchaseRatesIncludeGst,
       shipElsewhere,
       deliveryState,
@@ -983,7 +988,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // 🔒 AUDIT V24 §1: For notes, "paid" = cash refunded (0 unless the refund
   // toggle is ON). For sales/purchases, empty = full payment (unchanged).
   const finalPaid = isNote
-    ? (cashRefund ? (paidAmount === '' ? totalAmount : paid) : 0)
+    ? (cashRefundOn ? (paidAmount === '' ? totalAmount : paid) : 0)
     : (paidAmount === '' ? totalAmount : paid)
   const due = roundMoney(totalAmount - finalPaid)
 
@@ -1059,7 +1064,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     // does not reduce output GST — so the shop paid tax on a sale that came
     // back. See the note in app/api/transactions/route.ts. Point at the
     // action that is actually correct instead.
-    if (isNote && !partyId) {
+    // #276 (Phase 6b): a CREDIT note with no customer is a counter return — the server files it under
+    // the shop's Walk-in Customer (lib/walk-in-party.ts) and matches it to a walk-in bill
+    // (note-validation notePartiesMatch). Refusing it here made every walk-in return impossible.
+    if (isDebitNote && !partyId) {
       sonnerToast.error('Add a customer to this return', {
         description: 'Pick the customer above, or add them in one tap. Recording it as a stock adjustment instead would change your stock but not your GST — you would pay tax on a sale that came back.',
         duration: 8000,
@@ -1164,7 +1172,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           // empty field" must be sent explicitly (the server's ₹1 snap absorbs
           // any round-off residue). Sales/purchases keep "empty = full payment".
           paidAmount: isNote
-            ? (cashRefund ? (paidAmount === '' ? totalAmount : Number(paidAmount)) : 0)
+            ? (cashRefundOn ? (paidAmount === '' ? totalAmount : Number(paidAmount)) : 0)
             : (paidAmount === '' ? undefined : Number(paidAmount)),
           discountAmount: totalDiscount,
           notes,
@@ -2899,14 +2907,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         {isCreditNote ? 'Cash refunded to customer?' : 'Cash refunded by supplier?'}
                       </Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {cashRefund
+                        {cashRefundOn
                           ? 'Money was returned in cash/UPI — balance stays unchanged'
-                          : `OFF: adjusts the party's khata by ${formatINR(totalAmount)}`}
+                          : partyId
+                            ? `OFF: adjusts the party's khata by ${formatINR(totalAmount)}`
+                            : `OFF: ${formatINR(totalAmount)} stays owed to the counter customer`}
                       </p>
                     </div>
-                    <Switch checked={cashRefund} onCheckedChange={(v) => { markDirty(); setCashRefund(v) }} />
+                    <Switch checked={cashRefundOn} onCheckedChange={(v) => { markDirty(); setCashRefund(v) }} />
                   </div>
-                  {cashRefund && (
+                  {cashRefundOn && (
                     <div>
                       <Label htmlFor="field-refund-amount">Refund Amount (₹)</Label>
                       <NumberField id="field-refund-amount"

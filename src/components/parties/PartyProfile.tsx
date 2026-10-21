@@ -879,7 +879,8 @@ export function PartyProfile() {
               const sub = entry.isPayment
                 ? [mode, entry.notes].filter(Boolean).join(' · ')
                 // "paid" says why a bill left the balance where it was; "₹X due" is what it added.
-                : [entry.invoiceNo, t('bahi.items_n').replace('{n}', String(entry.itemCount ?? 0)), entry.due > 0 ? t('bahi.due').replace('{v}', formatINR(entry.due)) : t('bahi.paid')].filter(Boolean).join(' · ')
+                // #288: one item is "1 item" (the singular Items uses), not "1 items".
+                : [entry.invoiceNo, (entry.itemCount === 1 ? t('items.count_1') : t('bahi.items_n')).replace('{n}', String(entry.itemCount ?? 0)), entry.due > 0 ? t('bahi.due').replace('{v}', formatINR(entry.due)) : t('bahi.paid')].filter(Boolean).join(' · ')
               const body = (
                 <>
                   <span className="min-w-0 flex-1 text-left">

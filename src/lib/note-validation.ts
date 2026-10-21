@@ -23,6 +23,7 @@
  */
 
 import { roundMoney } from './money'
+import { findWalkInPartyId } from './walk-in-party'
 
 export interface NoteValidationInput {
   userId: string
@@ -47,6 +48,24 @@ export interface NoteValidationDb {
   // Optional on the interface so test stubs don't need to implement it
   // (the lock is a no-op in unit tests; it only fires against real Postgres).
   $queryRaw?(sql: TemplateStringsArray, ...values: any[]): Promise<any>
+  /** #276: to find the shop's walk-in party (optional, like $queryRaw, for test stubs). */
+  party?: { findFirst(args: any): Promise<any> }
+}
+
+/**
+ * #276 (Phase 6b): rule 3's "same party", counting the counter customer.
+ *
+ * A walk-in sale has no party. Its return is filed under the shop's reserved
+ * "Walk-in Customer" (lib/walk-in-party.ts, the CA's #2 issue): the routes turn
+ * a party-less note into it BEFORE this check. Comparing the two ids — null vs
+ * the walk-in's id — refused every counter return, the very case the walk-in
+ * party exists for, so the shop paid output tax on goods that came back. The
+ * walk-in bill and the walk-in khata are one customer; any other pair must
+ * match exactly (a return against Ramesh's bill is never Sunita's).
+ */
+export function notePartiesMatch(originalPartyId: string | null, notePartyId: string | null, walkInPartyId: string | null): boolean {
+  const asCounter = (id: string | null) => (id && id === walkInPartyId ? null : id)
+  return asCounter(originalPartyId) === asCounter(notePartyId)
 }
 
 const EXPECTED_ORIGINAL_TYPE: Record<string, string> = {
@@ -102,8 +121,11 @@ export async function validateNoteAgainstOriginal(
     }
   }
 
-  // Rule 3: same party (null === null is fine for walk-in against walk-in).
-  if ((original.partyId || null) !== (partyId || null)) {
+  // Rule 3: same party — the walk-in bill and the shop's Walk-in Customer being one (#276).
+  const walkInPartyId = (original.partyId || null) !== (partyId || null) && db.party
+    ? await findWalkInPartyId({ party: db.party }, userId)
+    : null
+  if (!notePartiesMatch(original.partyId || null, partyId || null, walkInPartyId)) {
     return {
       ok: false,
       status: 400,

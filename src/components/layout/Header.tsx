@@ -49,8 +49,11 @@ const viewTitleKeys: Record<string, string> = {
  * guard). Phase 5a-5: an unknown screen gets no title; the old fallback
  * called Tools and a party's bills "Dashboard".
  */
-export function headerTitleKey(view: string, selectedTransactionType?: string | null): string | undefined {
+export function headerTitleKey(view: string, selectedTransactionType?: string | null, entryType?: string | null): string | undefined {
   if (view === 'transaction-detail' && selectedTransactionType === 'purchase') return 'nav.purchases'
+  // #277 (Phase 6b): a return is made on the New Sale / New Purchase screen; the title said "New Sale".
+  if (view === 'new-sale' && entryType === 'credit-note') return 'entry.credit_note'
+  if (view === 'new-purchase' && entryType === 'debit-note') return 'entry.debit_note'
   return viewTitleKeys[view]
 }
 
@@ -64,7 +67,7 @@ const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases',
  * sized to exactly one header has no room to travel in. See AppShell.
  */
 export function Header({ className }: { className?: string } = {}) {
-  const { currentView, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setSearchOpen, selectedTransactionType } = useAppStore()
+  const { currentView, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setSearchOpen, selectedTransactionType, entryType } = useAppStore()
   // 🔒 V26 N20: Removed `setFeature` from destructure — was unused in Header.
   const { isFlagEnabled } = useFeatureFlags()
   const { data: session } = useSession()
@@ -75,7 +78,7 @@ export function Header({ className }: { className?: string } = {}) {
   // 🔒 V26 N10: Compute titleKeys WITHOUT mutating the module-level viewTitleKeys
   // object. Was: `titleKeys.titleKey = 'nav.purchases'` mutated the shared object,
   // so after viewing one purchase, every subsequent sale detail showed "Purchase Ledger".
-  const titleKey = headerTitleKey(currentView, selectedTransactionType)
+  const titleKey = headerTitleKey(currentView, selectedTransactionType, entryType)
   const title = titleKey ? t(titleKey) : ''
 
   const { data: settingData } = useQuery({

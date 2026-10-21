@@ -44,15 +44,8 @@ type Db = PrismaClient | Prisma.TransactionClient
  * party it did not ask for cluttering its list.
  */
 export async function getOrCreateWalkInParty(db: Db, userId: string): Promise<string> {
-  const existing = await db.party.findFirst({
-    where: {
-      userId,
-      deletedAt: null,
-      name: { equals: WALK_IN_PARTY_NAME, mode: 'insensitive' },
-    },
-    select: { id: true },
-  })
-  if (existing) return existing.id
+  const existing = await findWalkInPartyId(db, userId)
+  if (existing) return existing
 
   const created = await db.party.create({
     data: {
@@ -67,6 +60,25 @@ export async function getOrCreateWalkInParty(db: Db, userId: string): Promise<st
     select: { id: true },
   })
   return created.id
+}
+
+/**
+ * The shop's walk-in party id, or null when it has never been needed — found,
+ * never created (a check must not write). One lookup for every caller.
+ */
+export async function findWalkInPartyId(
+  db: { party: { findFirst(args: any): Promise<{ id: string } | null> } },
+  userId: string,
+): Promise<string | null> {
+  const existing = await db.party.findFirst({
+    where: {
+      userId,
+      deletedAt: null,
+      name: { equals: WALK_IN_PARTY_NAME, mode: 'insensitive' },
+    },
+    select: { id: true },
+  })
+  return existing?.id ?? null
 }
 
 /** True when this party is the reserved counter customer, not a real person. */

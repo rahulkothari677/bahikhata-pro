@@ -183,6 +183,9 @@ interface AppState {
   selectedTransactionType: string | null
   setSelectedTransactionId: (id: string | null) => void
   setSelectedTransactionType: (type: string | null) => void
+  /** #277 (Phase 6b): what the open entry screen is making ('credit-note'…), for the header title. */
+  entryType: string | null
+  setEntryType: (type: string | null) => void
   selectedPartyId: string | null
   setSelectedPartyId: (id: string | null) => void
   inventoryViewMode: ViewMode
@@ -399,6 +402,8 @@ export const useAppStore = create<AppState>()(
   selectedTransactionType: null,
       setSelectedTransactionId: (id) => set({ selectedTransactionId: id }),
   setSelectedTransactionType: (type) => set({ selectedTransactionType: type }),
+      entryType: null,
+      setEntryType: (type) => set({ entryType: type }),
       selectedPartyId: null,
       setSelectedPartyId: (id) => set({ selectedPartyId: id }),
       inventoryViewMode: 'grid',
