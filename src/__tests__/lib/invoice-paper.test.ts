@@ -90,9 +90,12 @@ describe('the chosen sheet reaches what the customer receives', () => {
      * instead of structure, which is CLAUDE.md's Cause 7 in miniature. Two
      * occurrences means both exits carry it; one means a path was missed.
      */
+    // Phase 6d: the WhatsApp path moved to lib/share-bill-flow.ts (the bill screen and the Counter share it);
+    // the download stays on the bill screen. One each — both exits still carry the sheet.
     const detail = readCode('src/components/ledger/TransactionDetail.tsx')
-    const occurrences = (detail.match(/paperId:\s*setting\?\.invoicePaperSize/g) || []).length
-    expect(occurrences).toBe(2)
+    const flow = readCode('src/lib/share-bill-flow.ts')
+    const count = (code: string) => (code.match(/paperId:\s*setting\?\.invoicePaperSize/g) || []).length
+    expect({ download: count(detail), whatsapp: count(flow) }).toEqual({ download: 1, whatsapp: 1 })
 
     const send = readCode('src/lib/send-bill.ts')
     expect(send).toContain('paperId: opts.paperId')

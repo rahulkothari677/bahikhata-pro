@@ -8,6 +8,7 @@ import { eInvoiceApplicability } from '@/lib/einvoice-applicability'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useAppStore } from '@/store/app-store'
+import { useArrivalRequest } from '@/hooks/use-new-entry-request'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
@@ -137,6 +138,15 @@ export function TransactionDetail() {
   const setting = settingData?.setting || {}
 
   const txn = data?.transaction
+  // Phase 6d: the Counter's "Saved" sheet opens this bill to print it — print once the bill has loaded.
+  const [printOnLoad, setPrintOnLoad] = useState(false)
+  useArrivalRequest('transaction-detail', 'print', () => setPrintOnLoad(true))
+  useEffect(() => {
+    if (!printOnLoad || !txn) return
+    setPrintOnLoad(false)
+    handlePrint()
+    // handlePrint is this screen's own print; it only needs to run once the bill is here.
+  }, [printOnLoad, txn])
   // Phase 1c-2: GST columns only on a bill that carries GST or a shop that charges it.
   const billShowsGst = txn ? billCarriesGstColumns(txn, gstStatus(setting)) : true
   // Phase 2c (#114): where the goods went, as the printed bill says it.
@@ -337,85 +347,9 @@ export function TransactionDetail() {
   const handleWhatsAppShare = async (override?: 'image' | 'pdf') => {
     if (!txn) return
     haptic.click()
-    const toastId = sonnerToast.loading('Preparing bill…')
-
-    try {
-      const { sendBill } = await import('@/lib/send-bill')
-      const result = await sendBill(
-        // Phase 3: the shop's payment window rides along with the bill, so the
-        // WhatsApp copy carries the same due date as the download.
-        { ...(txn as object), dueDays: setting?.invoiceDueDays } as never,
-        // 📄 Phase 4: the same mapper the download uses. These two once drifted
-        // apart — the picture honoured a setting the file ignored — and sharing
-        // the mapper is what stops that happening a second time.
-        invoiceShopFromSetting(setting),
-        {
-          preference: setting?.docSendFormat,
-          override,
-          themeId: setting?.invoiceTheme,
-          // The layout and the sheet the shopkeeper chose, so the file that
-          // reaches the customer is the one the preview showed them.
-          templateId: resolveInvoiceDesign(setting).layout.id,
-          // 🐛 2026-08-16: the WhatsApp path had the same hole as the download
-          // path one function above — layout passed, style dropped.
-          styleId: resolveInvoiceDesign(setting).style.id,
-          paperId: setting?.invoicePaperSize,
-        },
-      )
-
-      /*
-       * On a DESKTOP browser there is no share sheet, so `sendBill` falls back
-       * to downloading the file — which leaves the shopkeeper with a bill and
-       * no WhatsApp. This opens the conversation with the customer's number
-       * prefilled so they only have to attach it.
-       *
-       * 🔒 Kept from the code this replaced, including its audit fix:
-       * `offlineFetch` RESOLVES on a 4xx/5xx, so a server rejection used to
-       * produce an error body with no `whatsappUrl` and this did nothing at
-       * all — the file had downloaded and said so, leaving the user believing
-       * the bill was sent when WhatsApp never opened. Say it plainly instead.
-       */
-      const { Capacitor } = await import('@capacitor/core')
-      if (!Capacitor.isNativePlatform() && !navigator.canShare) {
-        const r = await offlineFetch('/api/whatsapp-invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transactionId: txn.id }),
-        })
-        const data = await r.json().catch(() => ({}) as Record<string, string>)
-        if (r.ok && data.whatsappUrl) {
-          window.open(data.whatsappUrl, '_blank')
-        } else {
-          sonnerToast.warning('Invoice saved, but WhatsApp could not be opened', {
-            description: data?.message || data?.error || 'Share the downloaded file manually.',
-            duration: 8000,
-          })
-        }
-      }
-
-      // Naming the choice, so a switch between a picture and a PDF never reads
-      // as the app being unpredictable.
-      sonnerToast.success(result.reason || 'Bill ready to send', {
-        id: toastId,
-        // Named rather than left silent: without a UPI id the bill goes out
-        // with no way to pay it, and nothing else would tell him why.
-        description: result.missingUpiId
-          ? 'Add your UPI ID in Settings so customers can pay straight from the bill.'
-          : undefined,
-        duration: result.missingUpiId ? 7000 : 4000,
-      })
-    } catch (err: unknown) {
-      const { isShareCancelled } = await import('@/lib/share-file')
-      if (isShareCancelled(err)) {
-        sonnerToast.dismiss(toastId)
-        return
-      }
-      sonnerToast.error("Couldn't share the invoice", {
-        description: String((err as Error)?.message || err).slice(0, 200),
-        id: toastId,
-        duration: 8000,
-      })
-    }
+    // Phase 6d: one flow for this screen and the Counter's "Saved" sheet (lib/share-bill-flow.ts).
+    const { shareBillOnWhatsApp } = await import('@/lib/share-bill-flow')
+    await shareBillOnWhatsApp(txn as never, setting, override)
   }
 
   // 🔒 FIX H7: Show error state instead of infinite skeleton on API failure.

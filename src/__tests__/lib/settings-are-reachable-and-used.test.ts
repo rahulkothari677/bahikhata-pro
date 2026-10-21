@@ -79,7 +79,7 @@ describe('every invoice setting has something that reads it', () => {
     upiId: 'src/lib/invoice-document.ts',
     invoiceTemplate: 'src/components/ledger/TransactionDetail.tsx',
     invoicePaperSize: 'src/components/ledger/TransactionDetail.tsx',
-    docSendFormat: 'src/components/ledger/TransactionDetail.tsx',
+    docSendFormat: 'src/lib/share-bill-flow.ts', // 6d: the WhatsApp send, shared by the bill screen and the Counter
     roundOffEnabled: 'src/app/api/transactions/route.ts',
     // The two this sweep found dead. Named LAST because they are the reason
     // this file exists.

@@ -106,7 +106,8 @@ describe('restore reports dropped rows', () => {
 })
 
 describe('invoice WhatsApp share reports failure', () => {
-  const src = stripComments(read('components/ledger/TransactionDetail.tsx'))
+  // Phase 6d: the share flow lives in lib/share-bill-flow.ts (the bill screen and the Counter call it).
+  const src = stripComments(read('lib/share-bill-flow.ts'))
 
   test('it checks r.ok before treating the share as done', () => {
     // offlineFetch resolves on 4xx/5xx, so `if (data.whatsappUrl)` alone

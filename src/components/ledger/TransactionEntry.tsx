@@ -40,6 +40,9 @@ import { haptic } from '@/lib/haptic'
 import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
 import { counterTiles, foldTiles, freezeWhileBillOpen, TOP_TILES, TOP_TILE_LIMIT, CATEGORY_TILE_LIMIT } from '@/lib/counter-tiles'
 import { partyMatchesSearch, partyPrefillFromSearch } from '@/lib/party-search'
+import { PaySheet, SavedSheet, type SavedBill } from '@/components/ledger/PaySheet'
+import { buildUpiLink, invoiceShopFromSetting } from '@/lib/invoice-document'
+import { changeFor } from '@/lib/quick-cash'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 // 🔒 V10 §2.3: Single rounding function shared between client and server.
 // Was: `const r = (n) => Math.round(n*100)/100` here, which lacks the 1e-9
@@ -532,6 +535,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // #229: three tiles a row on every screen (the Counter's right column on a computer is a phone's width).
   const { shown: shownTiles, folded: tilesFolded } = foldTiles(counterTileList, items.length, tilesExpanded, 3)
   useEffect(() => { if (items.length === 0) setTilesExpanded(false) }, [items.length])
+  // Phase 6d: Pay opens one sheet; after saving, the Saved sheet offers Share / Print / Next bill (#145).
+  const [paySheetOpen, setPaySheetOpen] = useState(false)
+  const [savedBill, setSavedBill] = useState<SavedBill | null>(null)
+  const [sharingBill, setSharingBill] = useState(false)
 
   // Check for preset data (from scanner, party profile, or repeat last sale)
   // Uses a small delay to ensure the component is fully mounted (it's lazy-loaded)
@@ -1091,9 +1098,17 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // In 'block' mode, the Save button is disabled if any item would go negative.
   const hasStockBlock = stockPolicy === 'block' && liveStockWarnings.length > 0
 
-  const handleSave = async () => {
+  const handleSave = async (payOpts?: { paymentMode?: string; paidAmount?: string; given?: number | null }) => {
+    // Phase 6d: the Counter's Pay sheet passes its choice here; the form's own fields otherwise.
+    // (Setting state and then reading it in the same tap would read the old values.)
+    const pm = payOpts?.paymentMode ?? paymentMode
+    const pa = payOpts?.paidAmount ?? paidAmount
+    const paidNum = parseFloat(pa) || 0
     // Set when an estimate is saved; shown once the screen has moved on.
     let estimateToast: (() => void) | null = null
+    // What the Counter's Saved sheet shows; and how long the old screens wait before leaving (stock warning).
+    let savedInfo: SavedBill | null = null
+    let leaveAfterMs = 0
     if (items.length === 0) {
       sonnerToast.error('Add at least one item')
       return
@@ -1164,7 +1179,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     }
     // Phase 5c-2: the server's rule (lib/paid-amount.ts) before saving — and before
     // an offline sale is queued, which would otherwise fail later at sync.
-    const paidAsSaved = paidAmount === '' ? (paymentMode === 'credit' ? 0 : totalAmount) : paid
+    const paidAsSaved = pa === '' ? (pm === 'credit' ? 0 : totalAmount) : paidNum
     if (owedByNobody(actualType, partyId, totalAmount, paidAsSaved)) {
       sonnerToast.error(owedByNobodyMessage(actualType))
       document.getElementById('field-party-search')?.focus()
@@ -1205,7 +1220,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           itcBlockedReason: !isSale && !isNote ? (itcBlockedReason || null) : null,
           // Only meaningful on a purchase, and only when something differs.
           updateProductCosts: !isSale && !isNote && costChanges.length > 0 && updateProductCosts,
-          paymentMode: estimateMode ? 'cash' : paymentMode,  // Estimates don't have payment
+          paymentMode: estimateMode ? 'cash' : pm,  // Estimates don't have payment
           // 🔒 AUDIT V24 §1: Notes ALWAYS send an explicit paidAmount (cash
           // refunded): 0 when the refund toggle is off (khata adjustment — the
           // common case), the entered refund (or the full total) when on. The
@@ -1214,7 +1229,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           // any round-off residue). Sales/purchases keep "empty = full payment".
           paidAmount: isNote
             ? (cashRefundOn ? (paidAmount === '' ? totalAmount : Number(paidAmount)) : 0)
-            : (paidAmount === '' ? undefined : Number(paidAmount)),
+            : (pa === '' ? undefined : Number(pa)),
           discountAmount: totalDiscount,
           notes,
           // V17-Ext Tier 3: Credit/Debit Note fields
@@ -1247,12 +1262,27 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       })
       if (!r.ok) throw new Error(await readError(r))
       if (isQueuedResponse(r)) {
-        sonnerToast.info(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : estimateMode ? 'Estimate' : (isSale ? 'Sale' : 'Purchase')} saved offline — will sync when online`, {
-          icon: '☁️',
-          description: 'Not yet sent to server. Will sync automatically when online.',
-        })
+        if (counterMode) {
+          savedInfo = { id: null, invoiceNo: null, total: totalAmount, change: null, offline: true }
+        } else {
+          sonnerToast.info(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : estimateMode ? 'Estimate' : (isSale ? 'Sale' : 'Purchase')} saved offline — will sync when online`, {
+            icon: '☁️',
+            description: 'Not yet sent to server. Will sync automatically when online.',
+          })
+        }
       } else {
         const data = await r.json()
+        if (counterMode) {
+          const saved = data.transaction ?? data
+          const given = payOpts?.given ?? null
+          savedInfo = {
+            id: saved?.id ?? null,
+            invoiceNo: saved?.invoiceNo ?? null,
+            total: roundMoney(saved?.totalAmount ?? totalAmount),
+            change: given !== null && changeFor(saved?.totalAmount ?? totalAmount, given) > 0 ? changeFor(saved?.totalAmount ?? totalAmount, given) : null,
+            offline: false,
+          }
+        }
         // 🔒 V26 Phase 6 §2.2: Differentiate money-success toasts — include
         // amount + party. Was: "Sale recorded successfully!" (identical weight
         // to "language changed"). Now: "Sale recorded — ₹12,450 · Sharma
@@ -1262,7 +1292,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         const partyName = selectedParty?.name || (data as any)?.partyName || ''
         const toastDesc = partyName ? `₹${amount.toLocaleString('en-IN')} · ${partyName}` : `₹${amount.toLocaleString('en-IN')}`
         // An estimate's message comes after the screen has moved on (below), so its button cannot be overtaken.
-        if (!estimateMode) sonnerToast.success(`${txLabel} recorded`, { description: toastDesc })
+        if (!estimateMode && !counterMode) sonnerToast.success(`${txLabel} recorded`, { description: toastDesc })
         else estimateToast = () => sonnerToast.success(`${txLabel} recorded`, {
           description: toastDesc,
           // #185: an estimate used to vanish after saving; say where it is and offer the way there.
@@ -1300,16 +1330,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             `Stock went negative:\n${lines.join('\n')}\nRecord the missing purchase to fix this.`,
             { duration: 8000 }
           )
-          // Delay navigation so the banner is visible
-          setTimeout(() => {
-            triggerRefresh()
-            if (previousView && !ENTRY_FORMS.includes(previousView)) {
-              setView(previousView)
-            } else {
-              setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
-            }
-          }, 2500)
-          return // skip the immediate setView below
+          // Delay leaving so the banner is visible. NOT an early return any more (6d, #292): that
+          // skipped clearing the draft of a sale that had just saved, so restoring the draft later
+          // and saving it would record the same sale twice.
+          leaveAfterMs = 2500
         }
         // 🔒 V12: Surface price/unit anomaly warnings (e.g. ₹20/gm looks wrong).
         if (Array.isArray(data.priceWarnings) && data.priceWarnings.length > 0) {
@@ -1337,15 +1361,26 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       // Was: only ['transactions'] + ['dashboard'] + ['parties'] were invalidated,
       // leaving party-profile and product caches stale for up to 2 minutes.
       await invalidateMoneyCaches(queryClient)
+      // Phase 6d (#145): the Counter stays open — the Saved sheet offers Share, Print, Next bill.
+      if (counterMode) {
+        triggerRefresh()
+        setPaySheetOpen(false)
+        setSavedBill(savedInfo)
+        return
+      }
       // 🔒 V26 Phase 8 NAV-3: Honor the origin — if we came from a party profile,
       // return there instead of landing on the ledger (a root view with no back).
       // Was: always setView('sales'/'purchases') → dead end after purchase from party.
-      triggerRefresh()
-      if (previousView && !ENTRY_FORMS.includes(previousView)) {
-        setView(previousView)
-      } else {
-        setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
+      const leave = () => {
+        triggerRefresh()
+        if (previousView && !ENTRY_FORMS.includes(previousView)) {
+          setView(previousView)
+        } else {
+          setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
+        }
       }
+      if (leaveAfterMs > 0) setTimeout(leave, leaveAfterMs)
+      else leave()
       estimateToast?.()
     } catch (e: any) {
       haptic.error()
@@ -1353,6 +1388,60 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     } finally {
       setSaving(false)
     }
+  }
+
+  /** Phase 6d: a fresh bill on the Counter — the same screen, nothing carried over but the date. */
+  const resetBill = () => {
+    setItems([])
+    setPartyId('')
+    setPartySearch('')
+    setPaidAmount('')
+    setPaymentMode('cash')
+    setDiscountAmount('')
+    setNotes('')
+    setInvoiceNo('')
+    setBillFields({})
+    setItemFields({})
+    setShipElsewhere(false)
+    setDeliveryState('')
+    setDeliveryAddress('')
+    setBillToShipTo(null)
+    setStockWarnings([])
+    setProductSearch('')
+    setPresetLoaded(false)
+  }
+  const handleNextBill = () => {
+    setSavedBill(null)
+    resetBill()
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
+  }
+  // The same flow as the bill screen's "Send bill" (lib/share-bill-flow.ts), on the bill as saved.
+  const handleShareSaved = async () => {
+    if (!savedBill?.id) return
+    setSharingBill(true)
+    try {
+      const r = await offlineFetch(`/api/transactions/${savedBill.id}`)
+      if (!r.ok) throw new Error(await readError(r))
+      const d = await r.json()
+      const { shareBillOnWhatsApp } = await import('@/lib/share-bill-flow')
+      await shareBillOnWhatsApp(d.transaction, settingData?.setting)
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Couldn't share the bill")
+    } finally {
+      setSharingBill(false)
+    }
+  }
+  // Print uses the bill screen's own print layout: open the bill, which prints once it has loaded.
+  const handlePrintSaved = () => {
+    if (!savedBill?.id) return
+    const st = useAppStore.getState()
+    st.requestOnArrival('transaction-detail', 'print')
+    st.setSelectedTransactionId(savedBill.id)
+    st.setSelectedTransactionType('sale')
+    st.setPreviousView('new-sale')
+    setSavedBill(null)
+    resetBill()
+    st.setView('transaction-detail')
   }
 
   const handleCancel = () => {
@@ -2583,7 +2672,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <EmptyState
                     icon={Package}
                     title="No products yet"
-                    description="Add your first product, or scan a bill and the products are made for you."
+                    description="Add your first product, or scan a bill."
                     action={{ label: 'Add Product', onClick: () => setView('inventory') }}
                     secondaryAction={{ label: 'Scan a Bill', onClick: () => { setScannerBillType('sale'); setView('scanner') } }}
                     color="blue"
@@ -2686,8 +2775,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 <span className="flex items-center gap-2 lg:hidden">
                   <span className="text-xs text-muted-foreground truncate max-w-[200px]">
                     {new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                    {' · '}
-                    {paymentMode.charAt(0).toUpperCase() + paymentMode.slice(1)}
+                    {/* 6d: on the Counter the Pay sheet holds the payment, so the fold does not name one. */}
+                    {!counterMode && ` · ${paymentMode.charAt(0).toUpperCase() + paymentMode.slice(1)}`}
                     {/* Phase 2c: a delivery elsewhere changes the tax — visible while folded. */}
                     {deliveryCode && ` · to ${stateNameForCode(deliveryCode)}`}
                   </span>
@@ -2934,7 +3023,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   payment card showed, the user could pick "Card" and enter 500,
                   then on save paymentMode was silently forced to 'cash' while
                   paidAmount was sent through unchanged. */}
-              {!estimateMode && (
+              {/* 6d: on the Counter, payment is chosen on the Pay sheet — one place, never two. */}
+              {!estimateMode && !counterMode && (
                 <div>
                   <Label htmlFor="field-payment-mode">Payment Mode</Label>
                   <Select value={paymentMode} onValueChange={(v) => { markDirty(); setPaymentMode(v) }}>
@@ -2988,7 +3078,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </div>
                   )}
                 </>
-              ) : !estimateMode ? (
+              ) : !estimateMode && !counterMode ? (
                 <div>
                   <Label htmlFor="field-paid-amount">Paid Amount (₹)</Label>
                   <NumberField id="field-paid-amount"
@@ -3260,9 +3350,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         <Button variant="outline" size="sm" onClick={handleCancel} className="h-11 px-4">
           Cancel
         </Button>
-        <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-6" onClick={handleSave} disabled={saving || hasStockBlock}>
-          <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
-        </Button>
+        {counterMode ? (
+          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-6 tabular-nums" onClick={() => setPaySheetOpen(true)} disabled={saving || hasStockBlock || items.length === 0}>
+            Pay {formatINR(totalAmount)}
+          </Button>
+        ) : (
+          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-6" onClick={() => handleSave()} disabled={saving || hasStockBlock}>
+            <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
+          </Button>
+        )}
       </div>
 
       {/* 🔒 V11 FIX: Desktop save bar — was MISSING entirely (only mobile had
@@ -3293,10 +3389,41 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         <Button variant="outline" onClick={handleCancel} className="h-11 px-5">
           Cancel
         </Button>
-        <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-8" onClick={handleSave} disabled={saving || hasStockBlock}>
-          <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
-        </Button>
+        {counterMode ? (
+          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-8 tabular-nums" onClick={() => setPaySheetOpen(true)} disabled={saving || hasStockBlock || items.length === 0}>
+            Pay {formatINR(totalAmount)}
+          </Button>
+        ) : (
+          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-8" onClick={() => handleSave()} disabled={saving || hasStockBlock}>
+            <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
+          </Button>
+        )}
       </div>
+
+      {counterMode && (
+        <>
+          <PaySheet
+            open={paySheetOpen}
+            onOpenChange={setPaySheetOpen}
+            total={totalAmount}
+            customerName={selectedParty?.name ?? null}
+            upiLink={buildUpiLink(invoiceShopFromSetting(settingData?.setting), totalAmount)}
+            saving={saving}
+            onSave={(choice) => handleSave(choice)}
+            onPickCustomer={() => {
+              setPaySheetOpen(false)
+              setTimeout(() => document.getElementById('field-party-search')?.focus(), 250)
+            }}
+          />
+          <SavedSheet
+            bill={savedBill}
+            sharing={sharingBill}
+            onShare={handleShareSaved}
+            onPrint={handlePrintSaved}
+            onNext={handleNextBill}
+          />
+        </>
+      )}
 
       {/* Add Party Dialog */}
       <AddPartyInline
