@@ -184,7 +184,7 @@ describe('Profit', () => {
     render(<ProfitSection range={range} t={t} />)
     expect(screen.getByText('↑ 18% on the period before')).toBeTruthy()
     expect(screen.getByText(formatINR(-14258))).toBeTruthy()
-    expect(screen.getByText('Typed-in items (no cost price)')).toBeTruthy()
+    expect(screen.getByText('No cost price (typed in or cost ₹0)')).toBeTruthy()
     expect(screen.getByText('no cost price')).toBeTruthy()
     expect(screen.getByText('Not matched to items')).toBeTruthy()
     expect(screen.getByText('9.5%')).toBeTruthy()

@@ -182,6 +182,14 @@ save.
   use the launch entry `ekbook-local-3002`; look at what answers on a port
   before stopping anything. A new port is a new origin: sign in again and
   decline the privacy dialog again.
+- **The local database runs on UTC, like live** (21 Oct, #279: set with
+  `ALTER DATABASE ekbook SET timezone TO 'UTC'`). It ran on Asia/Calcutta, so
+  every raw-SQL period report compared a UTC timestamp in India time and
+  dropped the first 5½ hours of each month — locally only. Item-wise Profit
+  showed 1 of 8 October items while Bill-wise (Prisma) showed all, and I first
+  suspected my own change. **When two screens disagree locally, check
+  `current_setting('TimeZone')` before suspecting the code**; a fresh
+  local-db must get the same setting.
 - **Local migrations: the Prisma CLI does not read `.env.local`.** Run
   `set -a; . ./.env.local; set +a` in the same shell first, then
   `npx prisma migrate deploy && npx prisma generate` (2 Oct: validation failed
@@ -226,7 +234,11 @@ save.
   with NO backslashes still failed** ("unexpected EOF while looking for
   matching quote") on a script full of template-literal backticks — nothing
   ran, by luck. Any multi-line script is a file written by the Write tool,
-  whatever it contains.
+  whatever it contains. **Broken again 21 Oct (6a):** a quoted
+  `python - <<'EOF'` carrying `CA\'s` wrote `CA's` into a single-quoted
+  i18n string and broke `i18n.ts`; caught by tsc. I had used several small
+  heredocs that day because they "worked" — that is how the rule decays.
+  No exceptions for small ones.
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck
@@ -262,7 +274,11 @@ save.
   `form_input` does not reach React state — type into the fields, at desktop
   size. **A tab that is not in front has no layout** (refs report "outside
   the viewport (0, 0)", clicks land nowhere): `tabs_select` it first, and
-  front Rahul's tab again afterwards (19 Oct).
+  front Rahul's tab again afterwards (19 Oct). **Never `scrollIntoView()` from
+  a script under emulation** (21 Oct): it scrolls the whole document, the app
+  shell slides off and screenshots paint blank or half-drawn. Use the
+  `computer` scroll action or `scroll_to` with a ref; if the page is already
+  shifted, reload.
 - **Commit messages go through a file** (`git commit -F msg.txt`). On 1 Oct a
   PowerShell here-string containing double quotes was split by Windows
   PowerShell 5.1 into pathspecs; the commit failed, the next command switched to
@@ -459,7 +475,15 @@ cause**, never as a new line at the bottom.
   ₹54,092 against ₹8,526 on the bills, and I spent an hour suspecting the
   engine. **When one function builds a record, every writer of that record
   calls it** (bill-lines-one-builder.test.ts), and a test of a READER on data
-  that bypassed the builder proves nothing about the reader. Also: a test call
+  that bypassed the builder proves nothing about the reader.
+· **21 Oct (6a, #254): three readers each worked out profit themselves.**
+  Bill-wise and Item-wise Profit and Ask did "revenue − quantity × cost" while
+  Home added the profit each bill booked — so an item at cost ₹0 was 100%
+  profit in three places and ₹0 in the rest. Ask's own comment said "writing
+  my own version would be a second definition" — it had copied the report's
+  instead, which was the second definition. **Copying another reader is not
+  using the rule; call the rule.** Guard: no file but insights-queries.ts may
+  multiply a sold line's cost (no-cost-profit.test.ts). Also: a test call
   with `to=2026-09-30` read as UTC midnight dropped a day — hand-check the
   window before blaming the sums.
 

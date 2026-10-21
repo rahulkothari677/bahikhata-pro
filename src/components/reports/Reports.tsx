@@ -893,8 +893,11 @@ function StockReport({ data }: { data: any }) {
   // #134: profit is worked on the sale value BEFORE GST, so "sale value −
   // stock value" no longer equals it for MRP items. The ⓘ shows the working.
   const potentialBeforeGst = data?.totalPotentialBeforeGst
-  const profitHint = typeof potentialBeforeGst === 'number' && Math.abs(potentialBeforeGst - totalPotentialValue) >= 0.01
-    ? `Sale value before GST ${formatINR(potentialBeforeGst)} minus stock value ${formatINR(totalStockValue)}. The GST inside MRP prices goes to the government, so it is not profit.`
+  // #254: stock with no cost price promises no profit, so its sale value comes off too.
+  const noCostBeforeGst = Number(data?.noCostBeforeGst) || 0
+  const noCostPart = noCostBeforeGst >= 0.01 ? `, minus ${formatINR(noCostBeforeGst)} of items with no cost price` : ''
+  const profitHint = typeof potentialBeforeGst === 'number' && (Math.abs(potentialBeforeGst - totalPotentialValue) >= 0.01 || noCostPart)
+    ? `Sale value before GST ${formatINR(potentialBeforeGst)} minus stock value ${formatINR(totalStockValue)}${noCostPart}. The GST inside MRP prices goes to the government, and an item with no cost price has no profit to count.`
     : undefined
   const lowStockCount = data?.lowStockCount ?? 0
   const products = data?.products || []

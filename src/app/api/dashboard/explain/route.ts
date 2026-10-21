@@ -12,7 +12,7 @@ import { netSalesProfit, netSalesTaxable, netSalesTotal } from '@/lib/net-sales'
 import { fromPaise, roundMoney } from '@/lib/money'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 import { listProof, netProfitProof, profitProof, purchasesProof, salesProof, type Proof, type ProofRow } from '@/lib/proof-sheets'
-import { salePaymentSplit } from '@/lib/insights-queries'
+import { NO_COST_LINE, salePaymentSplit } from '@/lib/insights-queries'
 
 /**
  * GET /api/dashboard/explain?metric=sales|profit|got|purchases|expenses|stock&scope=today|range[&from&to]
@@ -64,10 +64,10 @@ async function sumsByType(userId: string, from: Date, to: Date, types: string[])
 }
 
 /**
- * Sales value (before GST, net of returns) of lines with no product behind
- * them. Those lines book no profit — there is no cost price — so the profit
- * sheet shows them on their own line instead of as a cost (proof-sheets.ts).
- * Uses the shared line-taxable SQL, the same definition as the reports.
+ * Sales value (before GST, net of returns) of lines with no cost price — typed
+ * in, or an item at cost ₹0 (#254, NO_COST_LINE). Those lines book no profit,
+ * so the profit sheet shows them on their own line instead of as a cost
+ * (proof-sheets.ts). Uses the shared line-taxable SQL, the same definition as the reports.
  */
 async function noCostSales(userId: string, from: Date, to: Date): Promise<number> {
   const rows = await db.$queryRaw<Array<{ paise: unknown }>>`
@@ -78,7 +78,7 @@ async function noCostSales(userId: string, from: Date, to: Date): Promise<number
       AND t."deletedAt" IS NULL
       AND t."type" IN ('sale', 'credit-note')
       AND t."date" >= ${from} AND t."date" <= ${to}
-      AND ti."productId" IS NULL
+      AND ${NO_COST_LINE}
   `
   return fromPaise(Number(rows[0]?.paise ?? 0))
 }

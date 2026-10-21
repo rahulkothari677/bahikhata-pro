@@ -148,8 +148,8 @@ export interface RankedProduct {
   name: string
   revenue: number
   profit: number
-  /** Percent, one decimal. */
-  margin: number
+  /** Percent, one decimal, over the lines that have a cost price; null when none had one (#254). */
+  margin: number | null
   qty: number
 }
 
@@ -185,6 +185,19 @@ export function productProfitAnswer(
       headline: `Every item lost money ${label}`,
       detail: `${top.name} lost the least — ${money(Math.abs(top.profit))} on ` +
         `${money(top.revenue)} of sales. ${showing}Check your cost prices.`,
+    }
+  }
+
+  /*
+   * #254: NO COST PRICE IS NOT ₹0 PROFIT. An item saved without a cost books
+   * no profit, so if it tops the list nothing sold showed a profit — naming it
+   * "the most profit" would be the same lie as the loss above.
+   */
+  if (top.margin === null) {
+    return {
+      headline: `No profit counted ${label}`,
+      detail: `${top.name} has no cost price, so its profit is not counted. ` +
+        `${showing}Add its cost price to count it.`,
     }
   }
 

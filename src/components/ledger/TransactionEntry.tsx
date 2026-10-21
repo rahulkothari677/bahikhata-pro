@@ -64,7 +64,7 @@ import { istDateString } from '@/lib/timezone'
 import { refillPrice, resolveLineIncludesGst } from '@/lib/refill-line'
 import { lineTaxable } from '@/lib/line-taxable'
 import { gstStatus, chargesGstOnSales, claimsInputCredit, isOutwardDocument } from '@/lib/shop-tax'
-import { purchaseCostPerUnit, purchaseRateFromCost } from '@/lib/unit-profit'
+import { purchaseCostPerUnit, purchaseRateFromCost, isNoCostLine, marginOnCosted } from '@/lib/unit-profit'
 import { StateField, GstinField } from '@/components/common/StateField'
 
 const PAYMENT_MODES = [
@@ -959,7 +959,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // On a phone Details is folded; a legal warning must not hide behind it.
   const detailsWarn = compositionElsewhere || (showsGst && actualType === 'sale' && rule46e.length > 0)
   useEffect(() => { if (detailsWarn) setDetailsOpen(true) }, [detailsWarn])
-  const marginPct = (amount: number) => taxableTotal > 0 ? ((amount / taxableTotal) * 100).toFixed(1) : 0
+  // #254: lines with no cost price book no profit, so the margin is over the lines that have one.
+  const noCostTaxable = preview.txItems.reduce((s, l) => s + (isNoCostLine(l) ? lineTaxable(l) : 0), 0)
+  const marginPct = (amount: number) => marginOnCosted(amount, taxableTotal, noCostTaxable) ?? 0
   // 🔒 FIX C5: Apply round-off on the client too, so the preview matches the
   // server exactly. Was: `totalAmount = preview.totalBeforeRoundOff` — the
   // client used the pre-round-off total, but the server applied round-off.
@@ -3129,6 +3131,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       {formatINR(totalProfit)}
                       <span className="text-xs ml-1">({marginPct(totalProfit)}%)</span>
                     </span>
+                  </div>
+                )}
+                {!hideProfit && isSale && !isNote && noCostTaxable >= 0.01 && (
+                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>No cost price: profit not counted</span>
+                    <span className="tabular-nums">{formatINR(noCostTaxable)}</span>
                   </div>
                 )}
                 {/* 🔒 AUDIT V25 FIX BUG-030 (Batch 5): Credit/debit notes REVERSE

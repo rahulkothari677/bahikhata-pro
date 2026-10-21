@@ -10,6 +10,12 @@
  *   90+ days (Critical) → Red
  *
  * Shows total per bucket + per-party breakdown.
+ *
+ * #253 (Phase 6a, Rahul's decision 21 Oct): two ageing scales, each named for
+ * who it serves. These 30/60/90-day groups are the ACCOUNTANT's (how a CA and
+ * a statutory audit read debtors); Insights → Udhaar keeps 0–15/16–30/31–60/
+ * 60+ for the SHOP, who chases udhaar weekly. Same money, same oldest-bill
+ * rule (lib/insights ageBandOf vs this route) — each screen says which it is.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +23,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatINR, cn } from '@/lib/utils'
 import { ReportRows } from '@/components/reports/ReportRows'
 import { roundMoney } from '@/lib/money'
+import { InfoHint } from '@/components/common/InfoHint'
 import { AlertTriangle, Clock, User } from 'lucide-react'
 
 export function DebtAgingReport({ data }: { data: any }) {
@@ -111,8 +118,12 @@ export function DebtAgingReport({ data }: { data: any }) {
           <CardTitle className="text-base flex items-center gap-2">
             <Clock className="w-4 h-4" /> Customer-wise Debt Aging
           </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            {agedParties.length} customers with outstanding dues · aged by each customer&apos;s oldest unpaid invoice (approximate — part-payments settle oldest first)
+          <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+            {agedParties.length} customers with dues · 30-day groups, as accountants use
+            <InfoHint
+              label="these age groups"
+              text="Each customer is placed by their oldest unpaid bill; part-payments settle the oldest first. These 30/60/90-day groups are how your CA reads money owed. Insights → Udhaar shows the same money in shorter groups (0–15, 16–30, 31–60, over 60 days) for chasing payments."
+            />
           </p>
         </CardHeader>
         <CardContent>

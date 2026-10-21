@@ -26,7 +26,15 @@ export const SIGNED_LINE = Prisma.sql`(CASE WHEN t."type" = 'sale' THEN ${LINE_T
  * 100.49999999999999 up, and ROUND on a double rounds 50.5 to even.
  * A typed-in line (no item) booked no profit, so it is 0 here too.
  */
-export const SIGNED_PROFIT = Prisma.sql`(CASE WHEN ti."productId" IS NULL THEN 0 WHEN t."type" = 'sale' THEN 1 ELSE -1 END) * (${LINE_TAXABLE_SQL} - FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)::numeric)`
+/**
+ * #254 (Phase 6a): a line with no cost price — typed in (no item behind it) or
+ * an item saved with cost ₹0. It books no profit: "profit not counted", never
+ * its whole sale as profit. One definition for every query (Insights, the
+ * profit sheet, the profit reports); lib/unit-profit.ts hasCostPrice is the
+ * same rule for code. Aliases ti / t.
+ */
+export const NO_COST_LINE = Prisma.sql`(ti."productId" IS NULL OR ti."purchasePriceAtSale" <= 0)`
+export const SIGNED_PROFIT = Prisma.sql`(CASE WHEN ${NO_COST_LINE} THEN 0 WHEN t."type" = 'sale' THEN 1 ELSE -1 END) * (${LINE_TAXABLE_SQL} - FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)::numeric)`
 /** Sale and return lines of a shop in a window (inclusive). Aliases ti / t / p. */
 export const SALE_LINES = (userId: string, from: Date, to: Date) => Prisma.sql`
   FROM "TransactionItem" ti

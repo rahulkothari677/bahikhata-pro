@@ -16,10 +16,10 @@ import { rangeWindow } from '@/lib/period'
 import { trendBuckets } from '@/lib/trend-buckets'
 import { abcGroups, costRose, customerGroups, remainder, split, TYPED_IN, udhaarAge, UNMATCHED } from '@/lib/insights'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
-import { customerActivityInPeriod, itemSalesInPeriod, salePaymentSplit, SALE_LINES, SIGNED_LINE, SIGNED_PROFIT, SOLD_IN_WINDOW, UNPAID_ON_BILL } from '@/lib/insights-queries'
+import { customerActivityInPeriod, itemSalesInPeriod, NO_COST_LINE, salePaymentSplit, SALE_LINES, SIGNED_LINE, SIGNED_PROFIT, SOLD_IN_WINDOW, UNPAID_ON_BILL } from '@/lib/insights-queries'
 import { WALK_IN_PARTY_NAME } from '@/lib/walk-in-party'
 import { DEAD_DAYS } from '@/lib/stock-aging'
-import { earnPerUnit, purchaseCostPerUnit } from '@/lib/unit-profit'
+import { earnPerUnit, purchaseCostPerUnit, marginOnCosted } from '@/lib/unit-profit'
 import { chargesGstOnSales, claimsInputCredit, gstStatus } from '@/lib/shop-tax'
 
 /**
@@ -289,14 +289,16 @@ async function profitSection({ userId, w }: Ctx) {
   const [sums, prevSums, cats, perItem, costUp] = await Promise.all([
     sumsByType(userId, w.from, w.to, ['sale', 'credit-note', 'income', 'expense']),
     sumsByType(userId, w.prevFrom, w.prevTo, ['sale', 'credit-note']),
-    // Every line, by the item's category; typed-in lines (no item, no cost price) as their own row.
+    // Every line, by the item's category; lines with no cost price (typed in, or an item at cost ₹0 — #254)
+    // as their own row, booking no profit.
     db.$queryRaw<Array<{ category: string; sales: Num; profit: Num }>>`
-      SELECT CASE WHEN ti."productId" IS NULL THEN ${TYPED_IN} ELSE COALESCE(p."category", '') END AS "category",
+      SELECT CASE WHEN ${NO_COST_LINE} THEN ${TYPED_IN} ELSE COALESCE(p."category", '') END AS "category",
              SUM(${SIGNED_LINE})::numeric AS "sales", SUM(${SIGNED_PROFIT})::numeric AS "profit"
       ${SALE_LINES(userId, w.from, w.to)}
       GROUP BY 1`,
-    db.$queryRaw<Array<{ id: string; name: string; sales: Num; profit: Num }>>`
-      SELECT ti."productId" AS "id", MAX(p."name") AS "name", SUM(${SIGNED_LINE})::numeric AS "sales", SUM(${SIGNED_PROFIT})::numeric AS "profit"
+    db.$queryRaw<Array<{ id: string; name: string; sales: Num; profit: Num; noCost: Num }>>`
+      SELECT ti."productId" AS "id", MAX(p."name") AS "name", SUM(${SIGNED_LINE})::numeric AS "sales", SUM(${SIGNED_PROFIT})::numeric AS "profit",
+             SUM(CASE WHEN ${NO_COST_LINE} THEN ${SIGNED_LINE} ELSE 0 END)::numeric AS "noCost"
       ${SALE_LINES(userId, w.from, w.to)} AND ti."productId" IS NOT NULL
       GROUP BY ti."productId"`,
     // The last two purchase prices of each product: where the latest is higher, the cost went up.
@@ -329,13 +331,18 @@ async function profitSection({ userId, w }: Ctx) {
   const byCategory = rows
     .sort((a, b) => b.profit - a.profit || a.id.localeCompare(b.id))
     .map((c) => ({ ...c, margin: c.sales > 0 && c.id !== TYPED_IN && c.id !== UNMATCHED ? Math.round((c.profit / c.sales) * 1000) / 10 : null }))
-  const lowest = perItem.map((r) => ({ id: r.id, name: r.name ?? '—', sales: p2r(r.sales), profit: p2r(r.profit) }))
-    .filter((r) => r.sales >= 300)
-    .map((r) => ({ ...r, margin: Math.round((r.profit / r.sales) * 1000) / 10 }))
+  // #254: margins over the sales that have a cost price (marginOnCosted, as in the profit reports) — an item
+  // with no cost price has no margin to rank, never "0%", and is left out of the lowest-margin list.
+  const lowest = perItem.map((r) => ({ id: r.id, name: r.name ?? '—', sales: p2r(r.sales), profit: p2r(r.profit), noCost: p2r(r.noCost) }))
+    .filter((r) => r.sales - r.noCost >= 300)
+    .map(({ noCost, ...r }) => ({ ...r, margin: marginOnCosted(r.profit, r.sales, noCost) }))
+    .flatMap((r) => (r.margin === null ? [] : [{ ...r, margin: r.margin }]))
     .sort((a, b) => a.margin - b.margin || a.name.localeCompare(b.name)).slice(0, TOP)
+  const noCostSales = rows.find((r) => r.id === TYPED_IN)?.sales ?? 0
+  const totalMargin = marginOnCosted(profit, netSales, noCostSales)
   return {
     totals: {
-      profit, netSales, margin: netSales > 0 ? Math.round((profit / netSales) * 1000) / 10 : null,
+      profit, netSales, margin: netSales > 0 ? totalMargin : null,
       previous: netSalesProfit(prevSums('sale'), prevSums('credit-note')),
       afterExpenses: roundMoney(profit + income - expenses), expenses, income,
     },

@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { formatINR, cn } from '@/lib/utils'
 import { ReportRows } from '@/components/reports/ReportRows'
+import { NoCostNote, marginText } from '@/components/reports/NoCostNote'
 import { TrendingUp, TrendingDown, Package } from 'lucide-react'
 
 interface ItemWiseProfitProps {
@@ -26,6 +27,8 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
   if (!data?.summary) return <ReportUnavailable what="profit report" />
   const summary = data.summary
   const items = data?.items || []
+  // #254: a column for sales with no cost price, only when there are some — so revenue = cost + it + profit on every row.
+  const showNoCost = items.some((i: any) => i.noCost)
 
   return (
     <div className="space-y-4">
@@ -33,7 +36,7 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Products Sold" value={String(summary.totalProducts)} color="text-blue-600 dark:text-blue-400" bg="bg-blue-100 dark:bg-blue-950" />
         <StatCard label="Revenue (excl. GST)" value={formatINR(summary.totalRevenue)} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100 dark:bg-amber-950" />
-        <StatCard label="Total COGS" value={formatINR(summary.totalCogs)} color="text-rose-600 dark:text-rose-400" bg="bg-rose-100 dark:bg-rose-950" />
+        <StatCard label="Total cost" value={formatINR(summary.totalCogs)} color="text-rose-600 dark:text-rose-400" bg="bg-rose-100 dark:bg-rose-950" />
         <StatCard label="Total Profit" value={formatINR(summary.totalProfit)} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100 dark:bg-emerald-950" />
       </div>
 
@@ -44,7 +47,10 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
             <Package className="w-4 h-4 text-primary" />
             Product-wise Profit Breakdown
           </CardTitle>
-          <p className="text-xs text-muted-foreground">Avg margin: {summary.avgMargin}% • Sorted by revenue (high to low)</p>
+          <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+            Avg margin: {marginText(summary.avgMargin)} • Sorted by revenue (high to low)
+            {summary.totalNoCost ? <NoCostNote amount={summary.totalNoCost} /> : null}
+          </p>
         </CardHeader>
         <CardContent>
           {/* #241: on a phone each item is one row — its profit, the rest on tap; the table from sm up. */}
@@ -55,12 +61,14 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
               key: `${idx}-${item.productName}`,
               title: item.productName,
               sub: `${item.totalQty} sold`,
-              value: formatINR(item.profit),
+              // #254: an item with no cost price has no profit to show — never a "₹0" that reads like one.
+              value: item.margin === null ? 'No cost price' : formatINR(item.profit),
               tone: item.profit < 0 ? 'bad' : undefined,
               details: [
                 { label: 'Revenue', value: formatINR(item.revenue) },
                 { label: 'Cost', value: formatINR(item.cogs) },
-                { label: 'Margin', value: `${item.margin}%` },
+                ...(item.noCost ? [{ label: 'No cost price', value: formatINR(item.noCost) }] : []),
+                { label: 'Margin', value: marginText(item.margin) },
               ],
             }))}
             total={{ label: 'Total profit', value: formatINR(summary.totalProfit) }}
@@ -73,7 +81,8 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
                   <th className="py-2 px-2 font-medium text-muted-foreground">Product</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Qty Sold</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Revenue</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">COGS</th>
+                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Cost</th>
+                  {showNoCost && <th className="py-2 px-2 font-medium text-muted-foreground text-right">No cost price</th>}
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Profit</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Margin</th>
                 </tr>
@@ -81,7 +90,7 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <td colSpan={showNoCost ? 8 : 7} className="py-8 text-center text-muted-foreground">
                       No products sold in this period
                     </td>
                   </tr>
@@ -93,6 +102,7 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
                       <td className="py-2 px-2 text-right text-muted-foreground tabular-nums">{item.totalQty}</td>
                       <td className="py-2 px-2 text-right tabular-nums">{formatINR(item.revenue)}</td>
                       <td className="py-2 px-2 text-right text-rose-600 dark:text-rose-400 tabular-nums">{formatINR(item.cogs)}</td>
+                      {showNoCost && <td className="py-2 px-2 text-right text-muted-foreground tabular-nums">{item.noCost ? formatINR(item.noCost) : '—'}</td>}
                       <td className={cn(
                         'py-2 px-2 text-right font-semibold tabular-nums',
                         item.profit > 0 ? 'text-emerald-600 dark:text-emerald-400' : item.profit < 0 ? 'text-rose-600' : 'text-muted-foreground',
@@ -100,6 +110,9 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
                         {item.profit > 0 ? '+' : ''}{formatINR(item.profit)}
                       </td>
                       <td className="py-2 px-2 text-right">
+                        {item.margin === null ? (
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">No cost price</span>
+                        ) : (
                         <span className={cn(
                           'inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded',
                           item.margin >= 15
@@ -113,6 +126,7 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
                           {item.margin >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                           {item.margin}%
                         </span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -125,8 +139,9 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
                     <td className="py-2 px-2"></td>
                     <td className="py-2 px-2 text-right">{formatINR(summary.totalRevenue)}</td>
                     <td className="py-2 px-2 text-right text-rose-600">{formatINR(summary.totalCogs)}</td>
+                    {showNoCost && <td className="py-2 px-2 text-right text-muted-foreground">{formatINR(summary.totalNoCost ?? 0)}</td>}
                     <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{formatINR(summary.totalProfit)}</td>
-                    <td className="py-2 px-2 text-right">{summary.avgMargin}%</td>
+                    <td className="py-2 px-2 text-right">{marginText(summary.avgMargin)}</td>
                   </tr>
                 </tfoot>
               )}

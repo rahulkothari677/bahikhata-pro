@@ -24,6 +24,8 @@ export function ProfitSection({ range, t }: { range: DateRange; t: (k: string) =
   if (isError || !data) return <InsightsState kind="error" onRetry={() => refetch()} t={t} />
 
   const { totals } = data
+  // #254: with sales that have no cost price, the margin is over the rest — the caption says so.
+  const hasNoCost = data.byCategory.some((c: { id: string; sales: number }) => c.id === '__typed' && c.sales !== 0)
   const change = changeVsBefore(totals.profit, totals.previous)
   const sub = change
     ? t(change.dir === 'same' ? 'ins.same_as_before' : change.dir === 'up' ? 'ins.up_on_before' : 'ins.down_on_before').replace('{n}', String(change.pct))
@@ -31,7 +33,7 @@ export function ProfitSection({ range, t }: { range: DateRange; t: (k: string) =
   const strip = (
     <TotalsStrip className="lg:col-span-2" cells={[
       { label: t('ins.profit'), value: formatINR(totals.profit), sub, tone: totals.profit < 0 ? 'bad' : 'good' },
-      { label: t('ins.margin'), value: totals.margin === null ? '—' : pct(totals.margin), sub: t('ins.of_sales_before_gst') },
+      { label: t('ins.margin'), value: totals.margin === null ? '—' : pct(totals.margin), sub: t(hasNoCost ? 'ins.of_costed_sales' : 'ins.of_sales_before_gst') },
       { label: t('ins.after_expenses'), value: formatINR(totals.afterExpenses), sub: t('ins.expenses_amt').replace('{amount}', formatINR(totals.expenses)), tone: totals.afterExpenses < 0 ? 'bad' : undefined },
     ]} />
   )

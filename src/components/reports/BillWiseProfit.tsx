@@ -14,6 +14,7 @@ import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn, formatDate } from '@/lib/utils'
 import { ReportRows } from '@/components/reports/ReportRows'
+import { NoCostNote, marginText } from '@/components/reports/NoCostNote'
 import { TrendingUp, TrendingDown, FileText, AlertTriangle } from 'lucide-react'
 
 interface BillWiseProfitProps {
@@ -28,6 +29,8 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
   // 🔒 AUDIT V23 FIX §8.5: Show truncation warning when data is truncated.
   const truncated = data?.truncated === true
   const truncatedHint = data?.truncatedHint || 'Showing the latest 500 bills. Narrow the date range to see older bills.'
+  // #254: a column for sales with no cost price, only when there are some — so revenue = cost + it + profit on every row.
+  const showNoCost = bills.some((b: any) => b.noCost)
 
   return (
     <div className="space-y-4">
@@ -46,7 +49,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Total Bills" value={String(summary.totalBills)} color="text-blue-600 dark:text-blue-400" bg="bg-blue-100 dark:bg-blue-950" />
         <StatCard label="Revenue (excl. GST)" value={formatINR(summary.totalRevenue)} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100 dark:bg-amber-950" />
-        <StatCard label="Total COGS" value={formatINR(summary.totalCogs)} color="text-rose-600 dark:text-rose-400" bg="bg-rose-100 dark:bg-rose-950" />
+        <StatCard label="Total cost" value={formatINR(summary.totalCogs)} color="text-rose-600 dark:text-rose-400" bg="bg-rose-100 dark:bg-rose-950" />
         <StatCard label="Total Profit" value={formatINR(summary.totalProfit)} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100 dark:bg-emerald-950" />
       </div>
 
@@ -57,7 +60,10 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
             <FileText className="w-4 h-4 text-primary" />
             Bill-wise Profit Breakdown
           </CardTitle>
-          <p className="text-xs text-muted-foreground">Avg margin: {summary.avgMargin}%</p>
+          <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+            Avg margin: {marginText(summary.avgMargin)}
+            {summary.totalNoCost ? <NoCostNote amount={summary.totalNoCost} /> : null}
+          </p>
         </CardHeader>
         <CardContent>
           {/* #241: on a phone each bill is one row — its profit, the rest on tap; the table from sm up. */}
@@ -74,7 +80,8 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                 { label: 'Items', value: String(bill.itemCount ?? 0) },
                 { label: 'Revenue', value: formatINR(bill.revenue) },
                 { label: 'Cost', value: formatINR(bill.cogs) },
-                { label: 'Margin', value: `${bill.margin}%` },
+                ...(bill.noCost ? [{ label: 'No cost price', value: formatINR(bill.noCost) }] : []),
+                { label: 'Margin', value: bill.type === 'credit-note' ? '—' : marginText(bill.margin) },
               ],
             }))}
             total={{ label: 'Total profit', value: formatINR(summary.totalProfit) }}
@@ -88,7 +95,8 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                   <th className="py-2 px-2 font-medium text-muted-foreground">Party</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Items</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Revenue</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">COGS</th>
+                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Cost</th>
+                  {showNoCost && <th className="py-2 px-2 font-medium text-muted-foreground text-right">No cost price</th>}
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Profit</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Margin</th>
                 </tr>
@@ -96,7 +104,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
               <tbody>
                 {bills.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-muted-foreground">No sales in this period</td>
+                    <td colSpan={showNoCost ? 9 : 8} className="py-8 text-center text-muted-foreground">No sales in this period</td>
                   </tr>
                 ) : (
                   bills.map((bill: any) => (
@@ -114,6 +122,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                       <td className="py-2 px-2 text-right text-muted-foreground">{bill.itemCount}</td>
                       <td className="py-2 px-2 text-right">{formatINR(bill.revenue)}</td>
                       <td className="py-2 px-2 text-right text-rose-600 dark:text-rose-400">{formatINR(bill.cogs)}</td>
+                      {showNoCost && <td className="py-2 px-2 text-right text-muted-foreground">{bill.noCost ? formatINR(bill.noCost) : '—'}</td>}
                       <td className={cn(
                         'py-2 px-2 text-right font-semibold',
                         bill.profit > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600',
@@ -121,6 +130,12 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                         {bill.profit > 0 ? '+' : ''}{formatINR(bill.profit)}
                       </td>
                       <td className="py-2 px-2 text-right">
+                        {/* A return gives back the sale's profit; it has no margin of its own. */}
+                        {bill.type === 'credit-note' ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : bill.margin === null ? (
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">No cost price</span>
+                        ) : (
                         <span className={cn(
                           'inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded',
                           bill.margin >= 15
@@ -132,6 +147,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                           {bill.margin >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                           {bill.margin}%
                         </span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -143,8 +159,9 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                     <td className="py-2 px-2" colSpan={4}>Total</td>
                     <td className="py-2 px-2 text-right">{formatINR(summary.totalRevenue)}</td>
                     <td className="py-2 px-2 text-right text-rose-600">{formatINR(summary.totalCogs)}</td>
+                    {showNoCost && <td className="py-2 px-2 text-right text-muted-foreground">{formatINR(summary.totalNoCost ?? 0)}</td>}
                     <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{formatINR(summary.totalProfit)}</td>
-                    <td className="py-2 px-2 text-right">{summary.avgMargin}%</td>
+                    <td className="py-2 px-2 text-right">{marginText(summary.avgMargin)}</td>
                   </tr>
                 </tfoot>
               )}

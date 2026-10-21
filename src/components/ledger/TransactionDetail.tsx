@@ -49,7 +49,8 @@ import { GST_RATES } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice } from '@/lib/refill-line'
 import { gstStatus, documentTitle, billCarriesGstColumns, claimsInputCredit } from '@/lib/shop-tax'
-import { purchaseRateFromCost } from '@/lib/unit-profit'
+import { purchaseRateFromCost, isNoCostLine } from '@/lib/unit-profit'
+import { lineTaxable } from '@/lib/line-taxable'
 
 /**
  * Sentinel values for the party <Select> in the edit dialog.
@@ -820,12 +821,25 @@ export function TransactionDetail() {
                     <span className="font-medium text-xs">{txn.createdBy.name || txn.createdBy.email}{txn.createdBy.role === 'staff' ? ' (Staff)' : ''}</span>
                   </div>
                 )}
-                {isSale && !hideProfit && (
-                  <div className="flex items-center justify-between pt-2 border-t border-border">
-                    <span className="text-muted-foreground flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Profit</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatINR(txn.grossProfit)}</span>
-                  </div>
-                )}
+                {isSale && !hideProfit && (() => {
+                  // #254: lines with no cost price (typed in, or cost ₹0) booked no profit — say so, not "₹0".
+                  const items: any[] = txn.items || []
+                  const noCost = items.reduce((s, it) => s + (isNoCostLine(it) ? lineTaxable(it) : 0), 0)
+                  const allNoCost = items.length > 0 && items.every((it) => isNoCostLine(it))
+                  return (
+                    <div className="pt-2 border-t border-border">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Profit</span>
+                        {allNoCost
+                          ? <span className="text-xs text-muted-foreground">No cost price</span>
+                          : <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatINR(txn.grossProfit)}</span>}
+                      </div>
+                      {!allNoCost && noCost >= 0.01 && (
+                        <p className="text-xs text-muted-foreground text-right tabular-nums">{formatINR(noCost)} with no cost price</p>
+                      )}
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           </div>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
@@ -17,6 +18,8 @@ import {
   type TypeAggregates,
 } from '@/lib/net-sales'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
+import { SIGNED_LINE, SIGNED_PROFIT, NO_COST_LINE } from '@/lib/insights-queries'
+import { isNoCostLine, marginOnCosted } from '@/lib/unit-profit'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 
@@ -462,24 +465,29 @@ export async function GET(req: NextRequest) {
       // line-items.ts charges it 0% — lib/shop-tax.ts.
       const stockSetting = await db.setting.findUnique({ where: { userId }, select: { compositionCategory: true, gstRegistered: true } })
       const chargesGst = chargesGstOnSales(gstStatus(stockSetting))
+      // One unit's sale value before GST, per product row (paise, unrounded).
+      const beforeGstValue = Prisma.sql`GREATEST("currentStock", 0)::numeric * (
+              CASE WHEN ${chargesGst} AND "priceIncludesGst" AND "gstRate" > 0
+                THEN "salePrice"::numeric * 100 / (100 + "gstRate"::numeric)
+                ELSE "salePrice"::numeric
+              END
+            )`
 
       const [stockTotalsRows, productRows] = await Promise.all([
         db.$queryRaw<Array<{
           totalStockValuePaise: string
           totalPotentialPaise: string
           totalPotentialBeforeGstPaise: string
+          noCostBeforeGstPaise: string
           lowStockCount: bigint
           productCount: bigint
         }>>`
           SELECT
             COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric)), 0)::numeric AS "totalStockValuePaise",
             COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * "salePrice"::numeric)), 0)::numeric AS "totalPotentialPaise",
-            COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * (
-              CASE WHEN ${chargesGst} AND "priceIncludesGst" AND "gstRate" > 0
-                THEN "salePrice"::numeric * 100 / (100 + "gstRate"::numeric)
-                ELSE "salePrice"::numeric
-              END
-            ))), 0)::numeric AS "totalPotentialBeforeGstPaise",
+            COALESCE(SUM(ROUND(${beforeGstValue})), 0)::numeric AS "totalPotentialBeforeGstPaise",
+            -- #254: stock with no cost price promises no profit (stockPotentialProfit, the items screen).
+            COALESCE(SUM(ROUND(${beforeGstValue})) FILTER (WHERE "purchasePrice" <= 0), 0)::numeric AS "noCostBeforeGstPaise",
             COUNT(*) FILTER (WHERE "currentStock" <= "lowStockThreshold")::bigint AS "lowStockCount",
             COUNT(*)::bigint AS "productCount"
           FROM "Product"
@@ -549,6 +557,7 @@ export async function GET(req: NextRequest) {
       const totalStockValue = roundMoney(fromPaise(Number(stockTotalsRows[0]?.totalStockValuePaise ?? 0)))
       const totalPotentialValue = roundMoney(fromPaise(Number(stockTotalsRows[0]?.totalPotentialPaise ?? 0)))
       const totalPotentialBeforeGst = roundMoney(fromPaise(Number(stockTotalsRows[0]?.totalPotentialBeforeGstPaise ?? 0)))
+      const noCostBeforeGst = roundMoney(fromPaise(Number(stockTotalsRows[0]?.noCostBeforeGstPaise ?? 0)))
       const stockLowStockCount = Number(stockTotalsRows[0]?.lowStockCount ?? 0)
 
       // 🔒 V26 FIX N6 (V23 §3 residual): The stock report leaked cost & margin
@@ -588,9 +597,11 @@ export async function GET(req: NextRequest) {
         products: stockReport,
         totalStockValue,
         totalPotentialValue,
-        potentialProfit: roundMoney(totalPotentialBeforeGst - totalStockValue),
+        // #254: items with no cost price are left out — the items screen's stockPotentialProfit rule.
+        potentialProfit: roundMoney(totalPotentialBeforeGst - noCostBeforeGst - totalStockValue),
         // Shown behind the ⓘ on Potential Profit so the cards add up on screen.
         totalPotentialBeforeGst,
+        noCostBeforeGst,
         lowStockCount: stockLowStockCount,
       })
     }
@@ -834,6 +845,8 @@ export async function GET(req: NextRequest) {
               purchasePriceAtSale: true,
               discountAmount: true,
               productName: true,
+              productId: true,
+              total: true, cgst: true, sgst: true, igst: true, csamt: true,
             },
           },
           party: { select: { name: true } },
@@ -850,16 +863,24 @@ export async function GET(req: NextRequest) {
         take: 500,
       })
 
+      /*
+       * #254 (Phase 6a): a bill's profit is the profit the bill BOOKED
+       * (Transaction.grossProfit, written by lib/line-items.ts) — the figure
+       * Home and the P&L add up. This report worked out its own "revenue −
+       * quantity × cost", so a typed-in line or an item at cost ₹0 counted as
+       * 100% profit here and ₹0 there. Lines with no cost price (isNoCostLine /
+       * NO_COST_LINE) are shown as their own figure; cost = the rest.
+       */
       const bills = transactions.map(t => {
-        const revenue = t.type === 'sale'
-          ? (t.subtotal - t.discountAmount)
-          : -((t.subtotal - t.discountAmount)) // credit note reverses
-        const cogs = t.items.reduce((sum, item) => {
-          const itemCogs = item.purchasePriceAtSale * item.quantity
-          return sum + (t.type === 'sale' ? itemCogs : -itemCogs)
-        }, 0)
-        const profit = revenue - cogs
-        const margin = revenue > 0 ? (profit / revenue) * 100 : 0
+        const sign = t.type === 'sale' ? 1 : -1 // credit note reverses
+        const revenue = sign * (t.subtotal - t.discountAmount)
+        const noCost = sign * t.items.reduce((sum, item) => (
+          isNoCostLine(item)
+            ? sum + (item.total - item.cgst - item.sgst - item.igst - item.csamt)
+            : sum
+        ), 0)
+        const profit = t.grossProfit ?? 0
+        const cogs = revenue - noCost - profit
         return {
           id: t.id,
           invoiceNo: t.invoiceNo || `#${t.invoiceSequence || '—'}`,
@@ -870,7 +891,8 @@ export async function GET(req: NextRequest) {
           revenue: roundMoney(revenue),
           cogs: roundMoney(cogs),
           profit: roundMoney(profit),
-          margin: Math.round(margin * 10) / 10, // 1 decimal place
+          noCost: roundMoney(noCost),
+          margin: marginOnCosted(profit, revenue, noCost), // on the lines that have a cost; null = none had
         }
       })
 
@@ -878,29 +900,30 @@ export async function GET(req: NextRequest) {
       // truncated 500-bill array. For shops with 500+ transactions, the summary
       // was wrong (only covered the latest 500). Now: run a separate SQL
       // aggregate that covers ALL transactions (no take limit).
-      const summaryAgg = await db.transaction.aggregate({
+      const summaryByType = await db.transaction.groupBy({
+        by: ['type'],
         where: activeTransactionWhere(userId, {
           type: { in: ['sale', 'credit-note'] },
           date: { gte: from, lte: to },
         }),
-        _sum: { subtotal: true, discountAmount: true },
+        _sum: { subtotal: true, discountAmount: true, grossProfit: true },
         _count: true,
       })
-      // 🔒 V26 FIX N3: Was computing Σ(price) × Σ(qty) — mathematically wrong.
-      // For items A: cost ₹10 × qty 2, B: cost ₹100 × qty 1, the old formula
-      // computed (10+100) × (2+1) = ₹330 instead of the correct 20+100 = ₹120.
-      // Now uses raw SQL SUM(purchasePriceAtSale * quantity) with sign-aware
-      // credit-note handling (same pattern as the item-profit report).
-      const allRevenue = (summaryAgg._sum.subtotal || 0) - (summaryAgg._sum.discountAmount || 0)
-      const summaryCogsResult = await db.$queryRaw`
-        SELECT
-          COALESCE(SUM(
-            CASE
-              WHEN t."type" = 'sale' THEN ti."purchasePriceAtSale" * ti."quantity"
-              WHEN t."type" = 'credit-note' THEN -(ti."purchasePriceAtSale" * ti."quantity")
-              ELSE 0
-            END
-          ), 0) AS "totalCogsPaise"
+      // Phase 6a: a return takes its value OFF the total, as it does on each bill row above —
+      // the old aggregate added returns' subtotals to sales, so the total disagreed with the rows.
+      let allRevenue = 0
+      let allProfit = 0
+      let allBills = 0
+      for (const g of summaryByType) {
+        const sign = g.type === 'sale' ? 1 : -1
+        allRevenue += sign * ((g._sum.subtotal || 0) - (g._sum.discountAmount || 0))
+        allProfit += g._sum.grossProfit || 0 // a return's profit is stored negative
+        allBills += g._count
+      }
+      // #254: profit = what the bills booked, so the total equals Home's; the value of the lines
+      // with no cost price from the shared NO_COST_LINE; cost = the rest (no Σ(price) × Σ(qty), V26 N3).
+      const noCostResult = await db.$queryRaw<Array<{ paise: unknown }>>`
+        SELECT COALESCE(SUM(${SIGNED_LINE}), 0)::numeric AS "paise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t."id"
         WHERE t."userId" = ${userId}
@@ -908,10 +931,10 @@ export async function GET(req: NextRequest) {
           AND t."type" IN ('sale', 'credit-note')
           AND t."date" >= ${from}
           AND t."date" <= ${to}
+          AND ${NO_COST_LINE}
       `
-      const allCogs = fromPaise(Number((summaryCogsResult as any)[0]?.totalCogsPaise || 0))
-      const allProfit = allRevenue - allCogs
-      const avgMargin = allRevenue > 0 ? (allProfit / allRevenue) * 100 : 0
+      const allNoCost = fromPaise(Number(noCostResult[0]?.paise ?? 0))
+      const allCogs = allRevenue - allNoCost - allProfit
 
       return NextResponse.json({
         type: 'bill-profit',
@@ -919,11 +942,12 @@ export async function GET(req: NextRequest) {
         truncated: transactions.length >= 500,
         truncatedHint: transactions.length >= 500 ? 'Showing the latest 500 bills. Narrow the date range to see older bills.' : undefined,
         summary: {
-          totalBills: summaryAgg._count, // ALL bills, not just the 500 shown
+          totalBills: allBills, // ALL bills, not just the 500 shown
           totalRevenue: roundMoney(allRevenue),
           totalCogs: roundMoney(allCogs),
           totalProfit: roundMoney(allProfit),
-          avgMargin: Math.round(avgMargin * 10) / 10,
+          totalNoCost: roundMoney(allNoCost),
+          avgMargin: marginOnCosted(allProfit, allRevenue, allNoCost),
         },
         bills,
       })
@@ -1303,7 +1327,8 @@ export async function GET(req: NextRequest) {
         productName: string
         totalQty: number
         revenue: bigint
-        cogs: bigint
+        profit: unknown
+        noCost: unknown
       }>>`
         SELECT
           ti."productId" AS "productId",
@@ -1315,12 +1340,10 @@ export async function GET(req: NextRequest) {
               ELSE -${LINE_TAXABLE_SQL}
             END
           ) AS "revenue",
-          SUM(
-            CASE WHEN t."type" = 'sale'
-              THEN (ti."purchasePriceAtSale" * ti."quantity")
-              ELSE -(ti."purchasePriceAtSale" * ti."quantity")
-            END
-          ) AS "cogs"
+          -- #254: the profit each line booked (SIGNED_PROFIT — no cost price books none), and the
+          -- value of the lines with no cost price (NO_COST_LINE), the one rule Insights uses.
+          SUM(${SIGNED_PROFIT}) AS "profit",
+          SUM(CASE WHEN ${NO_COST_LINE} THEN ${SIGNED_LINE} ELSE 0 END) AS "noCost"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t."id"
         WHERE t."userId" = ${userId}
@@ -1337,9 +1360,9 @@ export async function GET(req: NextRequest) {
         // 🔒 BUG-019 FIX (Audit V22 §5): Raw SQL returns paise (Int columns).
         // Must convert via fromPaise() — the money extension does NOT touch $queryRaw.
         const revenue = fromPaise(Number(row.revenue))
-        const cogs = fromPaise(Number(row.cogs))
-        const profit = revenue - cogs
-        const margin = revenue > 0 ? (profit / revenue) * 100 : 0
+        const profit = fromPaise(Number(row.profit ?? 0))
+        const noCost = fromPaise(Number(row.noCost ?? 0))
+        const cogs = revenue - noCost - profit
         return {
           productId: row.productId,
           productName: row.productName,
@@ -1347,14 +1370,16 @@ export async function GET(req: NextRequest) {
           revenue: roundMoney(revenue),
           cogs: roundMoney(cogs),
           profit: roundMoney(profit),
-          margin: Math.round(margin * 10) / 10, // 1 decimal place
+          noCost: roundMoney(noCost),
+          // No margin for an item with no cost price: its profit is not counted (null, "No cost price").
+          margin: marginOnCosted(profit, revenue, noCost),
         }
       })
 
       const totalRevenue = items.reduce((s, i) => s + i.revenue, 0)
       const totalCogs = items.reduce((s, i) => s + i.cogs, 0)
       const totalProfit = items.reduce((s, i) => s + i.profit, 0)
-      const avgMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
+      const totalNoCost = items.reduce((s, i) => s + i.noCost, 0)
 
       return NextResponse.json({
         type: 'item-profit',
@@ -1365,7 +1390,8 @@ export async function GET(req: NextRequest) {
           totalRevenue: roundMoney(totalRevenue),
           totalCogs: roundMoney(totalCogs),
           totalProfit: roundMoney(totalProfit),
-          avgMargin: Math.round(avgMargin * 10) / 10,
+          totalNoCost: roundMoney(totalNoCost),
+          avgMargin: marginOnCosted(totalProfit, totalRevenue, totalNoCost),
         },
         items,
       })

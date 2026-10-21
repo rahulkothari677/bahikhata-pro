@@ -193,7 +193,8 @@ export async function exportPartyReportCSV(data: any) {
 // 🔒 AUDIT V23 FIX §8.4: CSV exports for the 5 new V22 reports.
 
 export async function exportBillWiseProfitCSV(data: any, periodLabel: string) {
-  const headers = ['Invoice', 'Date', 'Type', 'Party', 'Items', 'Revenue', 'COGS', 'Profit', 'Margin %']
+  // #254: sales with no cost price book no profit — their own column; margin blank when none had a cost.
+  const headers = ['Invoice', 'Date', 'Type', 'Party', 'Items', 'Revenue', 'COGS', 'No cost price', 'Profit', 'Margin %']
   const rows: (string | number)[][] = (data.bills || []).map((b: any) => [
     b.invoiceNo,
     new Date(b.date).toLocaleDateString('en-IN'),
@@ -202,21 +203,23 @@ export async function exportBillWiseProfitCSV(data: any, periodLabel: string) {
     b.itemCount,
     b.revenue,
     b.cogs,
+    b.noCost ?? 0,
     b.profit,
-    b.margin,
+    b.margin ?? '',
   ])
   await exportCSV(`BillWise_Profit_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
 }
 
 export async function exportItemWiseProfitCSV(data: any, periodLabel: string) {
-  const headers = ['Product', 'Qty Sold', 'Revenue', 'COGS', 'Profit', 'Margin %']
+  const headers = ['Product', 'Qty Sold', 'Revenue', 'COGS', 'No cost price', 'Profit', 'Margin %']
   const rows: (string | number)[][] = (data.items || []).map((i: any) => [
     i.productName,
     i.totalQty,
     i.revenue,
     i.cogs,
+    i.noCost ?? 0,
     i.profit,
-    i.margin,
+    i.margin ?? '',
   ])
   await exportCSV(`ItemWise_Profit_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
 }

@@ -25,6 +25,7 @@
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney, toPaise, fromPaise, multiplyPaise, calculateGstPaise, splitGstPaise, addPaise } from './money'
 import { normalizeUnitName, resolveEnteredQuantity, isSubUnit } from './units'
 import { isOutwardDocument } from './shop-tax'
+import { hasCostPrice } from './unit-profit'
 
 export interface RawLineItem {
   productId?: string | null
@@ -283,7 +284,11 @@ export function computeLineItems(opts: {
       // sold — no per-unit rounding. It was (round(taxable / qty) − cost) × qty,
       // which multiplied a rounded unit price by the quantity: 10 MRP packs at
       // ₹2,428.57 taxable and ₹230 cost booked ₹128.60 profit, not ₹128.57.
-      itemProfitPaise = taxableAmountPaise - multiplyPaise(p.quantity, toPaise(p.product.purchasePrice))
+      // #254: an item with no cost price books no profit (profit not counted), the same as a
+      // typed-in line — never its whole value. hasCostPrice is the one rule (lib/unit-profit.ts).
+      itemProfitPaise = hasCostPrice(p.product)
+        ? taxableAmountPaise - multiplyPaise(p.quantity, toPaise(p.product.purchasePrice))
+        : 0
       // Credit notes NEGATE the profit (they reverse the original sale's profit).
       // Sales ADD the profit. This way, sale + credit-note = net profit.
       grossProfitPaise = type === 'credit-note'

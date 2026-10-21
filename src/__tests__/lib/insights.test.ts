@@ -208,7 +208,9 @@ describe('rows that must add up to a figure shown elsewhere', () => {
     // The per-line profit rule lives with the shared period queries (5e-4); the route imports it.
     const queries = readCode('src/lib/insights-queries.ts')
     expect(queries).toContain('FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)')
-    expect(queries).toContain('WHEN ti."productId" IS NULL THEN 0')
+    // #254: a line books no profit when typed in OR its item had no cost price (NO_COST_LINE).
+    expect(queries).toContain('NO_COST_LINE = Prisma.sql`(ti."productId" IS NULL OR ti."purchasePriceAtSale" <= 0)`')
+    expect(queries).toContain('CASE WHEN ${NO_COST_LINE} THEN 0')
     expect(code + queries).not.toMatch(/ROUND\(ti\."quantity"/)
     expect(code).toMatch(/import \{[^}]*SIGNED_PROFIT[^}]*\} from '@\/lib\/insights-queries'/)
     expect({ sales: sales.split('remainder(').length - 1, profit: profit.split('remainder(').length - 1 }).toEqual({ sales: 1, profit: 2 })

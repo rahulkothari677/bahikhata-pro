@@ -63,6 +63,40 @@ export function aboveMrp(p: PricedProduct & { mrp?: number | null }, opts: Profi
   return mrp > 0 && Math.round(customerPaysPerUnit(p, opts) * 100) > Math.round(mrp * 100)
 }
 
+/**
+ * #254 (Phase 6a, Rahul's decision 21 Oct): does this item have a cost price?
+ * Small shops often save an item without one. With cost ₹0 every sale booked
+ * its whole value as profit (Home's profit could read as the whole sales),
+ * while a typed-in line booked ₹0 and the profit sheet said "profit not
+ * counted". Now cost ₹0 means "no cost price" everywhere: the bill books no
+ * profit on the line, screens say "No cost price", and potential profit leaves
+ * the item out. The SQL twin is NO_COST_LINE (lib/insights-queries.ts).
+ */
+export function hasCostPrice(p: { purchasePrice?: number | null }): boolean {
+  return (Number(p.purchasePrice) || 0) > 0
+}
+
+/**
+ * A saved bill line whose profit is not counted: typed in (no item) or its
+ * item had no cost price when sold. The JS twin of NO_COST_LINE, line for line.
+ */
+export function isNoCostLine(line: { productId?: string | null; purchasePriceAtSale?: number | null }): boolean {
+  return !line.productId || !hasCostPrice({ purchasePrice: line.purchasePriceAtSale })
+}
+
+/**
+ * #254: margin % over the sales that HAVE a cost price — profit ÷ (sales −
+ * sales with no cost price), to 1 decimal. Their profit is not counted, so
+ * leaving their sales under the line would shrink every margin. null when
+ * everything sold had no cost price (nothing to measure: shown "No cost
+ * price"); 0 when nothing was sold. Signed inputs: a return is negative.
+ */
+export function marginOnCosted(profit: number, sales: number, noCostSales: number): number | null {
+  const costed = roundMoney(sales - noCostSales)
+  if (costed !== 0) return Math.round((profit / costed) * 1000) / 10
+  return roundMoney(noCostSales) !== 0 ? null : 0
+}
+
 /** Profit and margin on one unit. Profit is rounded to the paisa; margin is a %. */
 export function unitProfit(p: PricedProduct, opts: ProfitOptions = {}): { profit: number; margin: number } {
   const sale = saleValueBeforeGst(p, opts)
@@ -93,6 +127,8 @@ export function todayMarginPct(kpis: { todayProfit?: number | null; todayNetSale
  * report can never show two numbers for one amount.
  */
 export function stockPotentialProfit(p: PricedProduct & { currentStock?: number | null }, opts: ProfitOptions = {}): number {
+  // #254: with no cost price there is no profit to promise — never the whole sale value.
+  if (!hasCostPrice(p)) return 0
   const qty = Math.max(0, Number(p.currentStock) || 0)
   return roundMoney(roundMoney(qty * saleValueBeforeGst(p, opts)) - roundMoney(qty * (Number(p.purchasePrice) || 0)))
 }

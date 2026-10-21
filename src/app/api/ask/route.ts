@@ -26,6 +26,8 @@ import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
 import { withNavAction } from '@/lib/ask-nav-action'
 import { resolveName, normalise } from '@/lib/resolve-name'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
+import { SIGNED_LINE, SIGNED_PROFIT, NO_COST_LINE } from '@/lib/insights-queries'
+import { marginOnCosted } from '@/lib/unit-profit'
 
 /**
  * "Ask your books" — A MODEL CHOOSES THE QUESTION. IT NEVER TOUCHES THE MONEY.
@@ -1119,17 +1121,20 @@ export async function POST(req: NextRequest) {
 
         /*
          * THE SAME ARITHMETIC AS THE ITEM-WISE PROFIT REPORT, deliberately:
-         * revenue is unitPrice × quantity less the discount, cost is the
-         * purchase price SNAPSHOTTED at sale time, and credit notes subtract.
-         * Writing my own version would be a second definition of profit, and
-         * the two would disagree the first time either changed.
+         * revenue is the line before GST, profit is SIGNED_PROFIT (the cost
+         * SNAPSHOTTED at sale time; credit notes subtract; a line with no cost
+         * price books none — #254), margin over the lines that have a cost.
+         * It was its own "revenue − cost" until Phase 6a, which counted an
+         * item at cost ₹0 as 100% profit here and ₹0 on Home: a second
+         * definition, disagreeing exactly as this comment warned.
          */
         const rows = await db.$queryRaw<Array<{
           productId: string | null
           productName: string
           qty: number
           revenuePaise: number
-          cogsPaise: number
+          profitPaise: number
+          noCostPaise: number
           soldCount: number
         }>>`
           WITH per_item AS (
@@ -1141,10 +1146,8 @@ export async function POST(req: NextRequest) {
                             THEN ${LINE_TAXABLE_SQL}
                             ELSE -${LINE_TAXABLE_SQL}
                        END)::float8 AS revenue_paise,
-                   SUM(CASE WHEN t."type" = 'sale'
-                            THEN (ti."purchasePriceAtSale" * ti."quantity")
-                            ELSE -(ti."purchasePriceAtSale" * ti."quantity")
-                       END)::float8 AS cogs_paise
+                   SUM(${SIGNED_PROFIT})::float8 AS profit_paise,
+                   SUM(CASE WHEN ${NO_COST_LINE} THEN ${SIGNED_LINE} ELSE 0 END)::float8 AS no_cost_paise
             FROM "TransactionItem" ti
             JOIN "Transaction" t ON t."id" = ti."transactionId"
             WHERE t."userId" = ${userId}
@@ -1158,26 +1161,25 @@ export async function POST(req: NextRequest) {
                  pname AS "productName",
                  qty,
                  revenue_paise AS "revenuePaise",
-                 cogs_paise    AS "cogsPaise",
+                 profit_paise  AS "profitPaise",
+                 no_cost_paise AS "noCostPaise",
                  (SELECT COUNT(*) FROM per_item)::int AS "soldCount"
           FROM per_item
-          ORDER BY (revenue_paise - cogs_paise) DESC, pname ASC
+          ORDER BY profit_paise DESC, pname ASC
           LIMIT 5
         `
 
         const products = rows.map(r => {
           const revenue = roundMoney(fromPaise(Number(r.revenuePaise) || 0))
-          const cogs = roundMoney(fromPaise(Number(r.cogsPaise) || 0))
-          const profit = roundMoney(revenue - cogs)
+          const profit = roundMoney(fromPaise(Number(r.profitPaise) || 0))
           return {
             id: r.productId,
             name: r.productName,
             revenue,
             profit,
-            // No revenue means no margin — a percentage with nothing under
-            // the line is not zero, it is undefined. Reported as 0 and never
-            // shown, because the loss branch takes over in that case.
-            margin: revenue > 0 ? (profit / revenue) * 100 : 0,
+            // Over the lines that have a cost price; null when none had one (#254) — the answer
+            // then says the profit is not counted, never "0% margin".
+            margin: marginOnCosted(profit, revenue, fromPaise(Number(r.noCostPaise) || 0)),
             qty: Number(r.qty) || 0,
           }
         })

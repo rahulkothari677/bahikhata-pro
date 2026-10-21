@@ -4,7 +4,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSetting } from '@/hooks/use-setting'
-import { unitProfit, purchaseRateFromCost } from '@/lib/unit-profit'
+import { unitProfit, purchaseRateFromCost, hasCostPrice } from '@/lib/unit-profit'
 import { gstStatus, chargesGstOnSales, claimsInputCredit } from '@/lib/shop-tax'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -378,13 +378,16 @@ export function Inventory() {
                       </td>
                       {!hideProfit && <td className="py-3 px-2 text-right">{isService(p) ? '—' : formatINR(p.stockValue)}</td>}
                       {/* 🔒 R15-2 (Round 15): Hide profit cell for hideProfit. */}
-                      {!hideProfit && (
+                      {!hideProfit && (hasCostPrice(p) ? (
                         <td className={cn('py-3 px-2 text-right font-medium',
                           profit < 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400')}>
                           {formatINR(profit)}
                           <span className="text-xs text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>
                         </td>
-                      )}
+                      ) : (
+                        // #254: no cost price — no profit to show, never the whole price.
+                        <td className="py-3 px-2 text-right text-xs text-muted-foreground">{t('items.no_cost')}</td>
+                      ))}
                       <td className="py-3 px-2 text-center">
                         {isService(p) ? (
                           <Badge variant="outline" className="text-xs">Service</Badge>
@@ -503,9 +506,12 @@ function ProductRow({ product: p, sort, onEdit }: { product: any; sort: ItemSort
     ? <span className="tabular-nums shrink-0">{t('items.worth').replace('{v}', formatINR(p.stockValue))}</span>
     : sort === 'profit' && p.profitNow !== undefined
       ? <span className={cn('tabular-nums shrink-0 font-semibold', p.profitNow < 0 ? 'text-bad' : 'text-good')}>{t('items.profit_month').replace('{v}', formatINR(p.profitNow))}</span>
-    : !hideProfit
-      ? <span className={cn('tabular-nums shrink-0 font-semibold', profit < 0 ? 'text-bad' : 'text-good')}>{profit >= 0 ? '+' : ''}{formatINR(profit)} · {margin.toFixed(0)}%</span>
-      : null
+    : hideProfit
+      ? null
+      // #254: an item with no cost price shows that, not its whole price as profit.
+      : !hasCostPrice(p)
+        ? <span className="shrink-0">{t('items.no_cost')}</span>
+        : <span className={cn('tabular-nums shrink-0 font-semibold', profit < 0 ? 'text-bad' : 'text-good')}>{profit >= 0 ? '+' : ''}{formatINR(profit)} · {margin.toFixed(0)}%</span>
 
   return (
     <div className="rounded-xl bg-card border border-border/60 shadow-card">

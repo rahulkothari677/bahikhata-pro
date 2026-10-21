@@ -19,7 +19,7 @@ import { formatINR, cn } from '@/lib/utils'
 import { InfoHint } from '@/components/common/InfoHint'
 import { readError } from '@/lib/read-error'
 import { useSetting } from '@/hooks/use-setting'
-import { aboveMrp, customerPaysPerUnit, unitProfit } from '@/lib/unit-profit'
+import { aboveMrp, customerPaysPerUnit, hasCostPrice, unitProfit } from '@/lib/unit-profit'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { defaultTracksInventory } from '@/lib/inventory-tracking'
 import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
@@ -348,8 +348,12 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
             )}
           </div>
           <div>
-            <Label htmlFor="field-purchase-price">Purchase Price (₹) *</Label>
+            <Label htmlFor="field-purchase-price">Purchase Price (₹)</Label>
             <NumberField id="field-purchase-price" value={form.purchasePrice} onValueChange={(v) => setForm({ ...form, purchasePrice: v })} placeholder="0" min={0} step={1} decimals={2} />
+            {/* #254: no cost price → the item's sales book no profit (never its whole price). */}
+            {!hideProfit && salePrice > 0 && !hasCostPrice({ purchasePrice }) && (
+              <p className="text-xs mt-1 text-muted-foreground">No cost price: profit not counted</p>
+            )}
           </div>
           <div>
             <Label htmlFor="field-mrp">MRP (₹)</Label>
@@ -650,7 +654,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
 
         {/* 🔒 R15-5 (Round 15): Hide profit preview for hideProfit.
             Staff with hideProfit must not see the margin calculation. */}
-        {!hideProfit && purchasePrice > 0 && salePrice > 0 && (
+        {!hideProfit && hasCostPrice({ purchasePrice }) && salePrice > 0 && (
           <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
               <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
