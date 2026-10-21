@@ -39,6 +39,7 @@ import { useDrafts } from '@/hooks/use-drafts'
 import { haptic } from '@/lib/haptic'
 import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
 import { counterTiles, foldTiles, freezeWhileBillOpen, TOP_TILES, TOP_TILE_LIMIT, CATEGORY_TILE_LIMIT } from '@/lib/counter-tiles'
+import { partyMatchesSearch, partyPrefillFromSearch } from '@/lib/party-search'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 // 🔒 V10 §2.3: Single rounding function shared between client and server.
 // Was: `const r = (n) => Math.round(n*100)/100` here, which lacks the 1e-9
@@ -462,12 +463,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   })
   const allParties: any[] = partiesData?.parties || []
   // Memoize filtered parties — only recomputes when allParties, isSale, or partySearch changes
+  // 6c-2: "98290 11223" or "+91 98290…" finds the customer stored as 9829011223 (lib/party-search.ts).
   const filteredParties = useMemo(() => allParties.filter(p =>
     (p.type === (isSale ? 'customer' : 'supplier') || p.type === 'both') &&
-    (!partySearch ||
-      p.name?.toLowerCase().includes(partySearch.toLowerCase()) ||
-      p.phone?.includes(partySearch))
+    partyMatchesSearch(p, partySearch)
   ), [allParties, isSale, partySearch])
+  // What "Add new" starts with when the search found nobody: a mobile number goes in Phone, a name in Name.
+  const addPartyPrefill = useMemo(() => partyPrefillFromSearch(partySearch), [partySearch])
 
   // Memoize categories — only rebuilds when products change
   const categories = useMemo(() =>
@@ -677,6 +679,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const buyerGstinCode = gstinStateCode(selectedParty?.gstin)
   // Ask only when it matters: a registered buyer, goods to another state than their GSTIN's.
   const asksShipTo = !!deliveryCode && !!buyerGstinCode && deliveryCode !== buyerGstinCode
+  // #227 (6c-2): until "Who gets the goods" is answered the tax split is not known — the badge and the summary both wait.
+  const taxSplitPending = asksShipTo && shipCheck.needsShipToChoice
   const compositionElsewhere = isOutwardDocument(actualType) && compositionInterStateBlocked(shopGstStatus, supplyPlaces)
   const partyHasNoState = !!selectedParty && !stateCodeOf({ gstin: selectedParty.gstin, state: selectedParty.state })
   // A changed customer is a new question — never carry the last answer over.
@@ -2398,7 +2402,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             {partySearch ? `No match for "${partySearch}"` : `No ${isSale ? 'customers' : 'suppliers'} yet`}
                           </p>
                           <Button size="sm" className="bg-gradient-saffron gap-1" onClick={() => { setPartyDropdownOpen(false); setAddPartyOpen(true) }}>
-                            <Plus className="w-3.5 h-3.5" /> Add New {isSale ? 'Customer' : 'Supplier'}
+                            <Plus className="w-3.5 h-3.5" /> {addPartyPrefill.phone
+                              ? `Add ${isSale ? 'customer' : 'supplier'} · ${addPartyPrefill.phone}`
+                              : `Add New ${isSale ? 'Customer' : 'Supplier'}`}
                           </Button>
                         </div>
                       ) : (
@@ -2721,7 +2727,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {derivedInterState.indeterminate
                         ? 'Set your shop\u2019s state to decide this automatically'
-                        : asksShipTo && shipCheck.needsShipToChoice
+                        : taxSplitPending
                           ? 'Answer \u201cWho gets the goods\u201d below'
                           : derivedInterState.isInterState
                           ? `${stateNameForCode(derivedInterState.shopCode)} \u2192 ${stateNameForCode(derivedInterState.posCode)} \u2014 different states`
@@ -2733,7 +2739,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   ) : (
                     <Badge variant="outline" className="text-xs font-semibold">
                       {/* Not answered yet: no tax head is shown as if decided. */}
-                      {asksShipTo && shipCheck.needsShipToChoice ? '—' : derivedInterState.isInterState ? 'IGST' : 'CGST + SGST'}
+                      {taxSplitPending ? '—' : derivedInterState.isInterState ? 'IGST' : 'CGST + SGST'}
                     </Badge>
                   )}
                 </div>
@@ -3125,7 +3131,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       <span className="text-muted-foreground">GST Total</span>
                       <span className="font-medium">{formatINR(totalGst)}</span>
                     </div>
-                    {!isInterState ? (
+                    {taxSplitPending ? (
+                      <div className="flex items-center justify-between text-xs text-check pl-4">
+                        <span>Tax split: answer &ldquo;Who gets the goods&rdquo;</span>
+                      </div>
+                    ) : !isInterState ? (
                       <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
                         <span>CGST + SGST</span>
                         <span>{formatINR(cgst)} + {formatINR(sgst)}</span>
@@ -3293,6 +3303,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         open={addPartyOpen}
         onOpenChange={setAddPartyOpen}
         defaultType={isSale ? 'customer' : 'supplier'}
+        prefill={partySearch ? addPartyPrefill : undefined}
         onAdded={(newParty) => {
           refetchParties()
           setPartyId(newParty.id)
@@ -3302,11 +3313,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   )
 }
 
-function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
+function AddPartyInline({ open, onOpenChange, defaultType, onAdded, prefill }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   defaultType: 'customer' | 'supplier'
   onAdded: (party: any) => void
+  /** 6c-2: what was typed in the search that found nobody (phone or name). */
+  prefill?: { name: string; phone: string }
 }) {
   const [form, setForm] = useState({
     name: '', type: defaultType, phone: '', gstin: '', state: '', address: '',
@@ -3315,8 +3328,9 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
 
   useEffect(() => {
     if (open) {
-      setForm({ name: '', type: defaultType, phone: '', gstin: '', state: '', address: '' })
+      setForm({ name: prefill?.name ?? '', type: defaultType, phone: prefill?.phone ?? '', gstin: '', state: '', address: '' })
     }
+    // Only when the dialog opens: typing in it must not be reset by the search behind it.
   }, [open, defaultType])
 
   const handleSave = async () => {

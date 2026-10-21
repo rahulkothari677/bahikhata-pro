@@ -34,6 +34,10 @@
  * Existing pairs are left alone; only new names and renames are checked.
  */
 import { db } from '@/lib/db'
+import { normalizePartyPhone } from '@/lib/party-search'
+
+// One idea of a phone number for the server's duplicate check and the bill screen's search (6c-2).
+export { normalizePartyPhone }
 
 export interface DuplicatePartyHit {
   field: 'name' | 'phone'
@@ -43,18 +47,6 @@ export interface DuplicatePartyHit {
 /** Case- and spacing-insensitive comparison key for a party name. */
 export function normalizePartyName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLowerCase()
-}
-
-/**
- * Digits only, so "98765 43210", "+91 98765 43210" and "9876543210" are
- * recognised as one number. Compares the last 10 digits: an Indian mobile is
- * 10 digits, and the same phone is routinely stored with and without +91.
- */
-export function normalizePartyPhone(phone: string | null | undefined): string | null {
-  if (!phone) return null
-  const digits = String(phone).replace(/\D/g, '')
-  if (!digits) return null
-  return digits.length > 10 ? digits.slice(-10) : digits
 }
 
 /**
