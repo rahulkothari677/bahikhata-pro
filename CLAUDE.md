@@ -511,7 +511,13 @@ cause**, never as a new line at the bottom.
   then correctly charged ₹0 GST where the test expected ₹180. `npm run verify`
   does not run Playwright, and I read only the Vercel status after each push.
   **After a push, read every check on the commit; when a default changes,
-  grep the e2e seed and specs for what they assumed.**
+  grep the e2e seed and specs for what they assumed.** **Same miss, 21 Oct
+  (6c-1):** the Counter put the bill above the add controls, and the sale
+  spec's "first button whose name contains the product" became the bill
+  line's "Remove …" — the second click removed the item; e2e went red on
+  main while every unit test was green. **When a screen's ORDER changes,
+  grep the e2e specs for `.first()` and substring names on that screen**, and
+  make each locator say what it means ("^Add (another )?<name>").
 · **2 Oct: the new "Rates include GST" switch passed 18 tests and verify, and
   was invisible on a new purchase** — its condition needed at least one line,
   and a new bill starts with none. Only opening the screen showed it. **Open

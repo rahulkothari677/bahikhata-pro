@@ -60,7 +60,14 @@ test.describe('Critical Flow: record a sale and find it in the ledger', () => {
 
     // ── Add the product ───────────────────────────────────────────────────
     await page.locator('#field-search-product').fill(E2E_PRODUCT.name)
-    const productResult = page.getByRole('button', { name: new RegExp(E2E_PRODUCT.name, 'i') }).first()
+    /*
+     * The ADD button, by name. Phase 6c (the Counter) put the bill above the
+     * add controls, so "the first button whose name contains the product"
+     * became the bill line's "Remove <product>" — the second click removed
+     * the line it had just added. Every add control (a search row, a tile)
+     * is labelled "Add <product>" / "Add another <product>".
+     */
+    const productResult = page.getByRole('button', { name: new RegExp(`^Add (another )?${E2E_PRODUCT.name}`, 'i') }).first()
     await expect(productResult).toBeVisible({ timeout: 15_000 })
     await productResult.click()
 
