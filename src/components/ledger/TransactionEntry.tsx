@@ -38,6 +38,7 @@ import { track, EVENTS } from '@/lib/analytics'
 import { useDrafts } from '@/hooks/use-drafts'
 import { haptic } from '@/lib/haptic'
 import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
+import { counterTiles, foldTiles, freezeWhileBillOpen, TOP_TILES, TOP_TILE_LIMIT, CATEGORY_TILE_LIMIT } from '@/lib/counter-tiles'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 // 🔒 V10 §2.3: Single rounding function shared between client and server.
 // Was: `const r = (n) => Math.round(n*100)/100` here, which lacks the 1e-9
@@ -495,6 +496,41 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     return matchesProductSearch(p, productSearch)
   }), [productsInCategory, productSearch])
 
+  /*
+   * Phase 6c — THE COUNTER. A sale is built on the Counter: the bill on top,
+   * search and the shop's own best sellers as tiles below (beside it on a
+   * computer), Pay at the thumb. Returns, estimates and purchases keep this
+   * form until their phases (build plan 6c–6h), so only a plain sale changes.
+   *
+   * #181/#146: the tiles' order comes from a ranking that is FROZEN while a
+   * bill is open (lib/counter-tiles.ts), so no tap can move a tile.
+   */
+  const counterMode = actualType === 'sale' && !estimateMode
+  const { data: topSellersData } = useQuery({
+    queryKey: ['products', 'top-sellers'],
+    queryFn: async () => (await offlineFetch('/api/products/top-sellers')).json(),
+    enabled: counterMode,
+    staleTime: 10 * 60 * 1000,
+  })
+  const [tileChip, setTileChip] = useState<string>(TOP_TILES)
+  const [tilesExpanded, setTilesExpanded] = useState(false)
+  const liveTileRanking = useMemo(
+    () => ({ rankIds: (topSellersData?.ids as string[] | undefined) ?? [], recentIds: getRecentProductIds() }),
+    // products: a sale just saved changes "recent"; re-read it when the list refreshes.
+    [topSellersData, products],
+  )
+  const tileRankingRef = useRef<{ rankIds: string[]; recentIds: string[] } | undefined>(undefined)
+  const tileRanking = freezeWhileBillOpen(liveTileRanking, tileRankingRef.current, items.length > 0)
+  tileRankingRef.current = tileRanking
+  const counterTileList = useMemo(() => counterTiles(products, {
+    ...tileRanking,
+    category: tileChip === TOP_TILES ? null : tileChip,
+    limit: tileChip === TOP_TILES ? TOP_TILE_LIMIT : CATEGORY_TILE_LIMIT,
+  }), [products, tileRanking, tileChip])
+  // #229: three tiles a row on every screen (the Counter's right column on a computer is a phone's width).
+  const { shown: shownTiles, folded: tilesFolded } = foldTiles(counterTileList, items.length, tilesExpanded, 3)
+  useEffect(() => { if (items.length === 0) setTilesExpanded(false) }, [items.length])
+
   // Check for preset data (from scanner, party profile, or repeat last sale)
   // Uses a small delay to ensure the component is fully mounted (it's lazy-loaded)
   useEffect(() => {
@@ -781,7 +817,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           ? { ...i, quantity: i.quantity + 1 }
           : i
       ))
-      sonnerToast.info(`Increased quantity of ${product.name}`)
+      // Phase 6c: on the Counter the tile's count and the bill line say it; a toast per tap is noise.
+      if (!counterMode) sonnerToast.info(`Increased quantity of ${product.name}`)
     } else {
       setItems([...items, {
         productId: product.id,
@@ -1691,14 +1728,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
        * wrappers become blocks again and the original two-column grid is restored
        * EXACTLY — no desktop regression, because desktop never sees the reorder.
        */}
-      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:gap-4">
+      {/* 6c: on the Counter the bill and the tiles share the width equally (a third left the tiles 70px wide). */}
+      <div className={cn('flex flex-col gap-3 lg:grid lg:gap-4', counterMode ? 'lg:grid-cols-2' : 'lg:grid-cols-3')}>
         {/* LEFT: Product selection + items list (takes 2 cols) */}
-        <div className="contents lg:block lg:col-span-2 lg:space-y-4">
-          {/* Product selector card */}
-          <Card className="shadow-card border-border/60 order-2 lg:order-none">
+        <div className={cn('contents lg:block lg:space-y-4', counterMode ? 'lg:col-span-1' : 'lg:col-span-2')}>
+          {/* Product selector card (on the Counter: the bill) */}
+          <Card className={cn('shadow-card border-border/60 order-2 lg:order-none', counterMode && 'py-0')}>
             {/* p-3 on mobile, p-4 from sm up. Every card on this form paid 4px
                 of padding on all four sides for a look that costs a phone user
                 a visible slice of the product list. */}
+            {!counterMode && (
             <div className="p-3 sm:p-4 border-b border-border bg-muted/30">
               {/* "Add Products" is hidden on mobile: a category dropdown and a
                   search box captioned "SEARCH PRODUCT" sit directly beneath it,
@@ -1806,127 +1845,17 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                    list IS the job. It was showing barely three rows inside a
                    192px window while the form around it had room to spare. */
                 <div className="mt-3 max-h-72 sm:max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
-                  {filteredProducts.slice(0, 20).map(p => {
-                    const inList = items.find(i => i.productId === p.id)
-                    const qty = inList?.quantity ?? 0
-                    return (
-                      /*
-                       * A row, not one big button.
-                       *
-                       * The whole row used to be a single <button>, which is why
-                       * the added state could only ever be a label: a stepper
-                       * needs its own buttons, and a button inside a button is
-                       * invalid HTML that browsers quietly flatten. Splitting the
-                       * row lets the info area stay tappable to add, while − and
-                       * + become real controls beside it.
-                       */
-                      <div
-                        key={p.id}
-                        className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-2.5 py-2 transition border-b border-border/30 last:border-0 hover:bg-muted/50"
-                      >
-                      <button
-                        onClick={() => handleAddProduct(p)}
-                        aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`}
-                        className="flex-1 min-w-0 min-h-12 flex items-center gap-2 sm:gap-3 text-left"
-                      >
-                        {/* The box icon is hidden on mobile. It is the same
-                            generic box on every row, so it distinguishes
-                            nothing — it just takes 36px off the width of the
-                            product NAME, which is the one thing being read.
-                            Desktop has the width to spare, so it keeps it. */}
-                        <div className="w-9 h-9 rounded-lg bg-muted items-center justify-center flex-shrink-0 hidden sm:flex">
-                          <Package className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{p.name}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {p.category && <Badge variant="outline" className="text-xs py-0">{p.category}</Badge>}
-                            <span>{formatINR(isSale ? p.salePrice : p.purchasePrice)}/{p.unit}</span>
-                            {showsGst && (
-                              <>
-                                <span>•</span>
-                                <span>GST {p.gstRate}%</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        {/* The stock column while billing. For a service this
-                            read "0 pcs" in red with an OUT badge — telling the
-                            tailor mid-bill that the thing they are about to
-                            sell is unavailable, when in fact it always is.
-                            The sale saved regardless; the screen was the lie. */}
-                        <div className="text-right flex-shrink-0">
-                          <p className={cn(
-                            'text-xs font-medium',
-                            isService(p) ? 'text-violet-600 dark:text-violet-400' :
-                            p.currentStock <= 0 ? 'text-rose-600' :
-                            p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
-                          )}>
-                            {isService(p) ? 'Service' : `${p.currentStock} ${p.unit}`}
-                          </p>
-                          {/* 🔒 V8 U6: Inline stock badge for quick visibility while billing */}
-                          {!isService(p) && p.currentStock <= 0 && (
-                            <span className="text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-full">OUT</span>
-                          )}
-                          {!isService(p) && p.currentStock > 0 && p.isLowStock && (
-                            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
-                          )}
-                        </div>
-                      </button>
-                      {/*
-                       * A stepper once it is in the sale — "− 2 +" — instead of
-                       * a "✓ Added" badge.
-                       *
-                       * The badge answered a question nobody asked (is it in?)
-                       * and hid the two the shopkeeper actually has: how many,
-                       * and how do I change it. Worse, it replaced the "+", so
-                       * the one affordance that said "tap me for another" was
-                       * removed at exactly the moment it became useful.
-                       *
-                       * This is the pattern every counter app uses — Blinkit,
-                       * Zepto, Swiggy, BigBasket — because billing is a counting
-                       * job: three of one thing, then two of the next. The count
-                       * is the feedback, and it is a control.
-                       */}
-                      <div className="flex-shrink-0">
-                        {qty > 0 ? (
-                          <div className="flex items-center rounded-lg border border-primary/40 bg-primary/5 overflow-hidden">
-                            <button
-                              onClick={() => handleDecrementProduct(p.id)}
-                              aria-label={qty === 1 ? `Remove ${p.name} from this sale` : `Reduce ${p.name} to ${qty - 1}`}
-                              className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
-                            >
-                              {/* At one, the next press removes the line, so say so. */}
-                              {qty === 1 ? <Trash2 className="w-3.5 h-3.5" /> : <Minus className="w-4 h-4" />}
-                            </button>
-                            {/* 44px targets, not 36. This is the control a
-                                shopkeeper taps most often while billing, and
-                                36px is below the minimum the rest of this
-                                codebase holds itself to (V26 Phase 6 §5.1). */}
-                            <span className="min-w-[26px] text-center text-sm font-bold text-primary tabular-nums">
-                              {qty}
-                            </span>
-                            <button
-                              onClick={() => handleAddProduct(p)}
-                              aria-label={`Add another ${p.name}`}
-                              className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleAddProduct(p)}
-                            aria-label={`Add ${p.name}`}
-                            className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 active:scale-95 transition"
-                          >
-                            <Plus className="w-4 h-4 text-primary" />
-                          </button>
-                        )}
-                      </div>
-                      </div>
-                    )
-                  })}
+                  {filteredProducts.slice(0, 20).map(p => (
+                    <PickRow
+                      key={p.id}
+                      product={p}
+                      qty={items.find(i => i.productId === p.id)?.quantity ?? 0}
+                      price={isSale ? p.salePrice : p.purchasePrice}
+                      showsGst={showsGst}
+                      onAdd={() => handleAddProduct(p)}
+                      onDecrement={() => handleDecrementProduct(p.id)}
+                    />
+                  ))}
                   {filteredProducts.length > 20 && (
                     <p className="text-center text-xs text-muted-foreground py-2">
                       Showing 20 of {filteredProducts.length} — refine search to see more
@@ -1960,12 +1889,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 </div>
               )}
             </div>
+            )}
 
             {/* Items list */}
             <div className="p-3 sm:p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-sm flex items-center gap-2">
-                  <ShoppingCart className="w-4 h-4" /> Selected Items
+                  <ShoppingCart className="w-4 h-4" /> {counterMode ? 'Bill' : 'Selected Items'}
                   {items.length > 0 && <Badge variant="secondary">{items.length}</Badge>}
                 </h3>
                 {items.length > 0 && (
@@ -2079,7 +2009,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 </button>
               )}
 
-              {items.length === 0 ? (
+              {items.length === 0 && counterMode ? (
+                /* 6c: on a phone the tiles must be in the first screen; an empty bill is one line, not a 140px box. */
+                <p className="text-sm text-muted-foreground text-center py-2">Tap an item, type its name, or scan</p>
+              ) : items.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
                   <ShoppingCart className="w-10 h-10 mx-auto mb-2 text-muted-foreground/40" />
                   <p>No items added yet</p>
@@ -2266,7 +2199,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               the top of this screen already carries the customer and the
               date, which is as much as fits before the item list. */}
           {billDefs.length > 0 && (
-            <Card className="shadow-card border-border/60 order-5 lg:order-none">
+            <Card className={cn('shadow-card border-border/60 lg:order-none', counterMode ? 'order-6' : 'order-5')}>
               <div className="p-3 sm:p-4">
                 <CustomFieldInputs
                   idPrefix="bill"
@@ -2279,7 +2212,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           )}
 
           {/* Notes */}
-          <Card className="shadow-card border-border/60 order-5 lg:order-none">
+          <Card className={cn('shadow-card border-border/60 lg:order-none', counterMode ? 'order-6' : 'order-5')}>
             <div className="p-3 sm:p-4">
               <Label htmlFor="field-notes-optional">Notes (optional)</Label>
               <Input id="field-notes-optional"
@@ -2330,7 +2263,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         {/* RIGHT: Party, date, payment, summary */}
         <div className="contents lg:block lg:space-y-4">
           {/* Party selection */}
-          <Card className="shadow-card border-border/60 order-1 lg:order-none">
+          {/* 6c: the Card's own py-4 sat on top of this p-3 (28px above the first line); the Counter drops it. */}
+          <Card className={cn('shadow-card border-border/60 order-1 lg:order-none', counterMode && 'py-0')}>
             <div className="p-3 sm:p-4">
               {/*
                 🔒 "Add New" lives beside the heading (2026-08-03, reported by
@@ -2342,7 +2276,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 Here it is visible before the dropdown is even opened, and it
                 does not move as the list scrolls.
               */}
-              <div className="flex items-center justify-between gap-2 mb-3">
+              <div className={cn('items-center justify-between gap-2 mb-3', counterMode && !selectedParty ? 'hidden lg:flex' : 'flex')}>
                 <h3 className="font-semibold text-sm flex items-center gap-2">
                   <User className="w-4 h-4" /> {isSale ? 'Customer' : 'Supplier'}
                 </h3>
@@ -2417,7 +2351,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                        silent no-op — the toast tells you to pick a customer
                        and then leaves you to find the field yourself. */
                     id="field-party-search"
-                    placeholder={`Search ${isSale ? 'customer' : 'supplier'} by name or phone...`}
+                    placeholder={counterMode ? 'Customer: name or phone (empty = cash sale)' : `Search ${isSale ? 'customer' : 'supplier'} by name or phone...`}
                     value={partySearch}
                     onChange={(e) => { setPartySearch(e.target.value); setPartyDropdownOpen(true) }}
                     /*
@@ -2604,6 +2538,119 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           </Card>
 
           {/* Transaction details */}
+          {/* Phase 6c — the Counter's add card: search, then the shop's best sellers as tiles that never move. */}
+          {counterMode && (
+            <Card className="shadow-card border-border/60 order-3 lg:order-none py-0">
+              <div className="p-3 sm:p-4 space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden />
+                  <Input id="field-search-product"
+                    aria-label="Search items"
+                    placeholder="Type name or price, or scan…"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return
+                      e.preventDefault()
+                      // A wedge scanner gun types the code then presses Enter.
+                      const match = resolveProductForEnterKey(productSearch, products, filteredProducts)
+                      if (match) {
+                        handleAddProduct(match)
+                        setProductSearch('')  // ready for the next scan
+                      }
+                    }}
+                    className="pl-9 pr-12"
+                  />
+                  {features?.barcodeScanner && (
+                    <button
+                      type="button"
+                      onClick={() => setBarcodeOpen(true)}
+                      className="min-h-12 min-w-12 inline-flex items-center justify-center absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
+                      aria-label="Scan barcode"
+                    >
+                      <ScanLine className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+
+                {products.length === 0 ? (
+                  <EmptyState
+                    icon={Package}
+                    title="No products yet"
+                    description="Add your first product, or scan a bill and the products are made for you."
+                    action={{ label: 'Add Product', onClick: () => setView('inventory') }}
+                    secondaryAction={{ label: 'Scan a Bill', onClick: () => { setScannerBillType('sale'); setView('scanner') } }}
+                    color="blue"
+                    compact
+                  />
+                ) : productSearch ? (
+                  /* Search results as plain rows in the page — never a scroll box inside the scrolling page (#232). */
+                  filteredProducts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">No item matches &quot;{productSearch}&quot;</p>
+                  ) : (
+                    <div className="rounded-lg border border-border bg-background">
+                      {filteredProducts.slice(0, 8).map(p => (
+                        <PickRow
+                          key={p.id}
+                          product={p}
+                          qty={items.find(i => i.productId === p.id)?.quantity ?? 0}
+                          price={p.salePrice}
+                          showsGst={showsGst}
+                          onAdd={() => handleAddProduct(p)}
+                          onDecrement={() => handleDecrementProduct(p.id)}
+                        />
+                      ))}
+                      {filteredProducts.length > 8 && (
+                        <p className="text-center text-xs text-muted-foreground py-2">
+                          8 of {filteredProducts.length} shown — type more to narrow
+                        </p>
+                      )}
+                    </div>
+                  )
+                ) : (
+                  <>
+                    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" role="tablist" aria-label="Item groups">
+                      {[TOP_TILES, ...categories].map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          role="tab"
+                          aria-selected={tileChip === c}
+                          onClick={() => setTileChip(c)}
+                          className={cn(
+                            'hit-48 relative shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+                            tileChip === c ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted',
+                          )}
+                        >
+                          {c === TOP_TILES ? 'Top' : c === 'Uncategorized' ? 'Other' : c}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {shownTiles.map(p => (
+                        <CounterTile
+                          key={p.id}
+                          product={p}
+                          qty={items.find(i => i.productId === p.id)?.quantity ?? 0}
+                          onAdd={() => handleAddProduct(p)}
+                        />
+                      ))}
+                    </div>
+                    {tilesFolded && (
+                      <button
+                        type="button"
+                        onClick={() => setTilesExpanded(true)}
+                        className="w-full min-h-12 rounded-lg text-sm font-semibold text-primary hover:bg-muted"
+                      >
+                        More items ({counterTileList.length - shownTiles.length})
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
+
           {/*
            * Collapsed on a phone, open on desktop.
            *
@@ -2619,7 +2666,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
            * to answer. Desktop keeps everything expanded, because there the
            * right-hand column is otherwise empty space.
            */}
-          <Card className="shadow-card border-border/60 order-3 lg:order-none">
+          <Card className={cn('shadow-card border-border/60 lg:order-none', counterMode ? 'order-4' : 'order-3')}>
             <div className="p-3 sm:p-4 space-y-3">
               <button
                 type="button"
@@ -3019,7 +3066,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           )}
 
           {/* Live summary */}
-          <Card className="shadow-card border-border/60 sticky top-20 order-4 lg:order-none">
+          <Card className={cn('shadow-card border-border/60 sticky top-20 lg:order-none', counterMode ? 'order-5' : 'order-4')}>
             <div className="p-3 sm:p-4">
               <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
                 <IndianRupee className="w-4 h-4" /> Summary
@@ -3349,5 +3396,141 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * One item in a pick list: name, price, stock, and + (a − 2 + stepper once it
+ * is on the bill). Shared by the old picker and the Counter's search results,
+ * so the two can never show an item differently.
+ */
+function PickRow({ product: p, qty, price, showsGst, onAdd, onDecrement }: {
+  product: any
+  qty: number
+  price: number
+  showsGst: boolean
+  onAdd: () => void
+  onDecrement: () => void
+}) {
+  return (
+    /*
+     * A row, not one big button.
+     *
+     * The whole row used to be a single <button>, which is why the added state
+     * could only ever be a label: a stepper needs its own buttons, and a button
+     * inside a button is invalid HTML that browsers quietly flatten. Splitting
+     * the row lets the info area stay tappable to add, while − and + become
+     * real controls beside it.
+     */
+    <div className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-2.5 py-2 transition border-b border-border/30 last:border-0 hover:bg-muted/50">
+      <button
+        onClick={onAdd}
+        aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`}
+        className="flex-1 min-w-0 min-h-12 flex items-center gap-2 sm:gap-3 text-left"
+      >
+        {/* The box icon is hidden on mobile: it is the same on every row and costs the NAME 36px. */}
+        <div className="w-9 h-9 rounded-lg bg-muted items-center justify-center flex-shrink-0 hidden sm:flex">
+          <Package className="w-4 h-4 text-muted-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{p.name}</p>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {p.category && <Badge variant="outline" className="text-xs py-0">{p.category}</Badge>}
+            <span>{formatINR(price)}/{p.unit}</span>
+            {showsGst && (
+              <>
+                <span>•</span>
+                <span>GST {p.gstRate}%</span>
+              </>
+            )}
+          </div>
+        </div>
+        {/* The stock column while billing. A service is never "0 pcs, OUT" — it always is available. */}
+        <div className="text-right flex-shrink-0">
+          <p className={cn(
+            'text-xs font-medium',
+            isService(p) ? 'text-violet-600 dark:text-violet-400' :
+            p.currentStock <= 0 ? 'text-rose-600' :
+            p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+          )}>
+            {isService(p) ? 'Service' : `${p.currentStock} ${p.unit}`}
+          </p>
+          {/* 🔒 V8 U6: Inline stock badge for quick visibility while billing */}
+          {!isService(p) && p.currentStock <= 0 && (
+            <span className="text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-full">OUT</span>
+          )}
+          {!isService(p) && p.currentStock > 0 && p.isLowStock && (
+            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
+          )}
+        </div>
+      </button>
+      {/*
+       * A stepper once it is in the sale — "− 2 +" — instead of a "✓ Added"
+       * badge: billing is a counting job (Blinkit, Zepto, Swiggy, BigBasket).
+       */}
+      <div className="flex-shrink-0">
+        {qty > 0 ? (
+          <div className="flex items-center rounded-lg border border-primary/40 bg-primary/5 overflow-hidden">
+            <button
+              onClick={onDecrement}
+              aria-label={qty === 1 ? `Remove ${p.name} from this sale` : `Reduce ${p.name} to ${qty - 1}`}
+              className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
+            >
+              {/* At one, the next press removes the line, so say so. */}
+              {qty === 1 ? <Trash2 className="w-3.5 h-3.5" /> : <Minus className="w-4 h-4" />}
+            </button>
+            <span className="min-w-[26px] text-center text-sm font-bold text-primary tabular-nums">
+              {qty}
+            </span>
+            <button
+              onClick={onAdd}
+              aria-label={`Add another ${p.name}`}
+              className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onAdd}
+            aria-label={`Add ${p.name}`}
+            className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 active:scale-95 transition"
+          >
+            <Plus className="w-4 h-4 text-primary" />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Phase 6c: a quick tile on the Counter — one tap adds one. 64px tall (final
+ * plan §1), the name in two lines, the price, and the count once it is on the
+ * bill. It never moves while a bill is open (lib/counter-tiles.ts).
+ */
+function CounterTile({ product: p, qty, onAdd }: { product: any; qty: number; onAdd: () => void }) {
+  const out = !isService(p) && Number(p.currentStock) <= 0
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`}
+      className={cn(
+        'relative min-h-16 rounded-xl px-2 py-2 text-left flex flex-col justify-between gap-1 transition active:scale-[0.98]',
+        qty > 0 ? 'bg-primary/10 ring-1 ring-primary/40' : 'bg-muted/60 hover:bg-muted',
+      )}
+    >
+      <span className="text-sm font-semibold leading-tight line-clamp-2 pr-5 break-words">{p.name}</span>
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {formatINR(p.salePrice)}{p.unit && p.unit !== 'pcs' ? `/${p.unit}` : ''}
+        {out && <span className="text-bad font-semibold"> · out</span>}
+      </span>
+      {qty > 0 && (
+        <span className="absolute top-1 right-1 min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-xs font-bold tabular-nums flex items-center justify-center" aria-hidden>
+          {qty}
+        </span>
+      )}
+    </button>
   )
 }
