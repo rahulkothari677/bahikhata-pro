@@ -14,7 +14,7 @@ import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn, formatDate } from '@/lib/utils'
 import { ReportRows } from '@/components/reports/ReportRows'
-import { NoCostNote, marginText } from '@/components/reports/NoCostNote'
+import { NoCostNote, UnmatchedNote, marginText } from '@/components/reports/NoCostNote'
 import { TrendingUp, TrendingDown, FileText, AlertTriangle } from 'lucide-react'
 
 interface BillWiseProfitProps {
@@ -31,6 +31,8 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
   const truncatedHint = data?.truncatedHint || 'Showing the latest 500 bills. Narrow the date range to see older bills.'
   // #254: a column for sales with no cost price, only when there are some — so revenue = cost + it + profit on every row.
   const showNoCost = bills.some((b: any) => b.noCost)
+  // 6a-2: a bill saved under an older rule may not add up by a little; that amount gets its own column.
+  const showUnmatched = bills.some((b: any) => b.unmatched)
 
   return (
     <div className="space-y-4">
@@ -63,6 +65,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
           <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
             Avg margin: {marginText(summary.avgMargin)}
             {summary.totalNoCost ? <NoCostNote amount={summary.totalNoCost} /> : null}
+            {summary.totalUnmatched ? <UnmatchedNote amount={summary.totalUnmatched} /> : null}
           </p>
         </CardHeader>
         <CardContent>
@@ -81,6 +84,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                 { label: 'Revenue', value: formatINR(bill.revenue) },
                 { label: 'Cost', value: formatINR(bill.cogs) },
                 ...(bill.noCost ? [{ label: 'No cost price', value: formatINR(bill.noCost) }] : []),
+                ...(bill.unmatched ? [{ label: 'Not matched to items', value: formatINR(bill.unmatched) }] : []),
                 { label: 'Margin', value: bill.type === 'credit-note' ? '—' : marginText(bill.margin) },
               ],
             }))}
@@ -97,6 +101,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Revenue</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Cost</th>
                   {showNoCost && <th className="py-2 px-2 font-medium text-muted-foreground text-right">No cost price</th>}
+                  {showUnmatched && <th className="py-2 px-2 font-medium text-muted-foreground text-right">Not matched</th>}
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Profit</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Margin</th>
                 </tr>
@@ -104,7 +109,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
               <tbody>
                 {bills.length === 0 ? (
                   <tr>
-                    <td colSpan={showNoCost ? 9 : 8} className="py-8 text-center text-muted-foreground">No sales in this period</td>
+                    <td colSpan={8 + (showNoCost ? 1 : 0) + (showUnmatched ? 1 : 0)} className="py-8 text-center text-muted-foreground">No sales in this period</td>
                   </tr>
                 ) : (
                   bills.map((bill: any) => (
@@ -123,6 +128,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                       <td className="py-2 px-2 text-right">{formatINR(bill.revenue)}</td>
                       <td className="py-2 px-2 text-right text-rose-600 dark:text-rose-400">{formatINR(bill.cogs)}</td>
                       {showNoCost && <td className="py-2 px-2 text-right text-muted-foreground">{bill.noCost ? formatINR(bill.noCost) : '—'}</td>}
+                      {showUnmatched && <td className="py-2 px-2 text-right text-muted-foreground">{bill.unmatched ? formatINR(bill.unmatched) : '—'}</td>}
                       <td className={cn(
                         'py-2 px-2 text-right font-semibold',
                         bill.profit > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600',
@@ -160,6 +166,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                     <td className="py-2 px-2 text-right">{formatINR(summary.totalRevenue)}</td>
                     <td className="py-2 px-2 text-right text-rose-600">{formatINR(summary.totalCogs)}</td>
                     {showNoCost && <td className="py-2 px-2 text-right text-muted-foreground">{formatINR(summary.totalNoCost ?? 0)}</td>}
+                    {showUnmatched && <td className="py-2 px-2 text-right text-muted-foreground">{formatINR(summary.totalUnmatched ?? 0)}</td>}
                     <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{formatINR(summary.totalProfit)}</td>
                     <td className="py-2 px-2 text-right">{marginText(summary.avgMargin)}</td>
                   </tr>

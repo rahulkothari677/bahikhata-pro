@@ -34,7 +34,16 @@ export const SIGNED_LINE = Prisma.sql`(CASE WHEN t."type" = 'sale' THEN ${LINE_T
  * same rule for code. Aliases ti / t.
  */
 export const NO_COST_LINE = Prisma.sql`(ti."productId" IS NULL OR ti."purchasePriceAtSale" <= 0)`
-export const SIGNED_PROFIT = Prisma.sql`(CASE WHEN ${NO_COST_LINE} THEN 0 WHEN t."type" = 'sale' THEN 1 ELSE -1 END) * (${LINE_TAXABLE_SQL} - FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)::numeric)`
+/** One sold line's cost in paise, rounded as line-items.ts (multiplyPaise) rounds it. */
+const LINE_COST = Prisma.sql`FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)::numeric`
+const COSTED_SIGN = Prisma.sql`(CASE WHEN ${NO_COST_LINE} THEN 0 WHEN t."type" = 'sale' THEN 1 ELSE -1 END)`
+export const SIGNED_PROFIT = Prisma.sql`${COSTED_SIGN} * (${LINE_TAXABLE_SQL} - ${LINE_COST})`
+/**
+ * 6a-2: what the sold lines cost (a return gives it back; no cost price, none).
+ * The profit reports' Cost column — never worked back from a stored profit,
+ * which for a bill saved under an older rule gave a cost nobody paid.
+ */
+export const SIGNED_COST = Prisma.sql`${COSTED_SIGN} * ${LINE_COST}`
 /** Sale and return lines of a shop in a window (inclusive). Aliases ti / t / p. */
 export const SALE_LINES = (userId: string, from: Date, to: Date) => Prisma.sql`
   FROM "TransactionItem" ti

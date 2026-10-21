@@ -58,6 +58,31 @@ describe('Bill-wise profit', () => {
   })
 })
 
+describe('6a-2: an older bill that does not add up shows the difference, not a made-up cost', () => {
+  test('Bill-wise: a "Not matched" column only when a bill has one; the cost stays the real cost', () => {
+    // live INV-0004: 3 × ₹230 = ₹690 cost; it stored ₹38.58 profit where its lines give ₹38.57
+    render(<BillWiseProfit data={{ summary: { totalBills: 1, totalRevenue: 728.57, totalCogs: 690, totalProfit: 38.58, totalNoCost: 0, totalUnmatched: 0.01, avgMargin: 5.3 }, bills: [bill({ invoiceNo: 'INV-0004', itemCount: 1, revenue: 728.57, cogs: 690, noCost: 0, profit: 38.58, unmatched: 0.01, margin: 5.3 })] }} />)
+    const table = screen.getByRole('table')
+    expect(within(table).getByRole('columnheader', { name: 'Not matched' })).toBeTruthy()
+    const row = within(table).getByText('INV-0004').closest('tr')!
+    expect(within(row).getByText('₹690')).toBeTruthy()
+    expect(screen.getByText(/not matched to items/)).toBeTruthy()
+  })
+  test('no column when every bill adds up', () => {
+    render(<BillWiseProfit data={billData([bill({ unmatched: 0 })], 100)} />)
+    expect(within(screen.getByRole('table')).queryByRole('columnheader', { name: 'Not matched' })).toBeNull()
+  })
+  test('Item-wise: the difference is one more row, and the total is the bills\' total', () => {
+    render(<ItemWiseProfit data={{ summary: { totalProducts: 1, totalRevenue: 728.57, totalCogs: 690, totalProfit: 38.58, totalNoCost: 0, totalUnmatched: 0.01, avgMargin: 5.3 }, items: [
+      { productName: 'Atta', totalQty: 3, revenue: 728.57, cogs: 690, noCost: 0, profit: 38.57, margin: 5.3 },
+    ] }} />)
+    const table = screen.getByRole('table')
+    const row = within(table).getByText('Not matched to items').closest('tr')!
+    expect(within(row).getByText('₹0.01')).toBeTruthy()
+    expect(within(table).getByText('₹38.58')).toBeTruthy() // footer total = the bills'
+  })
+})
+
 describe('Item-wise profit', () => {
   const data = { summary: { totalProducts: 2, totalRevenue: 210, totalCogs: 8, totalProfit: 2, totalNoCost: 200, avgMargin: 20 }, items: [
     { productName: 'TEST Loose Tea', totalQty: 2, revenue: 200, cogs: 0, noCost: 200, profit: 0, margin: null },

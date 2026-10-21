@@ -12,7 +12,7 @@
  */
 import fs from 'fs'
 import path from 'path'
-import { hasCostPrice, isNoCostLine, marginOnCosted, stockPotentialProfit } from '@/lib/unit-profit'
+import { hasCostPrice, isNoCostLine, lineCost, marginOnCosted, stockPotentialProfit } from '@/lib/unit-profit'
 import { computeLineItems } from '@/lib/line-items'
 import { productProfitAnswer } from '@/lib/ask-customer-rank'
 import { readCode } from '@/test-support/read-source'
@@ -38,6 +38,17 @@ describe('the rules', () => {
     expect(marginOnCosted(0, 0, 0)).toBe(0)
     expect(marginOnCosted(-10, -100, 0)).toBe(10) // a return: the margin given back
     expect(marginOnCosted(1, 3, 0)).toBe(33.3)
+  })
+
+  test('lineCost: the bill\'s own rounding; ₹0 with no cost price; the twin of SIGNED_COST', () => {
+    expect(lineCost({ productId: 'p', purchasePriceAtSale: 230, quantity: 3 })).toBe(690)
+    expect(lineCost({ productId: 'p', purchasePriceAtSale: 33.33, quantity: 0.333 })).toBe(11.1) // 1109.889 paise → 1110
+    expect(lineCost({ productId: 'p', purchasePriceAtSale: 0, quantity: 5 })).toBe(0)
+    expect(lineCost({ productId: null, purchasePriceAtSale: 50, quantity: 2 })).toBe(0)
+    const q = readCode('src/lib/insights-queries.ts')
+    expect(q).toContain('LINE_COST = Prisma.sql`FLOOR(ti."quantity"::float8 * ti."purchasePriceAtSale"::float8 + 0.5::float8)::numeric`')
+    expect(q).toContain('SIGNED_COST = Prisma.sql`${COSTED_SIGN} * ${LINE_COST}`')
+    expect(q).toContain('SIGNED_PROFIT = Prisma.sql`${COSTED_SIGN} * (${LINE_TAXABLE_SQL} - ${LINE_COST})`')
   })
 
   test('stock with no cost price promises no profit', () => {
@@ -136,23 +147,38 @@ describe('every reader uses the shared rule', () => {
   const at = (code: string, s: string) => { const i = code.indexOf(s); expect({ s, found: i >= 0 }).toEqual({ s, found: true }); return i }
   const between = (code: string, a: string, b: string) => { const s = code.slice(at(code, a), at(code, b)); expect(s.length).toBeGreaterThan(200); return s }
 
-  test('bill-wise profit: the profit each bill booked, the no-cost lines by the shared rule', () => {
+  test('the booked totals: the bills\' stored profit, a return taking its value off (#281)', () => {
+    const helper = between(route, 'async function bookedSales', 'async function lineTotals')
+    expect(helper).toContain('grossProfit: true')
+    expect(helper).toMatch(/\(g\.type === 'sale' \? 1 : -1\) \* \(\(g\._sum\.subtotal/)
+    const lines = between(route, 'async function lineTotals', 'export async function GET(')
+    expect(lines).toContain('WHEN ${NO_COST_LINE} THEN ${SIGNED_LINE}')
+    expect(lines).toContain('SUM(${SIGNED_COST})')
+  })
+
+  test('bill-wise profit: the profit each bill booked; cost from its lines; the rest shown, never pushed into the cost', () => {
     const block = between(route, "if (type === 'bill-profit')", "if (type === 'item-profit')")
     expect(block).toContain('const profit = t.grossProfit')
     expect(block).toContain('isNoCostLine(item)')
-    expect(block).toContain('grossProfit: true')
-    expect(block).toContain('${NO_COST_LINE}')
+    // 6a-2: live INV-0004 read "cost ₹689.99" for 3 × ₹230 when the cost was revenue − no cost − stored profit
+    expect(block).toContain('lineCost(item)')
+    expect(block).not.toMatch(/cogs = revenue - noCost - profit/)
+    expect(block).toContain('const unmatched = roundMoney(profit - (revenue - noCost - cogs))')
+    expect(block).toContain('bookedSales(userId, from, to)')
+    expect(block).toContain('lineTotals(userId, from, to)')
+    expect(block).not.toMatch(/allCogs = allRevenue - allNoCost - allProfit/)
     expect(block).toContain('marginOnCosted(')
-    // a return takes its value off the total (the old aggregate added it)
-    expect(block).toMatch(/const sign = g\.type === 'sale' \? 1 : -1/)
   })
 
-  test('item-wise profit: SIGNED_PROFIT and the no-cost value, margin over costed sales', () => {
+  test('item-wise profit: SIGNED_PROFIT per item; the total follows the bills, the difference its own row', () => {
     const block = route.slice(at(route, "if (type === 'item-profit')"))
     expect(block.length).toBeGreaterThan(200)
     expect(block).toContain('SUM(${SIGNED_PROFIT}) AS "profit"')
     expect(block).toContain('WHEN ${NO_COST_LINE} THEN ${SIGNED_LINE}')
     expect(block).toContain('marginOnCosted(profit, revenue, noCost)')
+    expect(block).toContain('bookedSales(userId, from, to)')
+    expect(block).toContain('totalProfit: roundMoney(booked.profit)')
+    expect(block).toContain('totalUnmatched: unmatchedProfit')
   })
 
   test('stock report: no-cost stock is left out of potential profit, as on the items screen', () => {

@@ -238,7 +238,9 @@ save.
   `python - <<'EOF'` carrying `CA\'s` wrote `CA's` into a single-quoted
   i18n string and broke `i18n.ts`; caught by tsc. I had used several small
   heredocs that day because they "worked" — that is how the rule decays.
-  No exceptions for small ones.
+  No exceptions for small ones. **And an hour after writing that (6a-2), I
+  used one again** — `\n` and `\"` inside, and it happened to work. Writing
+  the rule is not following it; the habit has to change at the keyboard.
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck

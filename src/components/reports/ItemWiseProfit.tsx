@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { formatINR, cn } from '@/lib/utils'
 import { ReportRows } from '@/components/reports/ReportRows'
-import { NoCostNote, marginText } from '@/components/reports/NoCostNote'
+import { NoCostNote, UnmatchedNote, marginText } from '@/components/reports/NoCostNote'
 import { TrendingUp, TrendingDown, Package } from 'lucide-react'
 
 interface ItemWiseProfitProps {
@@ -29,6 +29,8 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
   const items = data?.items || []
   // #254: a column for sales with no cost price, only when there are some — so revenue = cost + it + profit on every row.
   const showNoCost = items.some((i: any) => i.noCost)
+  // 6a-2: the total follows the bills; what the items do not add up to is one more row, never spread.
+  const unmatched: number = summary.totalUnmatched || 0
 
   return (
     <div className="space-y-4">
@@ -50,6 +52,7 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
           <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
             Avg margin: {marginText(summary.avgMargin)} • Sorted by revenue (high to low)
             {summary.totalNoCost ? <NoCostNote amount={summary.totalNoCost} /> : null}
+            {unmatched ? <UnmatchedNote amount={unmatched} /> : null}
           </p>
         </CardHeader>
         <CardContent>
@@ -57,7 +60,7 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
           <ReportRows
             className="sm:hidden"
             empty="No items sold in this period"
-            rows={items.map((item: any, idx: number) => ({
+            rows={[...items.map((item: any, idx: number) => ({
               key: `${idx}-${item.productName}`,
               title: item.productName,
               sub: `${item.totalQty} sold`,
@@ -70,7 +73,13 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
                 ...(item.noCost ? [{ label: 'No cost price', value: formatINR(item.noCost) }] : []),
                 { label: 'Margin', value: marginText(item.margin) },
               ],
-            }))}
+            })), ...(unmatched ? [{
+              key: '__unmatched',
+              title: 'Not matched to items',
+              sub: 'Older bills',
+              value: formatINR(unmatched),
+              details: [],
+            }] : [])]}
             total={{ label: 'Total profit', value: formatINR(summary.totalProfit) }}
           />
           <div className="hidden sm:block overflow-auto max-h-[60vh]">
@@ -130,6 +139,15 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
                       </td>
                     </tr>
                   ))
+                )}
+                {unmatched !== 0 && (
+                  <tr className="border-b border-border/50 text-muted-foreground">
+                    <td className="py-2 px-2 text-xs"></td>
+                    <td className="py-2 px-2">Not matched to items</td>
+                    <td className="py-2 px-2" colSpan={showNoCost ? 4 : 3}></td>
+                    <td className="py-2 px-2 text-right tabular-nums">{formatINR(unmatched)}</td>
+                    <td className="py-2 px-2"></td>
+                  </tr>
                 )}
               </tbody>
               {items.length > 0 && (

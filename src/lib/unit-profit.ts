@@ -18,7 +18,7 @@
  *
  * Margin is on the before-GST price, the same basis as the bill screen.
  */
-import { roundMoney } from './money'
+import { roundMoney, fromPaise, toPaise, multiplyPaise } from './money'
 
 export interface PricedProduct {
   salePrice?: number | null
@@ -82,6 +82,16 @@ export function hasCostPrice(p: { purchasePrice?: number | null }): boolean {
  */
 export function isNoCostLine(line: { productId?: string | null; purchasePriceAtSale?: number | null }): boolean {
   return !line.productId || !hasCostPrice({ purchasePrice: line.purchasePriceAtSale })
+}
+
+/**
+ * 6a-2: what a saved bill line cost the shop, rounded exactly as the bill
+ * worked it (line-items.ts: multiplyPaise of quantity and cost) — ₹0 when it
+ * has no cost price. The JS twin of SIGNED_COST (unsigned).
+ */
+export function lineCost(line: { productId?: string | null; purchasePriceAtSale?: number | null; quantity: number }): number {
+  if (isNoCostLine(line)) return 0
+  return fromPaise(multiplyPaise(line.quantity, toPaise(line.purchasePriceAtSale)))
 }
 
 /**

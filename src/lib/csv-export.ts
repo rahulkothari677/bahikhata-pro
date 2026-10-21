@@ -194,7 +194,7 @@ export async function exportPartyReportCSV(data: any) {
 
 export async function exportBillWiseProfitCSV(data: any, periodLabel: string) {
   // #254: sales with no cost price book no profit — their own column; margin blank when none had a cost.
-  const headers = ['Invoice', 'Date', 'Type', 'Party', 'Items', 'Revenue', 'COGS', 'No cost price', 'Profit', 'Margin %']
+  const headers = ['Invoice', 'Date', 'Type', 'Party', 'Items', 'Revenue', 'COGS', 'No cost price', 'Not matched', 'Profit', 'Margin %']
   const rows: (string | number)[][] = (data.bills || []).map((b: any) => [
     b.invoiceNo,
     new Date(b.date).toLocaleDateString('en-IN'),
@@ -204,6 +204,7 @@ export async function exportBillWiseProfitCSV(data: any, periodLabel: string) {
     b.revenue,
     b.cogs,
     b.noCost ?? 0,
+    b.unmatched ?? 0,
     b.profit,
     b.margin ?? '',
   ])
@@ -221,6 +222,8 @@ export async function exportItemWiseProfitCSV(data: any, periodLabel: string) {
     i.profit,
     i.margin ?? '',
   ])
+  // 6a-2: the total follows the bills; the amount the items do not add up to is its own row.
+  if (data.summary?.totalUnmatched) rows.push(['Not matched to items', '', '', '', '', data.summary.totalUnmatched, ''])
   await exportCSV(`ItemWise_Profit_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
 }
 

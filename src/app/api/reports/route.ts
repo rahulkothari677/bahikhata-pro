@@ -18,8 +18,8 @@ import {
   type TypeAggregates,
 } from '@/lib/net-sales'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
-import { SIGNED_LINE, SIGNED_PROFIT, NO_COST_LINE } from '@/lib/insights-queries'
-import { isNoCostLine, marginOnCosted } from '@/lib/unit-profit'
+import { SIGNED_LINE, SIGNED_PROFIT, SIGNED_COST, NO_COST_LINE } from '@/lib/insights-queries'
+import { isNoCostLine, lineCost, marginOnCosted } from '@/lib/unit-profit'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 
@@ -46,6 +46,44 @@ export const maxDuration = 60
 // have the truncation problem.
 
 // GET /api/reports?type=pl|gst|stock|party&from=&to=
+/**
+ * 6a-2: what a period's sales BOOKED — sales net of returns, and the profit the
+ * bills stored (a return's is stored negative): the figures Home and the P&L
+ * add up. Both profit reports total to these.
+ */
+async function bookedSales(userId: string, from: Date, to: Date) {
+  const byType = await db.transaction.groupBy({
+    by: ['type'],
+    where: activeTransactionWhere(userId, { type: { in: ['sale', 'credit-note'] }, date: { gte: from, lte: to } }),
+    _sum: { subtotal: true, discountAmount: true, grossProfit: true },
+    _count: true,
+  })
+  let revenue = 0, profit = 0, bills = 0
+  for (const g of byType) {
+    // a return takes its value off (the old aggregate added it — #281)
+    revenue += (g.type === 'sale' ? 1 : -1) * ((g._sum.subtotal || 0) - (g._sum.discountAmount || 0))
+    profit += g._sum.grossProfit || 0
+    bills += g._count
+  }
+  return { revenue, profit, bills }
+}
+
+/** 6a-2: the period's lines with no cost price (their value) and what the costed lines cost — shared rules. */
+async function lineTotals(userId: string, from: Date, to: Date) {
+  const rows = await db.$queryRaw<Array<{ noCost: unknown; cost: unknown }>>`
+    SELECT COALESCE(SUM(CASE WHEN ${NO_COST_LINE} THEN ${SIGNED_LINE} ELSE 0 END), 0)::numeric AS "noCost",
+           COALESCE(SUM(${SIGNED_COST}), 0)::numeric AS "cost"
+    FROM "TransactionItem" ti
+    JOIN "Transaction" t ON ti."transactionId" = t."id"
+    WHERE t."userId" = ${userId}
+      AND t."deletedAt" IS NULL
+      AND t."type" IN ('sale', 'credit-note')
+      AND t."date" >= ${from}
+      AND t."date" <= ${to}
+  `
+  return { noCost: fromPaise(Number(rows[0]?.noCost ?? 0)), cost: fromPaise(Number(rows[0]?.cost ?? 0)) }
+}
+
 export async function GET(req: NextRequest) {
   try {
     // 🔒 FIX H1+H2: Use getAuthContext for staff permission + profit hiding
@@ -879,8 +917,14 @@ export async function GET(req: NextRequest) {
             ? sum + (item.total - item.cgst - item.sgst - item.igst - item.csamt)
             : sum
         ), 0)
+        // 6a-2: the cost is what the lines cost (lineCost, the bill's own rounding) — never worked back
+        // from the stored profit: a bill saved under an older rule then showed a cost nobody paid
+        // (live INV-0004: ₹689.99 for 3 × ₹230). Whatever revenue − no cost − cost − profit leaves is
+        // shown as "not matched": the profit booked beyond what the lines give — the same sign as
+        // Item-wise and Insights (₹0 for every bill saved under today's rules).
+        const cogs = sign * t.items.reduce((sum, item) => sum + lineCost(item), 0)
         const profit = t.grossProfit ?? 0
-        const cogs = revenue - noCost - profit
+        const unmatched = roundMoney(profit - (revenue - noCost - cogs))
         return {
           id: t.id,
           invoiceNo: t.invoiceNo || `#${t.invoiceSequence || '—'}`,
@@ -892,6 +936,7 @@ export async function GET(req: NextRequest) {
           cogs: roundMoney(cogs),
           profit: roundMoney(profit),
           noCost: roundMoney(noCost),
+          unmatched,
           margin: marginOnCosted(profit, revenue, noCost), // on the lines that have a cost; null = none had
         }
       })
@@ -900,41 +945,15 @@ export async function GET(req: NextRequest) {
       // truncated 500-bill array. For shops with 500+ transactions, the summary
       // was wrong (only covered the latest 500). Now: run a separate SQL
       // aggregate that covers ALL transactions (no take limit).
-      const summaryByType = await db.transaction.groupBy({
-        by: ['type'],
-        where: activeTransactionWhere(userId, {
-          type: { in: ['sale', 'credit-note'] },
-          date: { gte: from, lte: to },
-        }),
-        _sum: { subtotal: true, discountAmount: true, grossProfit: true },
-        _count: true,
-      })
-      // Phase 6a: a return takes its value OFF the total, as it does on each bill row above —
-      // the old aggregate added returns' subtotals to sales, so the total disagreed with the rows.
-      let allRevenue = 0
-      let allProfit = 0
-      let allBills = 0
-      for (const g of summaryByType) {
-        const sign = g.type === 'sale' ? 1 : -1
-        allRevenue += sign * ((g._sum.subtotal || 0) - (g._sum.discountAmount || 0))
-        allProfit += g._sum.grossProfit || 0 // a return's profit is stored negative
-        allBills += g._count
-      }
-      // #254: profit = what the bills booked, so the total equals Home's; the value of the lines
-      // with no cost price from the shared NO_COST_LINE; cost = the rest (no Σ(price) × Σ(qty), V26 N3).
-      const noCostResult = await db.$queryRaw<Array<{ paise: unknown }>>`
-        SELECT COALESCE(SUM(${SIGNED_LINE}), 0)::numeric AS "paise"
-        FROM "TransactionItem" ti
-        JOIN "Transaction" t ON ti."transactionId" = t."id"
-        WHERE t."userId" = ${userId}
-          AND t."deletedAt" IS NULL
-          AND t."type" IN ('sale', 'credit-note')
-          AND t."date" >= ${from}
-          AND t."date" <= ${to}
-          AND ${NO_COST_LINE}
-      `
-      const allNoCost = fromPaise(Number(noCostResult[0]?.paise ?? 0))
-      const allCogs = allRevenue - allNoCost - allProfit
+      // #254 / 6a-2: profit = what the bills booked (Home's figure), sales net of returns; the no-cost
+      // value and the cost from the lines by the shared rules; what does not add up shown as such.
+      const [booked, lines] = await Promise.all([bookedSales(userId, from, to), lineTotals(userId, from, to)])
+      const allRevenue = booked.revenue
+      const allProfit = booked.profit
+      const allBills = booked.bills
+      const allNoCost = lines.noCost
+      const allCogs = lines.cost
+      const allUnmatched = roundMoney(allProfit - (allRevenue - allNoCost - allCogs))
 
       return NextResponse.json({
         type: 'bill-profit',
@@ -947,6 +966,7 @@ export async function GET(req: NextRequest) {
           totalCogs: roundMoney(allCogs),
           totalProfit: roundMoney(allProfit),
           totalNoCost: roundMoney(allNoCost),
+          totalUnmatched: allUnmatched,
           avgMargin: marginOnCosted(allProfit, allRevenue, allNoCost),
         },
         bills,
@@ -1380,6 +1400,12 @@ export async function GET(req: NextRequest) {
       const totalCogs = items.reduce((s, i) => s + i.cogs, 0)
       const totalProfit = items.reduce((s, i) => s + i.profit, 0)
       const totalNoCost = items.reduce((s, i) => s + i.noCost, 0)
+      // 6a-2: the total is what the bills booked (Home's figure, Bill-wise's total). Items add up to
+      // the line rule; a bill saved under an older rule booked a little more or less — shown as
+      // "not matched to items" (Insights' row), never spread over the items or dropped.
+      const booked = await bookedSales(userId, from, to)
+      const itemsProfit = totalProfit
+      const unmatchedProfit = roundMoney(booked.profit - itemsProfit)
 
       return NextResponse.json({
         type: 'item-profit',
@@ -1389,9 +1415,10 @@ export async function GET(req: NextRequest) {
           totalProducts: items.length,
           totalRevenue: roundMoney(totalRevenue),
           totalCogs: roundMoney(totalCogs),
-          totalProfit: roundMoney(totalProfit),
+          totalProfit: roundMoney(booked.profit),
           totalNoCost: roundMoney(totalNoCost),
-          avgMargin: marginOnCosted(totalProfit, totalRevenue, totalNoCost),
+          totalUnmatched: unmatchedProfit,
+          avgMargin: marginOnCosted(booked.profit, totalRevenue, totalNoCost),
         },
         items,
       })
