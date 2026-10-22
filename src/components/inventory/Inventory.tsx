@@ -23,6 +23,7 @@ import { ChipRow } from '@/components/common/ChipRow'
 import { FocusChip } from '@/components/common/FocusChip'
 import { ITEM_SORTS, NO_CATEGORY, isFamilyEntry, entryItems, type ItemChip, type ItemSort, type FamilyEntry } from '@/lib/items-list'
 import { FamilyRow, BrandSuggestions, FamilySheet } from './Families'
+import { GroupTidy } from './GroupTidy'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { EmptyState } from '@/components/common/EmptyState'
 import { WakingUpState } from '@/components/common/WakingUpState'
@@ -89,6 +90,7 @@ export function Inventory() {
     triggerRefresh()
     queryClient.invalidateQueries({ queryKey: ['products'] })
     queryClient.invalidateQueries({ queryKey: ['product-families'] })
+    queryClient.invalidateQueries({ queryKey: ['product-groups'] })
   }
 
   /*
@@ -213,6 +215,8 @@ export function Inventory() {
 
       {/* Phase 7b: items that are sizes of one brand — suggested, grouped only on the shop's tap. */}
       {!debouncedSearch && !focus && <BrandSuggestions onChanged={refreshItems} />}
+      {/* Phase 7d: groups that should be one ("Tea" and "Tea & coffee"), merged on a tap. */}
+      {!debouncedSearch && !focus && <GroupTidy onChanged={refreshItems} />}
 
       {focus && <FocusChip label={focus.label} onClear={() => setListFocus(null)} clearLabel={t('list.clear_focus')} />}
 

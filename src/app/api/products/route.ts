@@ -341,7 +341,13 @@ export async function DELETE(req: NextRequest) {
     const existing = await db.product.findFirst({ where: { id, userId } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    await db.product.delete({ where: { id } })
+    await db.$transaction(async (tx) => {
+      await tx.product.delete({ where: { id } })
+      // #302 (7d): the last size of a brand takes the now-empty brand with it.
+      if (existing.familyId && (await tx.product.count({ where: { userId, familyId: existing.familyId } })) === 0) {
+        await tx.productFamily.deleteMany({ where: { id: existing.familyId, userId } })
+      }
+    })
     return NextResponse.json({ success: true })
   } catch (error) {
     return apiError(error, 'Failed to delete product', 500)

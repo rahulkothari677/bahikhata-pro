@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { describeSaveOutcome } from '@/lib/edit-conflict'
+import { groupChoices } from '@/lib/item-groups'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -62,6 +64,14 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
   initial?: { barcode?: string; name?: string; like?: any; brand?: string }
 }) {
   const [form, setForm] = useState(EMPTY_FORM)
+  // Phase 7d: the shop's groups, for the Category choices (counted on the server).
+  const { data: groupsData } = useQuery({
+    queryKey: ['product-groups'],
+    queryFn: async () => (await offlineFetch('/api/products/groups')).json(),
+    enabled: open,
+    staleTime: 60_000,
+  })
+  const shopGroups: string[] = ((groupsData?.groups as { name: string }[] | undefined) ?? []).map((g) => g.name)
   // Has the shopkeeper answered the goods/service question themselves? Once
   // they have, typing an HSN must stop re-deciding it for them.
   const [serviceTouched, setServiceTouched] = useState(false)
@@ -443,7 +453,12 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
           </div>
           <div>
             <Label htmlFor="field-category">Category</Label>
-            <Input id="field-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Flour" />
+            {/* Phase 7d (#299): chosen from one list — the shop's own groups first, then the standard
+                list — so "Tea" is not made again next to "Tea & coffee". A new name is still allowed. */}
+            <Input id="field-category" list="item-group-choices" autoComplete="off" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Atta & flour" />
+            <datalist id="item-group-choices">
+              {groupChoices(shopGroups, form.category).slice(0, 40).map((g) => <option key={g} value={g} />)}
+            </datalist>
           </div>
           <div>
             <Label htmlFor="field-hsn-sac-code">HSN/SAC Code</Label>
