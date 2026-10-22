@@ -13,8 +13,9 @@ import { roundMoney } from '@/lib/money'
 import { validateBody, createProductSchema, updateProductSchema } from '@/lib/validation'
 import { apiError } from '@/lib/api-error'
 import { describeEditConflict } from '@/lib/edit-conflict'
+import { catalogEtag, CATALOG_CACHE_CONTROL, CATALOG_FUSE } from '@/lib/catalog-etag'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     // 🔒 R15 v2 (Verification Ledger): Switch from getAuthUserIdWithModule to
     // getAuthContext so we can check hideProfit + role. The earlier fix only
@@ -36,10 +37,30 @@ export async function GET() {
     // 🔒 V26 R15 (Phase 5): Wrapped in withConnectionRetry for Neon cold-start.
     // 🔒 #71: same as parties — the fuse stays, the silence goes. See the
     // comment there for why removing the cap would be the wrong fix.
+    /*
+     * Phase 7a (#297): the fuse moves from 5,000 to 20,000 items (CATALOG_FUSE).
+     * 5,000 was below a medical store's or a small supermarket's catalog, and the
+     * bill screen searches this list on the phone — an item past the fuse could
+     * not be billed, and no screen said so. The bill screen now declares it.
+     *
+     * And the phone keeps its copy: the tag (lib/catalog-etag.ts) changes
+     * whenever the list could have, so an unchanged catalog costs a 304 with no
+     * body instead of the whole list on every bill.
+     */
+    const stamp = await withConnectionRetry(() => db.product.aggregate({
+      where: { userId },
+      _count: { _all: true },
+      _max: { updatedAt: true },
+    }))
+    const etag = catalogEtag(userId, stamp._count._all, stamp._max.updatedAt, hideProfit)
+    const cacheHeaders = { ETag: etag, 'Cache-Control': CATALOG_CACHE_CONTROL }
+    if (req.headers.get('if-none-match') === etag) {
+      return new NextResponse(null, { status: 304, headers: cacheHeaders })
+    }
     const products = await withConnectionRetry(() => db.product.findMany({
       where: { userId },
       orderBy: { name: 'asc' },
-      take: 5000,
+      take: CATALOG_FUSE,
     }))
 
     /*
@@ -52,12 +73,13 @@ export async function GET() {
     // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 60, swr: 300 }).
     // Money-bearing endpoint — stock counts + sale prices must always be fresh.
     // A shopkeeper who just made a sale would see stale stock for up to 60s.
-    const totalProducts = await db.product.count({ where: { userId } })
-    return noStore({
+    // Revalidated on every request (no-cache + ETag), never served stale.
+    const totalProducts = stamp._count._all
+    return NextResponse.json({
       products: productsWithStock,
       total: totalProducts,
       truncated: totalProducts > products.length,
-    })
+    }, { headers: cacheHeaders })
   } catch (error) {
     // 🔒 V11 §4.2: Use apiError() for consistent errorId logging.
     // Was: console.error + generic 503 with no errorId.

@@ -141,12 +141,14 @@ export interface CachedResponse {
   key: string // URL including query string
   body: any
   cachedAt: number
+  /** The server's version tag for this body (Phase 7a: the item list) — sent back as If-None-Match. */
+  etag?: string
 }
 
-export async function cacheResponse(key: string, body: any): Promise<void> {
+export async function cacheResponse(key: string, body: any, etag?: string | null): Promise<void> {
   try {
     await tx(STORE_KV, 'readwrite', (s) =>
-      s.put({ key, body, cachedAt: Date.now() } as CachedResponse),
+      s.put({ key, body, cachedAt: Date.now(), ...(etag ? { etag } : {}) } as CachedResponse),
     )
   } catch {
     /* ignore */

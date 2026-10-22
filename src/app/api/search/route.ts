@@ -64,8 +64,12 @@ export async function GET(req: NextRequest) {
     const userId = authCtx.userId
     const { role, permissions } = authCtx
 
-    const raw = new URL(req.url).searchParams.get('q') ?? ''
+    const params = new URL(req.url).searchParams
+    const raw = params.get('q') ?? ''
     const q = raw.trim().slice(0, MAX_QUERY_LENGTH)
+    // Phase 7a: the search box now finds ITEMS on the phone with the app's one item
+    // search (lib/item-search.ts) and asks here only for customers and bills.
+    const types = new Set((params.get('types') ?? 'products,parties,transactions').split(','))
 
     if (q.length < MIN_QUERY_LENGTH) {
       return noStore({ products: [], parties: [], transactions: [], query: q, tooShort: true })
@@ -75,9 +79,9 @@ export async function GET(req: NextRequest) {
     // is a shortcut into modules a staff member may not be allowed to open, so
     // without this a cashier blocked from Purchases could still read purchase
     // invoices through the search box. Each type is gated independently.
-    const canParties = canAccessModule(role, permissions, 'parties')
-    const canInventory = canAccessModule(role, permissions, 'inventory')
-    const canSales = canAccessModule(role, permissions, 'sales')
+    const canParties = types.has('parties') && canAccessModule(role, permissions, 'parties')
+    const canInventory = types.has('products') && canAccessModule(role, permissions, 'inventory')
+    const canSales = types.has('transactions') && canAccessModule(role, permissions, 'sales')
 
     const contains = { contains: q, mode: 'insensitive' as const }
 

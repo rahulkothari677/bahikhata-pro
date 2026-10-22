@@ -249,6 +249,9 @@ function normalizeCacheKey(url: string): string {
   }
 }
 
+/** GET paths whose server sends an ETag; the kept copy's tag goes back as If-None-Match (Phase 7a). */
+const REVALIDATED_PREFIXES = ['/api/products']
+
 async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response> {
   const cacheKey = normalizeCacheKey(url)
 
@@ -277,7 +280,27 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
 
   // Online: try network, fall back to cache on failure
   try {
-    const res = await fetch(url, fetchOpts)
+    /*
+     * Phase 7a (#297): a list the server versions (the item list's ETag) is asked
+     * for WITH the version of the copy kept here. "304, not changed" then costs no
+     * body, and the kept copy is the answer. Done here, not left to the browser's
+     * HTTP cache, which a phone may evict and some browsers switch off.
+     */
+    const kept = REVALIDATED_PREFIXES.some((p) => cacheKey.startsWith(p)) ? await getCachedResponse(cacheKey) : null
+    let askOpts = fetchOpts
+    if (kept?.etag) {
+      const headers = new Headers(fetchOpts.headers)
+      headers.set('If-None-Match', kept.etag)
+      askOpts = { ...fetchOpts, headers }
+    }
+    const res = await fetch(url, askOpts)
+    if (res.status === 304 && kept) {
+      cacheResponse(cacheKey, kept.body, kept.etag).catch(() => {})
+      return new Response(JSON.stringify(kept.body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'X-bahikhata-Source': 'revalidated', ETag: kept.etag ?? '' },
+      })
+    }
 
     // 🔒 AUDIT FIX V5: Auto-redirect on 401 (session expired/invalid)
     // The app uses AuthScreen component at / (not a separate /login route)
@@ -299,7 +322,7 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
           // The cache is for offline fallback only; if it fails, no harm.
           // trimCacheByPrefix is expensive (full IDB scan) so defer it
           // to a microtask so it runs after the response is returned.
-          cacheResponse(cacheKey, body).catch(() => {})
+          cacheResponse(cacheKey, body, res.headers.get('etag')).catch(() => {})
           setTimeout(() => {
             trimCacheByPrefix(cacheKey.split('?')[0], 3).catch(() => {})
           }, 0)

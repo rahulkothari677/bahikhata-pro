@@ -1,7 +1,8 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { findProductByScannedCode, matchesProductSearch, resolveProductForEnterKey } from '@/lib/find-product-by-code'
+import { findProductByScannedCode, resolveProductForEnterKey } from '@/lib/find-product-by-code'
+import { itemSearch } from '@/lib/item-search'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { useArrivalRequest } from '@/hooks/use-new-entry-request'
@@ -425,6 +426,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     },
   })
   const products: any[] = productsData?.products || []
+  // #71 / Phase 7a: past the declared fuse (lib/catalog-etag.ts) the list is the first N items — said on screen.
+  const catalogCutNote = productsData?.truncated ? `First ${products.length.toLocaleString('en-IN')} of ${Number(productsData.total).toLocaleString('en-IN')} items` : null
   // Memoize productMap — only rebuilds when products array changes
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products])
 
@@ -496,11 +499,6 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     [products, selectedCategory]
   )
 
-  const filteredProducts = useMemo(() => productsInCategory.filter(p => {
-    if (!productSearch) return true
-    return matchesProductSearch(p, productSearch)
-  }), [productsInCategory, productSearch])
-
   /*
    * Phase 6c — THE COUNTER. A sale is built on the Counter: the bill on top,
    * search and the shop's own best sellers as tiles below (beside it on a
@@ -517,6 +515,18 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     enabled: counterMode,
     staleTime: 10 * 60 * 1000,
   })
+  // Phase 7a (#296): the app's ONE item search (lib/item-search.ts) — word starts in any
+  // order, shop words, spelling slips, codes — ranked, with the shop's best sellers lifted
+  // among equal matches. Every match is kept; the list below says "8 of N" when it shows fewer.
+  const searchBoost = useMemo(() => {
+    const ids = (topSellersData?.ids as string[] | undefined) ?? []
+    return new Map(ids.map((id, i) => [id, 1 - i / Math.max(ids.length, 1)]))
+  }, [topSellersData])
+  const productSearchResult = useMemo(
+    () => itemSearch(productsInCategory, productSearch, { boost: searchBoost }),
+    [productsInCategory, productSearch, searchBoost],
+  )
+  const filteredProducts = productSearchResult.items
   const [tileChip, setTileChip] = useState<string>(TOP_TILES)
   const [tilesExpanded, setTilesExpanded] = useState(false)
   const liveTileRanking = useMemo(
@@ -1899,6 +1909,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       </button>
                     )}
                   </div>
+                  {catalogCutNote && <p className="mt-1 text-xs font-semibold text-check">{catalogCutNote}</p>}
                 </div>
               </div>
 
@@ -1938,6 +1949,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                    list IS the job. It was showing barely three rows inside a
                    192px window while the form around it had room to spare. */
                 <div className="mt-3 max-h-72 sm:max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
+                  {productSearchResult.close && <p className="px-3 pt-2 text-xs font-semibold text-check">No exact match · close spellings</p>}
                   {filteredProducts.slice(0, 20).map(p => (
                     <PickRow
                       key={p.id}
@@ -2667,6 +2679,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </button>
                   )}
                 </div>
+                {catalogCutNote && <p className="text-xs font-semibold text-check">{catalogCutNote}</p>}
 
                 {products.length === 0 ? (
                   <EmptyState
@@ -2684,6 +2697,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     <p className="text-sm text-muted-foreground py-4 text-center">No item matches &quot;{productSearch}&quot;</p>
                   ) : (
                     <div className="rounded-lg border border-border bg-background">
+                      {productSearchResult.close && <p className="px-3 pt-2 text-xs font-semibold text-check">No exact match · close spellings</p>}
                       {filteredProducts.slice(0, 8).map(p => (
                         <PickRow
                           key={p.id}

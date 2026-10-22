@@ -151,14 +151,28 @@ describe('a cap is allowed — being silent about it is not', () => {
    * The fuse itself STAYS. Loading 50,000 parties onto a phone would be a
    * worse app, not a better one.
    */
-  test.each([
-    ['src/app/api/parties/route.ts', 'party'],
-    ['src/app/api/products/route.ts', 'product'],
-  ])('%s returns the true total beside the capped list', (file) => {
-    const src = read(file)
+  test('parties: the true total beside the capped list', () => {
+    const src = read('src/app/api/parties/route.ts')
     expect(src).toMatch(/\.count\(/)
     expect(src).toMatch(/truncated:/)
     expect(src).toContain('take: 5000')   // the fuse is deliberate and stays
+  })
+
+  test('items: the fuse is declared (20,000 since Phase 7a) and the true total travels with the list', () => {
+    /*
+     * Phase 7a (#297): 5,000 was below a medical store's catalog, and the bill
+     * screen searches this list on the phone — so an item past the fuse could
+     * not be billed. The fuse stays (#71), at 20,000; the count now comes from
+     * the same aggregate that versions the list (lib/catalog-etag.ts).
+     */
+    const src = read('src/app/api/products/route.ts')
+    expect(src).toMatch(/_count: \{ _all: true \}/)
+    expect(src).toMatch(/const totalProducts = stamp\._count\._all/)
+    expect(src).toMatch(/truncated: totalProducts > products\.length/)
+    expect(src).toContain('take: CATALOG_FUSE')
+    expect(read('src/lib/catalog-etag.ts')).toMatch(/export const CATALOG_FUSE = 20_000/)
+    // ...and the bill screen says so when a shop passes it.
+    expect(read('src/components/ledger/TransactionEntry.tsx')).toMatch(/productsData\?\.truncated/)
   })
 
   test('insights totals are summed by the database, never from capped rows', () => {

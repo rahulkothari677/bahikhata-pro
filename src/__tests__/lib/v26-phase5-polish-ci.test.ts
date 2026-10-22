@@ -201,11 +201,11 @@ describe('V26 Phase 5 Batch 6 — Polish + CI guards', () => {
 
   // ─── R20: GET take guard ─────────────────────────────────────────────────
 
-  test('R20: parties + products GET have take: 5000 fuse', () => {
+  test('R20: parties + products GET have a fuse (products: CATALOG_FUSE, 20,000 since Phase 7a)', () => {
     const partiesSrc = readFile('app/api/parties/route.ts')
     expect(partiesSrc).toMatch(/take:\s*5000/)
     const productsSrc = readFile('app/api/products/route.ts')
-    expect(productsSrc).toMatch(/take:\s*5000/)
+    expect(productsSrc).toMatch(/take:\s*CATALOG_FUSE/)
   })
 
   // ─── R21: Migration SQL lint ─────────────────────────────────────────────

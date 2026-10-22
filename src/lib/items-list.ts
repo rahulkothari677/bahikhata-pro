@@ -68,7 +68,8 @@ export function itemsList(all: ItemRow[], opts: { chip: ItemChip; search: string
   const categories = [...catMap].sort((a, b) => a[0].localeCompare(b[0])).map(([name, c]) => ({ name, count: c.count, value: hidden ? null : c.value / 100 }))
   // A group opened from Insights (lib/list-focus.ts) narrows the list and its counts like a search — never the shop totals.
   const scoped = all.filter((p) => (!opts.focusIds || opts.focusIds.has(p.id)) && (!opts.category || cat(p) === opts.category)
-    && (!opts.search.trim() || matchesProductSearch(p, opts.search) || cat(p).toLowerCase().includes(opts.search.trim().toLowerCase())))
+    // Phase 7a: the app's one item search (it already counts the item's group), never letters anywhere.
+    && (!opts.search.trim() || matchesProductSearch(p, opts.search)))
   const counts = Object.fromEntries(ITEM_CHIPS.map((c) => [c, scoped.filter((p) => inItemChip(p, c, opts.now)).length])) as Record<ItemChip, number>
   const rows = scoped.filter((p) => inItemChip(p, opts.chip, opts.now))
   const byName = (a: ItemRow, b: ItemRow) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)

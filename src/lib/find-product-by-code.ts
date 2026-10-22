@@ -17,6 +17,7 @@
  * function means the next screen that scans inherits the right answer instead
  * of a plausible one.
  */
+import { itemMatches } from './item-search'
 
 export interface ScannableProduct {
   id: string
@@ -122,15 +123,17 @@ export function resolveProductForEnterKey<T extends ScannableProduct>(
     (visibleMatches.length === 1 ? visibleMatches[0] : null)
 }
 
-export function matchesProductSearch<T extends ScannableProduct & { hsn?: string | null }>(
+/**
+ * Does a typed search find this product? Phase 7a (#296): the app's ONE item
+ * search rule lives in lib/item-search.ts (word starts in any order, shop
+ * words, spelling slips, codes, HSN); this name stays so every caller — and the
+ * guard that sends screens here — keeps one door. Letters-anywhere matching is
+ * gone: "atta" used to find Kurkure Chilli Chatka.
+ */
+export function matchesProductSearch<T extends ScannableProduct & { hsn?: string | null; category?: string | null; salePrice?: number | null }>(
   product: T,
   query: string,
 ): boolean {
-  const q = (query || '').trim().toLowerCase()
-  if (!q) return true
-
-  const has = (value: string | null | undefined) =>
-    !!value && value.toLowerCase().includes(q)
-
-  return has(product.name) || has(product.sku) || has(product.barcode) || has(product.hsn)
+  // The product itself (not a copy) whenever it has a name, so item-search's per-item index is reused.
+  return itemMatches(typeof product.name === 'string' ? (product as T & { name: string }) : { ...product, name: '' }, query)
 }

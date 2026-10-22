@@ -18,6 +18,10 @@ import { useSession } from 'next-auth/react'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { gstStatus } from '@/lib/shop-tax'
 import { useSetting } from '@/hooks/use-setting'
+import { itemSearch, shownOf } from '@/lib/item-search'
+
+/** Items listed in the search box; "5 of 23 items" when more matched. */
+const ITEMS_SHOWN = 5
 
 type SearchResult = {
   type: 'product' | 'party' | 'transaction'
@@ -58,10 +62,14 @@ export function GlobalSearch() {
     return () => clearTimeout(id)
   }, [query])
 
+  // Phase 7a (#287): customers and bills from the server; ITEMS from the catalog the phone
+  // already holds (the same list and cache the bill screen uses), through the app's one item
+  // search — so items, screens and commands answer as you type, and only customers and bills
+  // wait for the network.
   const { data: searchData, isFetching: searchLoading, isError: searchFailed } = useQuery({
     queryKey: ['global-search', debouncedQuery],
     queryFn: async () => {
-      const r = await offlineFetch(`/api/search?q=${encodeURIComponent(debouncedQuery)}`)
+      const r = await offlineFetch(`/api/search?q=${encodeURIComponent(debouncedQuery)}&types=parties,transactions`)
       if (!r.ok) throw new Error('Search request failed')
       return r.json()
     },
@@ -71,8 +79,17 @@ export function GlobalSearch() {
     staleTime: 15_000,
     retry: 1,
   })
+  const { data: catalogData } = useQuery({
+    queryKey: ['products', 'for-entry'],
+    queryFn: async () => (await offlineFetch('/api/products')).json(),
+    enabled: searchOpen,
+    staleTime: 5 * 60 * 1000,
+  })
+  const itemResults = useMemo(
+    () => (query.trim() ? itemSearch((catalogData?.products as any[]) ?? [], query) : { items: [], total: 0, close: false }),
+    [catalogData, query],
+  )
 
-  const productsData = searchData
   const partiesData = searchData
   const txnData = searchData
 
@@ -95,8 +112,8 @@ export function GlobalSearch() {
   // these. Re-filtering here would silently drop rows the database matched (the
   // two use different case rules), which is how a "search" starts lying again.
   if (q) {
-    // Products
-    ;(productsData?.products || []).forEach((p: any) => {
+    // Items: the best five; the list says how many more matched (never a silent cut).
+    itemResults.items.slice(0, ITEMS_SHOWN).forEach((p: any) => {
       results.push({
         type: 'product',
         id: p.id,
@@ -252,7 +269,7 @@ export function GlobalSearch() {
                 This is a connection problem, not a missing record. Please try again.
               </p>
             </div>
-          ) : searchLoading && q ? (
+          ) : searchLoading && q && allResults.length === 0 ? (
             <div className="p-8 text-center">
               <Search className="w-8 h-8 mx-auto text-muted-foreground/50 mb-2 animate-pulse" />
               <p className="text-sm font-medium">Searching…</p>
@@ -301,6 +318,9 @@ export function GlobalSearch() {
                 <>
                   <p className="text-xs text-muted-foreground font-medium px-2 py-1 mt-2">
                     {results.length} search result{results.length !== 1 ? 's' : ''}
+                    {shownOf(Math.min(ITEMS_SHOWN, itemResults.total), itemResults.total) && ` · ${shownOf(ITEMS_SHOWN, itemResults.total)} items`}
+                    {itemResults.close && ' · close spellings'}
+                    {searchLoading && ' · finding customers and bills…'}
                   </p>
                   {results.map((result) => {
                     const globalIdx = allResults.indexOf(result)
