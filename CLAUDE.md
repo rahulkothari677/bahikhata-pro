@@ -602,7 +602,12 @@ cause**, never as a new line at the bottom.
   (2) a replacement for a screen he uses is timed against the old one on the
   real job (a 15-item customer list: taps, letters typed, seconds per item)
   BEFORE it ships, and the numbers go in the report; (3) when he says "the
-  earlier design", ask which one — I assumed August; he meant 6d.
+  earlier design", ask which one, WITH A PICTURE OF EACH CANDIDATE (git has
+  every version: `git show <tag>:<file>`). I guessed twice the same evening:
+  first August, then (after "second last version") the 6d tiles, and built a
+  whole tile demo; he meant the list design (category + product search on
+  top, a list window of rows with + and −, as it stood at phase-6b). A
+  guess about which design he means costs a build; a picture costs a minute.
 
 **Cause 5 — Saying a thing instead of logging it**
 · Reported the period flash in chat and never logged it — twice in one day
