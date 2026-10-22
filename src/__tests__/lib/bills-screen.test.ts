@@ -61,10 +61,12 @@ describe('the screen', () => {
     const entry = readCode('src/components/ledger/TransactionEntry.tsx')
     expect(entry).toMatch(/action: \{ label: 'See estimates', onClick: \(\) => \{ useAppStore\.getState\(\)\.requestOnArrival\('sales', 'show-estimates'\)/)
     // Shown once the screen has moved on, so the save's own navigation cannot overtake a tap.
-    const moved = entry.lastIndexOf('if (previousView && !ENTRY_FORMS.includes(previousView))')
+    // 7c-2: one list of entry screens (lib/entry-views.ts) replaced the local ENTRY_FORMS.
+    const moved = entry.lastIndexOf('if (previousView && !isEntryView(previousView))')
+    expect(moved).toBeGreaterThan(0)
     const shown = entry.indexOf('estimateToast?.()')
     expect({ afterMove: shown > moved, insideSave: shown < entry.indexOf('const handleCancel = ()') }).toEqual({ afterMove: true, insideSave: true })
-    expect(entry).toMatch(/const ENTRY_FORMS: string\[\] = \['new-sale', 'new-purchase', 'new-estimate'\]/)
+    expect(readCode('src/lib/entry-views.ts')).toMatch(/export const ENTRY_VIEWS: readonly string\[\] = \['new-sale', 'new-purchase', 'new-estimate'\]/)
     expect(ledger).toMatch(/useArrivalRequest\('sales', 'show-estimates', \(\) => setChip\('est'\)\)/)
   })
   test('the totals strip names its period ("All time" when none is chosen)', () => {

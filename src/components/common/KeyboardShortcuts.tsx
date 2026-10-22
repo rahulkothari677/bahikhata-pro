@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { ShortcutsHelp } from '@/components/common/ShortcutsHelp'
+import { isEntryView } from '@/lib/entry-views'
 
 /**
  * Is this Escape press ours to act on (close search / leave the screen)?
@@ -64,6 +65,10 @@ export function KeyboardShortcuts() {
         }
         return
       }
+
+      // Phase 6e: on a bill-entry screen single letters belong to the bill — a barcode gun types the
+      // codes it reads (SKUs carry letters), so the one-letter shortcuts below stay off there.
+      if (isEntryView(currentView)) return
 
       // N → New entry (context-aware)
       if (e.key === 'n' || e.key === 'N') {

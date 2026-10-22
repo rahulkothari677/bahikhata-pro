@@ -45,6 +45,10 @@ import { partyMatchesSearch, partyPrefillFromSearch } from '@/lib/party-search'
 import { PaySheet, SavedSheet, type SavedBill } from '@/components/ledger/PaySheet'
 import { buildUpiLink, invoiceShopFromSetting } from '@/lib/invoice-document'
 import { changeFor } from '@/lib/quick-cash'
+import { createScanBuffer } from '@/lib/scanner-burst'
+import { isEntryView } from '@/lib/entry-views'
+import { ProductDialog } from '@/components/inventory/ProductDialog'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 // 🔒 V10 §2.3: Single rounding function shared between client and server.
 // Was: `const r = (n) => Math.round(n*100)/100` here, which lacks the 1e-9
@@ -124,7 +128,7 @@ type ItemRow = {
  * into a fresh copy of a form — estimates included (5d-3: a New Estimate opened
  * from New Estimate returned to a blank estimate after saving).
  */
-const ENTRY_FORMS: string[] = ['new-sale', 'new-purchase', 'new-estimate']
+// One list of bill-entry screens (lib/entry-views.ts) — the keyboard shortcuts use it too.
 
 export function TransactionEntry({ type, estimateMode = false }: { type: LedgerType; estimateMode?: boolean }) {
   const isSale = type === 'sale'
@@ -791,7 +795,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   }
 
 
-  const handleAddProduct = (product: any) => {
+  const handleAddProduct = (product: any, qty = 1) => {
     // User manually added a product — clear presetLoaded so autosave resumes
     setPresetLoaded(false)
     /*
@@ -814,7 +818,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     if (existing) {
       setItems(items.map(i =>
         i.productId === product.id
-          ? { ...i, quantity: i.quantity + 1 }
+          ? { ...i, quantity: i.quantity + qty }
           : i
       ))
       // Phase 6c: on the Counter the tile's count and the bill line say it; a toast per tap is noise.
@@ -823,7 +827,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       setItems([...items, {
         productId: product.id,
         productName: product.name,
-        quantity: 1,
+        quantity: qty,
         // #175: a non-claiming shop's saved cost includes GST — take it out
         // before pre-filling the supplier's rate (purchaseRateFromCost).
         unitPrice: isSale ? product.salePrice : purchaseRateFromCost(product, { claimsItc: canClaimGst }),
@@ -877,6 +881,75 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // adjust quantities or delete non-returned items. Fetches the original transaction
   // by ID and maps its items to the ItemRow shape.
   const [loadingOriginal, setLoadingOriginal] = useState(false)
+  /*
+   * Phase 7c-2 (from 6e, now for every bill) — ONE add step: a picker row, a
+   * search pick, a gun scan and the camera all come here. Quantity first ("6,
+   * then tap or scan"); on a sale, price check shows price, MRP and stock and
+   * adds nothing.
+   */
+  const [nextQty, setNextQty] = useState('')
+  const [qtyOpen, setQtyOpen] = useState(false)
+  const [priceCheck, setPriceCheck] = useState(false)
+  const [checkedProduct, setCheckedProduct] = useState<any | null>(null)
+  const [unknownCode, setUnknownCode] = useState<string | null>(null)
+  const [newItemCode, setNewItemCode] = useState<string | null>(null)
+  const pickAdd = (p: any) => {
+    if (priceCheck && isSale) { setCheckedProduct(p); return }
+    const q = parseFloat(nextQty)
+    handleAddProduct(p, q > 0 ? q : 1)
+    if (nextQty !== '') { setNextQty(''); setQtyOpen(false) }
+  }
+  // An unknown barcode asks "New item?" instead of leaving a number in the search box.
+  const handleScannedCode = (code: string) => {
+    const match = findProductByScannedCode(products, code)
+    if (match) pickAdd(match)
+    else setUnknownCode(code)
+  }
+  const scanBufferRef = useRef(createScanBuffer())
+  const handleScannedRef = useRef(handleScannedCode)
+  handleScannedRef.current = handleScannedCode
+  const itemCountRef = useRef(0)
+  itemCountRef.current = items.length
+  // F10: Pay on a plain sale (the Pay sheet), Save on every other bill — the same as tapping it.
+  const finishRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement as HTMLElement | null
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+      const sheetOpen = !!document.querySelector('[role=dialog]')
+      // The bill's keys (final plan §5) work while typing too; never under an open sheet.
+      if (!sheetOpen && /^F(2|3|4|6|10)$/.test(e.key)) {
+        e.preventDefault()
+        if (e.key === 'F2') document.getElementById('field-search-product')?.focus()
+        else if (e.key === 'F3') document.getElementById('field-party-search')?.focus()
+        else if (e.key === 'F4') { setQtyOpen(true); setTimeout(() => document.getElementById('field-next-qty')?.focus(), 50) }
+        else if (e.key === 'F6' && isSale) setPriceCheck((v) => !v)
+        else if (e.key === 'F10' && itemCountRef.current > 0) finishRef.current()
+        return
+      }
+      // A barcode gun works anywhere a text box does not have the cursor (lib/scanner-burst.ts).
+      if (typing || sheetOpen || e.ctrlKey || e.metaKey || e.altKey) { scanBufferRef.current.reset(); return }
+      const code = scanBufferRef.current.push(e.key, e.timeStamp)
+      if (code) { e.preventDefault(); handleScannedRef.current(code) }
+    }
+    // Esc with a bill open (capture, so it runs before the app's Escape = go back): clears the
+    // search, the quantity or price check — it never leaves the bill. A sheet takes its own Esc
+    // first; the app's shortcut skips an Escape already handled (escapeIsOurs).
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || document.querySelector('[role=dialog]') || itemCountRef.current === 0) return
+      e.preventDefault()
+      setProductSearch('')
+      setNextQty('')
+      setQtyOpen(false)
+      setPriceCheck(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('keydown', onEscape, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onEscape, true)
+    }
+  }, [isSale])
   const handleLoadOriginalItems = async () => {
     if (!originalTransactionId) return
     setLoadingOriginal(true)
@@ -1362,7 +1435,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       // Was: always setView('sales'/'purchases') → dead end after purchase from party.
       const leave = () => {
         triggerRefresh()
-        if (previousView && !ENTRY_FORMS.includes(previousView)) {
+        if (previousView && !isEntryView(previousView)) {
           setView(previousView)
         } else {
           setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
@@ -1377,6 +1450,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     } finally {
       setSaving(false)
     }
+  }
+
+  // F10 (7c-2): exactly what the bar's button does — Pay on a plain sale, Save on any other bill.
+  finishRef.current = () => {
+    if (saving || hasStockBlock) return
+    if (counterMode) setPaySheetOpen(true)
+    else handleSave()
   }
 
   /** Phase 6d: a fresh bill on the Counter — the same screen, nothing carried over but the date. */
@@ -1565,14 +1645,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         <BarcodeScanner
           onScan={(code) => {
             setBarcodeOpen(false)
-            // Barcode, then SKU, then exact name — see find-product-by-code.
-            const match = findProductByScannedCode(products, code)
-            if (match) {
-              handleAddProduct(match)
-            } else {
-              // No match — put the code in the search field so user can see it
-              setProductSearch(code)
-            }
+            // 7c-2: the one add step — barcode, then SKU, then exact name (find-product-by-code);
+            // quantity first; an unknown code asks "New item?" instead of leaving digits in the box.
+            handleScannedCode(code)
           }}
           onClose={() => setBarcodeOpen(false)}
         />
@@ -1826,8 +1901,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   // A wedge scanner gun types the code then presses Enter.
                   const match = resolveProductForEnterKey(productSearch, products, filteredProducts)
                   if (match) {
-                    handleAddProduct(match)
+                    pickAdd(match)
                     setProductSearch('')  // ready for the next scan
+                  } else if (/^\d{6,}$/.test(productSearch.trim())) {
+                    // A barcode nobody knows yet: offer to add it, never leave digits in the box.
+                    setUnknownCode(productSearch.trim())
+                    setProductSearch('')
                   }
                 }}
                 result={productSearchResult}
@@ -1839,9 +1918,45 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 qtyOf={(id) => items.find((i) => i.productId === id)?.quantity ?? 0}
                 priceOf={(p) => (isSale ? p.salePrice : p.purchasePrice)}
                 showsGst={showsGst}
-                onAdd={(p) => handleAddProduct(p)}
+                onAdd={(p) => pickAdd(p)}
                 onDecrement={(id) => handleDecrementProduct(id)}
                 catalogCutNote={catalogCutNote}
+                belowSearch={(
+                  <>
+                    {/* 7c-2: quantity first ("6, then tap or scan"); on a sale, price check (nothing is added). */}
+                    <div className="flex items-center gap-2">
+                      {qtyOpen ? (
+                        <div className="flex items-center gap-1 min-w-0 flex-1">
+                          <NumberField
+                            id="field-next-qty"
+                            aria-label="Quantity for the next item"
+                            value={nextQty}
+                            onValueChange={setNextQty}
+                            placeholder="Qty for next item"
+                            min={0}
+                            step={1}
+                            decimals={3}
+                            className="flex-1 min-w-0"
+                          />
+                          <button type="button" onClick={() => { setNextQty(''); setQtyOpen(false) }} className="w-12 h-12 shrink-0 inline-flex items-center justify-center rounded-lg hover:bg-muted" aria-label="Clear quantity">
+                            <X className="w-4 h-4" aria-hidden />
+                          </button>
+                        </div>
+                      ) : (
+                        <Button type="button" variant="outline" className="h-12 tabular-nums" onClick={() => { setQtyOpen(true); setTimeout(() => document.getElementById('field-next-qty')?.focus(), 50) }}>
+                          {nextQty ? `× ${nextQty} next` : 'Qty'}
+                        </Button>
+                      )}
+                      {isSale && (
+                        <Button type="button" variant={priceCheck ? 'default' : 'outline'} className="h-12 shrink-0" aria-pressed={priceCheck} onClick={() => setPriceCheck((v) => !v)}>
+                          Price check
+                        </Button>
+                      )}
+                    </div>
+                    {priceCheck && isSale && <p className="text-xs font-semibold text-check">Price check: tap or scan an item — nothing is added</p>}
+                    <p className="hidden lg:block text-xs text-muted-foreground">F2 search · F3 {isSale ? 'customer' : 'supplier'} · F4 quantity{isSale ? ' · F6 price check' : ''} · F10 {counterMode ? 'pay' : 'save'} · a barcode gun works anywhere</p>
+                  </>
+                )}
                 scanButton={features?.barcodeScanner ? (
                   <button
                     type="button"
@@ -3193,6 +3308,53 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           />
         </>
       )}
+
+      {/* 7c-2: price check (a sale) — price, MRP and stock; nothing is added unless asked. */}
+      <Sheet open={!!checkedProduct} onOpenChange={(o) => { if (!o) setCheckedProduct(null) }}>
+        <SheetContent side="bottom" className="rounded-t-3xl gap-0 pb-[calc(1rem+var(--safe-bottom))] lg:mx-auto lg:max-w-md">
+          <SheetHeader className="pb-1">
+            <SheetTitle className="text-base">{checkedProduct?.name}</SheetTitle>
+            <SheetDescription className="sr-only">Price check</SheetDescription>
+          </SheetHeader>
+          {checkedProduct && (
+            <div className="px-4 space-y-3">
+              <p className="text-3xl font-bold tabular-nums">{formatINR(checkedProduct.salePrice)}<span className="text-sm font-normal text-muted-foreground">/{checkedProduct.unit}</span></p>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <p className="text-muted-foreground">MRP <span className="font-semibold text-foreground tabular-nums">{checkedProduct.mrp ? formatINR(checkedProduct.mrp) : '—'}</span></p>
+                <p className="text-muted-foreground">In stock <span className="font-semibold text-foreground tabular-nums">{isService(checkedProduct) ? 'Service' : `${checkedProduct.currentStock} ${checkedProduct.unit}`}</span></p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" className="h-12" onClick={() => setCheckedProduct(null)}>Done</Button>
+                <Button type="button" className="h-12" onClick={() => { handleAddProduct(checkedProduct, 1); setCheckedProduct(null) }}>Add to bill</Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+      {/* 7c-2: a barcode nobody knows yet. */}
+      <Sheet open={!!unknownCode} onOpenChange={(o) => { if (!o) setUnknownCode(null) }}>
+        <SheetContent side="bottom" className="rounded-t-3xl gap-0 pb-[calc(1rem+var(--safe-bottom))] lg:mx-auto lg:max-w-md">
+          <SheetHeader className="pb-1">
+            <SheetTitle className="text-base">New item?</SheetTitle>
+            <SheetDescription>Barcode <span className="font-mono tabular-nums">{unknownCode}</span> is not in your items.</SheetDescription>
+          </SheetHeader>
+          <div className="px-4 grid grid-cols-2 gap-2">
+            <Button type="button" variant="outline" className="h-12" onClick={() => setUnknownCode(null)}>Not now</Button>
+            <Button type="button" className="h-12" onClick={() => { setNewItemCode(unknownCode); setUnknownCode(null) }}>Add new item</Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+      <ProductDialog
+        open={!!newItemCode}
+        onOpenChange={(o) => { if (!o) setNewItemCode(null) }}
+        product={null}
+        initial={{ barcode: newItemCode ?? undefined }}
+        onSuccess={(saved) => {
+          queryClient.invalidateQueries({ queryKey: ['products'] })
+          // The new item goes straight on the bill — what the scan was for.
+          if (saved) handleAddProduct(saved, 1)
+        }}
+      />
 
       {/* Add Party Dialog */}
       <AddPartyInline
