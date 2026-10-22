@@ -588,6 +588,21 @@ cause**, never as a new line at the bottom.
   ₹272.70 was given on credit — both sums were right; the ₹510 between them
   was a walk-in bill left unpaid, which the app should never have accepted
   (#257). **Check the SAME fact across screens, not only each screen's sum.**
+· **22 Oct (7c, #310): I measured a proxy and shipped a replacement for a
+  screen Rahul was using.** He asked how the tile Counter would cope with
+  hundreds of items in brands and sizes; I read that as "tiles are wrong" and
+  replaced them with brand rows (8 "Often sold" rows, everything else behind
+  a Groups sheet or typing). My evidence was findability ("found after 3
+  letters: 55% → 98%"), not the job. His job is speed: **30–40 items on one
+  bill in 1–2 minutes on a phone** (Rahul, 22 Oct). The new screen lost the
+  two things that made the tiles fast — one tap per item and tiles that never
+  move — and he caught it on the live app the same day. **Rules:** (1) when
+  Rahul questions a design, the fix keeps what works in it and answers the
+  question (tiles that also handle sizes), never a swap of the whole shape;
+  (2) a replacement for a screen he uses is timed against the old one on the
+  real job (a 15-item customer list: taps, letters typed, seconds per item)
+  BEFORE it ships, and the numbers go in the report; (3) when he says "the
+  earlier design", ask which one — I assumed August; he meant 6d.
 
 **Cause 5 — Saying a thing instead of logging it**
 · Reported the period flash in chat and never logged it — twice in one day
