@@ -59,7 +59,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
    * name, or (Phase 7b, "Add a size") a sibling size whose group, unit and
    * GST settings the new size shares — so only the size and prices are typed.
    */
-  initial?: { barcode?: string; name?: string; like?: any }
+  initial?: { barcode?: string; name?: string; like?: any; brand?: string }
 }) {
   const [form, setForm] = useState(EMPTY_FORM)
   // Has the shopkeeper answered the goods/service question themselves? Once
@@ -349,12 +349,21 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{product ? 'Edit Product' : 'Add New Product'}</DialogTitle>
+          {/* #303: "Add a size" says whose size it is. */}
+          <DialogTitle>{product ? 'Edit Product' : initial?.brand ? `New size of ${initial.brand}` : 'Add New Product'}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
           <div className="sm:col-span-2">
             <Label htmlFor="field-product-name">Product Name *</Label>
-            <Input id="field-product-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Aashirvaad Atta 5kg" />
+            <Input
+              id="field-product-name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Aashirvaad Atta 5kg"
+              // #303: a new size starts with the brand's name; the cursor waits after it, ready for "2 kg".
+              autoFocus={!product && !!initial?.brand}
+              onFocus={(e) => { if (!product && initial?.brand) { const n = e.currentTarget.value.length; e.currentTarget.setSelectionRange(n, n) } }}
+            />
           </div>
           {/* #270: the prices — the fields changed most — come straight after the name (they sat below SKU,
               barcode, category, HSN and unit, under the fold on a phone). */}

@@ -14,11 +14,13 @@ const at = (code: string, s: string) => { const i = code.indexOf(s); expect({ s,
 describe('every screen searches items with the one rule (#296)', () => {
   test('the bill screen ranks with itemSearch, lifting the shop\'s best sellers', () => {
     const te = readCode('src/components/ledger/TransactionEntry.tsx')
-    expect(te).toContain('itemSearch(productsInCategory, productSearch, { boost: searchBoost })')
+    expect(te).toContain('itemSearch(products, productSearch, { boost: searchBoost })')
     expect(te).toContain('const filteredProducts = productSearchResult.items')
     expect(te).not.toMatch(/matchesProductSearch|\.name\.toLowerCase\(\)\.includes\(/)
-    // Close matches are labelled, never passed off as matches.
-    expect(te.split('productSearchResult.close &&').length - 1).toBe(2)
+    // Close matches are labelled, never passed off as matches — by the one picker (Phase 7c).
+    expect(te).toContain('result={productSearchResult}')
+    const picker = readCode('src/components/ledger/ItemPicker.tsx')
+    expect(picker.split('p.result.close &&').length - 1).toBe(1)
   })
   test('the search box finds items on the phone and asks the server only for customers and bills (#287)', () => {
     const gs = readCode('src/components/common/GlobalSearch.tsx')

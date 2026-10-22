@@ -39,7 +39,8 @@ import { track, EVENTS } from '@/lib/analytics'
 import { useDrafts } from '@/hooks/use-drafts'
 import { haptic } from '@/lib/haptic'
 import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
-import { counterTiles, foldTiles, freezeWhileBillOpen, TOP_TILES, TOP_TILE_LIMIT, CATEGORY_TILE_LIMIT } from '@/lib/counter-tiles'
+import { freezeWhileBillOpen } from '@/lib/pick-rows'
+import { ItemPicker } from './ItemPicker'
 import { partyMatchesSearch, partyPrefillFromSearch } from '@/lib/party-search'
 import { PaySheet, SavedSheet, type SavedBill } from '@/components/ledger/PaySheet'
 import { buildUpiLink, invoiceShopFromSetting } from '@/lib/invoice-document'
@@ -231,7 +232,6 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const itemDefs = allDefs.filter(f => f.entity === 'item')
 
   // Cascading product selection
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [productSearch, setProductSearch] = useState('')
   const [items, setItems] = useState<ItemRow[]>([])
 
@@ -477,74 +477,53 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // What "Add new" starts with when the search found nobody: a mobile number goes in Phone, a name in Name.
   const addPartyPrefill = useMemo(() => partyPrefillFromSearch(partySearch), [partySearch])
 
-  // Memoize categories — only rebuilds when products change
-  const categories = useMemo(() =>
-    Array.from(new Set(products.map(p => p.category || 'Uncategorized'))).sort(),
-    [products]
-  )
-  // Recently used products — most recently used first.
-  // Only show products that exist in current inventory (in case product was deleted).
-  // Memoized: only recomputes when products array changes (not on every keystroke).
-  const recentProducts = useMemo(() => {
-    const recentIds = getRecentProductIds()
-    return recentIds
-      .map((id) => products.find((p) => p.id === id))
-      .filter((p): p is NonNullable<typeof p> => !!p)
-      .slice(0, 6)
-  }, [products])
-  const productsInCategory = useMemo(() =>
-    selectedCategory
-      ? products.filter(p => (p.category || 'Uncategorized') === selectedCategory)
-      : products,
-    [products, selectedCategory]
-  )
-
   /*
-   * Phase 6c — THE COUNTER. A sale is built on the Counter: the bill on top,
-   * search and the shop's own best sellers as tiles below (beside it on a
-   * computer), Pay at the thumb. Returns, estimates and purchases keep this
-   * form until their phases (build plan 6c–6h), so only a plain sale changes.
-   *
-   * #181/#146: the tiles' order comes from a ranking that is FROZEN while a
-   * bill is open (lib/counter-tiles.ts), so no tap can move a tile.
+   * Phase 6c/6d — a plain sale is paid on the Pay sheet (change, UPI QR, udhaar
+   * to a named customer) and stays open for the next bill. Kept in Phase 7c;
+   * its tile grid is gone (#294).
    */
   const counterMode = actualType === 'sale' && !estimateMode
+  /*
+   * Phase 7c — THE BILL PICKER, one for every bill (components/ledger/ItemPicker.tsx).
+   * "Often sold" (or "Often bought" on a purchase) is the shop's own bills over 90
+   * days; once a party is picked, what THEY usually take comes first. The order is
+   * FROZEN while a bill is open (#181/#146), so a second tap never lands on a row
+   * that moved. A shop with no history yet falls back to the items used last on
+   * this phone.
+   */
+  const pickType = isSale ? 'sale' : 'purchase'
   const { data: topSellersData } = useQuery({
-    queryKey: ['products', 'top-sellers'],
-    queryFn: async () => (await offlineFetch('/api/products/top-sellers')).json(),
-    enabled: counterMode,
+    queryKey: ['products', 'top-sellers', pickType],
+    queryFn: async () => (await offlineFetch(`/api/products/top-sellers?type=${pickType}`)).json(),
     staleTime: 10 * 60 * 1000,
   })
+  const { data: usualData } = useQuery({
+    queryKey: ['products', 'top-sellers', pickType, partyId],
+    queryFn: async () => (await offlineFetch(`/api/products/top-sellers?type=${pickType}&partyId=${encodeURIComponent(partyId)}`)).json(),
+    enabled: !!partyId,
+    staleTime: 10 * 60 * 1000,
+  })
+  const liveOftenIds = useMemo(() => {
+    const ranked = (topSellersData?.ids as string[] | undefined) ?? []
+    // products: a bill just saved changes "recent"; re-read it when the list refreshes.
+    return ranked.length ? ranked : getRecentProductIds()
+  }, [topSellersData, products])
+  const oftenRef = useRef<string[] | undefined>(undefined)
+  const oftenIds = freezeWhileBillOpen(liveOftenIds, oftenRef.current, items.length > 0)
+  oftenRef.current = oftenIds
+  const usualIds: string[] = (partyId && (usualData?.ids as string[] | undefined)) || []
   // Phase 7a (#296): the app's ONE item search (lib/item-search.ts) — word starts in any
   // order, shop words, spelling slips, codes — ranked, with the shop's best sellers lifted
-  // among equal matches. Every match is kept; the list below says "8 of N" when it shows fewer.
+  // among equal matches. Every match is kept; the picker says "8 of N" when it shows fewer.
   const searchBoost = useMemo(() => {
     const ids = (topSellersData?.ids as string[] | undefined) ?? []
     return new Map(ids.map((id, i) => [id, 1 - i / Math.max(ids.length, 1)]))
   }, [topSellersData])
   const productSearchResult = useMemo(
-    () => itemSearch(productsInCategory, productSearch, { boost: searchBoost }),
-    [productsInCategory, productSearch, searchBoost],
+    () => itemSearch(products, productSearch, { boost: searchBoost }),
+    [products, productSearch, searchBoost],
   )
   const filteredProducts = productSearchResult.items
-  const [tileChip, setTileChip] = useState<string>(TOP_TILES)
-  const [tilesExpanded, setTilesExpanded] = useState(false)
-  const liveTileRanking = useMemo(
-    () => ({ rankIds: (topSellersData?.ids as string[] | undefined) ?? [], recentIds: getRecentProductIds() }),
-    // products: a sale just saved changes "recent"; re-read it when the list refreshes.
-    [topSellersData, products],
-  )
-  const tileRankingRef = useRef<{ rankIds: string[]; recentIds: string[] } | undefined>(undefined)
-  const tileRanking = freezeWhileBillOpen(liveTileRanking, tileRankingRef.current, items.length > 0)
-  tileRankingRef.current = tileRanking
-  const counterTileList = useMemo(() => counterTiles(products, {
-    ...tileRanking,
-    category: tileChip === TOP_TILES ? null : tileChip,
-    limit: tileChip === TOP_TILES ? TOP_TILE_LIMIT : CATEGORY_TILE_LIMIT,
-  }), [products, tileRanking, tileChip])
-  // #229: three tiles a row on every screen (the Counter's right column on a computer is a phone's width).
-  const { shown: shownTiles, folded: tilesFolded } = foldTiles(counterTileList, items.length, tilesExpanded, 3)
-  useEffect(() => { if (items.length === 0) setTilesExpanded(false) }, [items.length])
   // Phase 6d: Pay opens one sheet; after saving, the Saved sheet offers Share / Print / Next bill (#145).
   const [paySheetOpen, setPaySheetOpen] = useState(false)
   const [savedBill, setSavedBill] = useState<SavedBill | null>(null)
@@ -1831,176 +1810,67 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
        * wrappers become blocks again and the original two-column grid is restored
        * EXACTLY — no desktop regression, because desktop never sees the reorder.
        */}
-      {/* 6c: on the Counter the bill and the tiles share the width equally (a third left the tiles 70px wide). */}
-      <div className={cn('flex flex-col gap-3 lg:grid lg:gap-4', counterMode ? 'lg:grid-cols-2' : 'lg:grid-cols-3')}>
-        {/* LEFT: Product selection + items list (takes 2 cols) */}
-        <div className={cn('contents lg:block lg:space-y-4', counterMode ? 'lg:col-span-1' : 'lg:col-span-2')}>
-          {/* Product selector card (on the Counter: the bill) */}
-          <Card className={cn('shadow-card border-border/60 order-2 lg:order-none', counterMode && 'py-0')}>
-            {/* p-3 on mobile, p-4 from sm up. Every card on this form paid 4px
-                of padding on all four sides for a look that costs a phone user
-                a visible slice of the product list. */}
-            {!counterMode && (
-            <div className="p-3 sm:p-4 border-b border-border bg-muted/30">
-              {/* "Add Products" is hidden on mobile: a category dropdown and a
-                  search box captioned "SEARCH PRODUCT" sit directly beneath it,
-                  so the heading names something the controls already say. */}
-              <h3 className="font-semibold text-sm items-center gap-2 mb-3 hidden sm:flex">
-                <Package className="w-4 h-4" /> Add Products
-              </h3>
-
-              {/* Cascading: Category dropdown + Product search */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Category selector */}
-                <div>
-                  <Label className="text-xs text-muted-foreground" htmlFor="field-category">Category</Label>
-                  <Select
-                    value={selectedCategory || '__all__'}
-                    onValueChange={(v) => setSelectedCategory(v === '__all__' ? null : v)}
+      {/* Phase 7c: one layout for every bill (#298) — customer, then items and the bill, details, summary, notes. */}
+      <div className="flex flex-col gap-3 lg:grid lg:gap-4 lg:grid-cols-3">
+        {/* LEFT: the picker + the bill (takes 2 cols) */}
+        <div className="contents lg:block lg:space-y-4 lg:col-span-2">
+          <Card className="shadow-card border-border/60 order-2 lg:order-none py-0">
+            {/* Phase 7c: the ONE item picker (components/ledger/ItemPicker.tsx) — a row per brand with its
+                sizes as buttons, "Often sold", the customer's usual items, Groups; nothing cut silently. */}
+            <div className="p-3 sm:p-4 border-b border-border">
+              <ItemPicker
+                products={products}
+                query={productSearch}
+                onQuery={setProductSearch}
+                onEnter={() => {
+                  // A wedge scanner gun types the code then presses Enter.
+                  const match = resolveProductForEnterKey(productSearch, products, filteredProducts)
+                  if (match) {
+                    handleAddProduct(match)
+                    setProductSearch('')  // ready for the next scan
+                  }
+                }}
+                result={productSearchResult}
+                oftenIds={oftenIds}
+                oftenLabel={isSale ? 'Often sold' : 'Often bought'}
+                usualIds={usualIds}
+                customerName={selectedParty?.name ?? null}
+                billLines={items.length}
+                qtyOf={(id) => items.find((i) => i.productId === id)?.quantity ?? 0}
+                priceOf={(p) => (isSale ? p.salePrice : p.purchasePrice)}
+                showsGst={showsGst}
+                onAdd={(p) => handleAddProduct(p)}
+                onDecrement={(id) => handleDecrementProduct(id)}
+                catalogCutNote={catalogCutNote}
+                scanButton={features?.barcodeScanner ? (
+                  <button
+                    type="button"
+                    onClick={() => setBarcodeOpen(true)}
+                    className="min-h-12 min-w-12 inline-flex items-center justify-center rounded-md hover:bg-muted text-primary"
+                    aria-label="Scan barcode"
                   >
-                    <SelectTrigger className="mt-1 bg-background">
-                      <Folder className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
-                      <SelectValue placeholder="All Categories" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">All Categories ({products.length})</SelectItem>
-                      {categories.map(cat => {
-                        const count = products.filter(p => (p.category || 'Uncategorized') === cat).length
-                        return (
-                          <SelectItem key={cat} value={cat}>
-                            {cat} ({count})
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Product search */}
-                <div className="sm:col-span-2">
-                  <Label className="text-xs text-muted-foreground" htmlFor="field-search-product">Search Product</Label>
-                  <div className="relative mt-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input id="field-search-product"
-                      placeholder="Type name, SKU, barcode, or scan..."
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return
-                        e.preventDefault()
-                        // A wedge scanner gun types the code then presses Enter.
-                        const match = resolveProductForEnterKey(productSearch, products, filteredProducts)
-                        if (match) {
-                          handleAddProduct(match)
-                          setProductSearch('')  // ready for the next scan
-                        }
-                      }}
-                      className="pl-9 pr-12"
-                    />
-                    {features?.barcodeScanner && (
-                      <button
-                        type="button"
-                        onClick={() => setBarcodeOpen(true)}
-                        className="min-h-12 min-w-12 inline-flex items-center justify-center absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
-                        aria-label="Scan barcode"
-                        title="Scan barcode to find product"
-                      >
-                        <ScanLine className="w-5 h-5" />
-                      </button>
-                    )}
-                  </div>
-                  {catalogCutNote && <p className="mt-1 text-xs font-semibold text-check">{catalogCutNote}</p>}
-                </div>
-              </div>
-
-              {/* Recently used products — quick-pick chips */}
-              {!productSearch && !selectedCategory && recentProducts.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-xs text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> Recently Used
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {recentProducts.map((p) => {
-                      const inList = items.find((i) => i.productId === p.id)
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => handleAddProduct(p)}
-                          className={cn(
-                            'px-2.5 py-1.5 rounded-lg text-xs font-medium border transition flex items-center gap-1.5',
-                            inList
-                              ? 'bg-emerald-100 dark:bg-emerald-950/40 border-emerald-300 text-emerald-700 dark:text-emerald-300'
-                              : 'bg-muted/50 border-border hover:bg-muted hover:border-primary/30'
-                          )}
-                        >
-                          <Package className="w-3 h-3" />
-                          <span className="truncate max-w-[100px]">{p.name}</span>
-                          {inList && <Check className="w-3 h-3" />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Product list - clickable to add */}
-              {filteredProducts.length > 0 && (
-                /* Taller on a phone (max-h-72 ≈ 288px vs 192px), because this
-                   list IS the job. It was showing barely three rows inside a
-                   192px window while the form around it had room to spare. */
-                <div className="mt-3 max-h-72 sm:max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
-                  {productSearchResult.close && <p className="px-3 pt-2 text-xs font-semibold text-check">No exact match · close spellings</p>}
-                  {filteredProducts.slice(0, 20).map(p => (
-                    <PickRow
-                      key={p.id}
-                      product={p}
-                      qty={items.find(i => i.productId === p.id)?.quantity ?? 0}
-                      price={isSale ? p.salePrice : p.purchasePrice}
-                      showsGst={showsGst}
-                      onAdd={() => handleAddProduct(p)}
-                      onDecrement={() => handleDecrementProduct(p.id)}
-                    />
-                  ))}
-                  {filteredProducts.length > 20 && (
-                    <p className="text-center text-xs text-muted-foreground py-2">
-                      Showing 20 of {filteredProducts.length} — refine search to see more
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {filteredProducts.length === 0 && (
-                <div className="mt-3">
-                  {productSearch ? (
-                    // User is searching — show a simple "no matches" message
-                    <div className="text-center py-6 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
-                      <Package className="w-8 h-8 mx-auto mb-1 text-muted-foreground/50" />
-                      No products match &quot;{productSearch}&quot;
-                    </div>
-                  ) : (
-                    // 🐛 UI/UX Phase 1 Fix 1: No products at all — show actionable empty state
-                    // with a button to go to Inventory + a button to scan a bill (which can
-                    // create products automatically). Was: a dead-end div with no escape.
-                    <EmptyState
-                      icon={Package}
-                      title="No products yet"
-                      description="You need at least one product to record a sale. Add your first product — it takes 30 seconds. Or scan a bill and we'll create the products for you."
-                      action={{ label: 'Add Product', onClick: () => setView('inventory') }}
-                      secondaryAction={{ label: 'Scan a Bill', onClick: () => { setScannerBillType(isSale ? 'sale' : 'purchase'); setView('scanner') } }}
-                      color="blue"
-                      compact
-                    />
-                  )}
-                </div>
-              )}
+                    <ScanLine className="w-5 h-5" />
+                  </button>
+                ) : null}
+                empty={(
+                  <EmptyState
+                    icon={Package}
+                    title="No products yet"
+                    description="Add your first product, or scan a bill."
+                    action={{ label: 'Add Product', onClick: () => setView('inventory') }}
+                    secondaryAction={{ label: 'Scan a Bill', onClick: () => { setScannerBillType(isSale ? 'sale' : 'purchase'); setView('scanner') } }}
+                    color="blue"
+                    compact
+                  />
+                )}
+              />
             </div>
-            )}
 
             {/* Items list */}
             <div className="p-3 sm:p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-sm flex items-center gap-2">
-                  <ShoppingCart className="w-4 h-4" /> {counterMode ? 'Bill' : 'Selected Items'}
+                  <ShoppingCart className="w-4 h-4" /> Bill
                   {items.length > 0 && <Badge variant="secondary">{items.length}</Badge>}
                 </h3>
                 {items.length > 0 && (
@@ -2304,7 +2174,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               the top of this screen already carries the customer and the
               date, which is as much as fits before the item list. */}
           {billDefs.length > 0 && (
-            <Card className={cn('shadow-card border-border/60 lg:order-none', counterMode ? 'order-6' : 'order-5')}>
+            <Card className="shadow-card border-border/60 lg:order-none order-5 py-0">
               <div className="p-3 sm:p-4">
                 <CustomFieldInputs
                   idPrefix="bill"
@@ -2317,7 +2187,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           )}
 
           {/* Notes */}
-          <Card className={cn('shadow-card border-border/60 lg:order-none', counterMode ? 'order-6' : 'order-5')}>
+          <Card className="shadow-card border-border/60 lg:order-none order-5 py-0">
             <div className="p-3 sm:p-4">
               <Label htmlFor="field-notes-optional">Notes (optional)</Label>
               <Input id="field-notes-optional"
@@ -2369,7 +2239,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         <div className="contents lg:block lg:space-y-4">
           {/* Party selection */}
           {/* 6c: the Card's own py-4 sat on top of this p-3 (28px above the first line); the Counter drops it. */}
-          <Card className={cn('shadow-card border-border/60 order-1 lg:order-none', counterMode && 'py-0')}>
+          <Card className="shadow-card border-border/60 order-1 lg:order-none py-0">
             <div className="p-3 sm:p-4">
               {/*
                 🔒 "Add New" lives beside the heading (2026-08-03, reported by
@@ -2645,121 +2515,6 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           </Card>
 
           {/* Transaction details */}
-          {/* Phase 6c — the Counter's add card: search, then the shop's best sellers as tiles that never move. */}
-          {counterMode && (
-            <Card className="shadow-card border-border/60 order-3 lg:order-none py-0">
-              <div className="p-3 sm:p-4 space-y-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden />
-                  <Input id="field-search-product"
-                    aria-label="Search items"
-                    placeholder="Type name or price, or scan…"
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return
-                      e.preventDefault()
-                      // A wedge scanner gun types the code then presses Enter.
-                      const match = resolveProductForEnterKey(productSearch, products, filteredProducts)
-                      if (match) {
-                        handleAddProduct(match)
-                        setProductSearch('')  // ready for the next scan
-                      }
-                    }}
-                    className="pl-9 pr-12"
-                  />
-                  {features?.barcodeScanner && (
-                    <button
-                      type="button"
-                      onClick={() => setBarcodeOpen(true)}
-                      className="min-h-12 min-w-12 inline-flex items-center justify-center absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
-                      aria-label="Scan barcode"
-                    >
-                      <ScanLine className="w-5 h-5" />
-                    </button>
-                  )}
-                </div>
-                {catalogCutNote && <p className="text-xs font-semibold text-check">{catalogCutNote}</p>}
-
-                {products.length === 0 ? (
-                  <EmptyState
-                    icon={Package}
-                    title="No products yet"
-                    description="Add your first product, or scan a bill."
-                    action={{ label: 'Add Product', onClick: () => setView('inventory') }}
-                    secondaryAction={{ label: 'Scan a Bill', onClick: () => { setScannerBillType('sale'); setView('scanner') } }}
-                    color="blue"
-                    compact
-                  />
-                ) : productSearch ? (
-                  /* Search results as plain rows in the page — never a scroll box inside the scrolling page (#232). */
-                  filteredProducts.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">No item matches &quot;{productSearch}&quot;</p>
-                  ) : (
-                    <div className="rounded-lg border border-border bg-background">
-                      {productSearchResult.close && <p className="px-3 pt-2 text-xs font-semibold text-check">No exact match · close spellings</p>}
-                      {filteredProducts.slice(0, 8).map(p => (
-                        <PickRow
-                          key={p.id}
-                          product={p}
-                          qty={items.find(i => i.productId === p.id)?.quantity ?? 0}
-                          price={p.salePrice}
-                          showsGst={showsGst}
-                          onAdd={() => handleAddProduct(p)}
-                          onDecrement={() => handleDecrementProduct(p.id)}
-                        />
-                      ))}
-                      {filteredProducts.length > 8 && (
-                        <p className="text-center text-xs text-muted-foreground py-2">
-                          8 of {filteredProducts.length} shown — type more to narrow
-                        </p>
-                      )}
-                    </div>
-                  )
-                ) : (
-                  <>
-                    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" role="tablist" aria-label="Item groups">
-                      {[TOP_TILES, ...categories].map(c => (
-                        <button
-                          key={c}
-                          type="button"
-                          role="tab"
-                          aria-selected={tileChip === c}
-                          onClick={() => setTileChip(c)}
-                          className={cn(
-                            'hit-48 relative shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
-                            tileChip === c ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted',
-                          )}
-                        >
-                          {c === TOP_TILES ? 'Top' : c === 'Uncategorized' ? 'Other' : c}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {shownTiles.map(p => (
-                        <CounterTile
-                          key={p.id}
-                          product={p}
-                          qty={items.find(i => i.productId === p.id)?.quantity ?? 0}
-                          onAdd={() => handleAddProduct(p)}
-                        />
-                      ))}
-                    </div>
-                    {tilesFolded && (
-                      <button
-                        type="button"
-                        onClick={() => setTilesExpanded(true)}
-                        className="w-full min-h-12 rounded-lg text-sm font-semibold text-primary hover:bg-muted"
-                      >
-                        More items ({counterTileList.length - shownTiles.length})
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </Card>
-          )}
-
           {/*
            * Collapsed on a phone, open on desktop.
            *
@@ -2775,7 +2530,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
            * to answer. Desktop keeps everything expanded, because there the
            * right-hand column is otherwise empty space.
            */}
-          <Card className={cn('shadow-card border-border/60 lg:order-none', counterMode ? 'order-4' : 'order-3')}>
+          <Card className="shadow-card border-border/60 lg:order-none order-3 py-0">
             <div className="p-3 sm:p-4 space-y-3">
               <button
                 type="button"
@@ -3176,7 +2931,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           )}
 
           {/* Live summary */}
-          <Card className={cn('shadow-card border-border/60 sticky top-20 lg:order-none', counterMode ? 'order-5' : 'order-4')}>
+          <Card className="shadow-card border-border/60 sticky top-20 lg:order-none order-4 py-0">
             <div className="p-3 sm:p-4">
               <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
                 <IndianRupee className="w-4 h-4" /> Summary
@@ -3551,141 +3306,5 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded, prefill }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-/**
- * One item in a pick list: name, price, stock, and + (a − 2 + stepper once it
- * is on the bill). Shared by the old picker and the Counter's search results,
- * so the two can never show an item differently.
- */
-function PickRow({ product: p, qty, price, showsGst, onAdd, onDecrement }: {
-  product: any
-  qty: number
-  price: number
-  showsGst: boolean
-  onAdd: () => void
-  onDecrement: () => void
-}) {
-  return (
-    /*
-     * A row, not one big button.
-     *
-     * The whole row used to be a single <button>, which is why the added state
-     * could only ever be a label: a stepper needs its own buttons, and a button
-     * inside a button is invalid HTML that browsers quietly flatten. Splitting
-     * the row lets the info area stay tappable to add, while − and + become
-     * real controls beside it.
-     */
-    <div className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-2.5 py-2 transition border-b border-border/30 last:border-0 hover:bg-muted/50">
-      <button
-        onClick={onAdd}
-        aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`}
-        className="flex-1 min-w-0 min-h-12 flex items-center gap-2 sm:gap-3 text-left"
-      >
-        {/* The box icon is hidden on mobile: it is the same on every row and costs the NAME 36px. */}
-        <div className="w-9 h-9 rounded-lg bg-muted items-center justify-center flex-shrink-0 hidden sm:flex">
-          <Package className="w-4 h-4 text-muted-foreground" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{p.name}</p>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {p.category && <Badge variant="outline" className="text-xs py-0">{p.category}</Badge>}
-            <span>{formatINR(price)}/{p.unit}</span>
-            {showsGst && (
-              <>
-                <span>•</span>
-                <span>GST {p.gstRate}%</span>
-              </>
-            )}
-          </div>
-        </div>
-        {/* The stock column while billing. A service is never "0 pcs, OUT" — it always is available. */}
-        <div className="text-right flex-shrink-0">
-          <p className={cn(
-            'text-xs font-medium',
-            isService(p) ? 'text-violet-600 dark:text-violet-400' :
-            p.currentStock <= 0 ? 'text-rose-600' :
-            p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
-          )}>
-            {isService(p) ? 'Service' : `${p.currentStock} ${p.unit}`}
-          </p>
-          {/* 🔒 V8 U6: Inline stock badge for quick visibility while billing */}
-          {!isService(p) && p.currentStock <= 0 && (
-            <span className="text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-full">OUT</span>
-          )}
-          {!isService(p) && p.currentStock > 0 && p.isLowStock && (
-            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
-          )}
-        </div>
-      </button>
-      {/*
-       * A stepper once it is in the sale — "− 2 +" — instead of a "✓ Added"
-       * badge: billing is a counting job (Blinkit, Zepto, Swiggy, BigBasket).
-       */}
-      <div className="flex-shrink-0">
-        {qty > 0 ? (
-          <div className="flex items-center rounded-lg border border-primary/40 bg-primary/5 overflow-hidden">
-            <button
-              onClick={onDecrement}
-              aria-label={qty === 1 ? `Remove ${p.name} from this sale` : `Reduce ${p.name} to ${qty - 1}`}
-              className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
-            >
-              {/* At one, the next press removes the line, so say so. */}
-              {qty === 1 ? <Trash2 className="w-3.5 h-3.5" /> : <Minus className="w-4 h-4" />}
-            </button>
-            <span className="min-w-[26px] text-center text-sm font-bold text-primary tabular-nums">
-              {qty}
-            </span>
-            <button
-              onClick={onAdd}
-              aria-label={`Add another ${p.name}`}
-              className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={onAdd}
-            aria-label={`Add ${p.name}`}
-            className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 active:scale-95 transition"
-          >
-            <Plus className="w-4 h-4 text-primary" />
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/**
- * Phase 6c: a quick tile on the Counter — one tap adds one. 64px tall (final
- * plan §1), the name in two lines, the price, and the count once it is on the
- * bill. It never moves while a bill is open (lib/counter-tiles.ts).
- */
-function CounterTile({ product: p, qty, onAdd }: { product: any; qty: number; onAdd: () => void }) {
-  const out = !isService(p) && Number(p.currentStock) <= 0
-  return (
-    <button
-      type="button"
-      onClick={onAdd}
-      aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`}
-      className={cn(
-        'relative min-h-16 rounded-xl px-2 py-2 text-left flex flex-col justify-between gap-1 transition active:scale-[0.98]',
-        qty > 0 ? 'bg-primary/10 ring-1 ring-primary/40' : 'bg-muted/60 hover:bg-muted',
-      )}
-    >
-      <span className="text-sm font-semibold leading-tight line-clamp-2 pr-5 break-words">{p.name}</span>
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {formatINR(p.salePrice)}{p.unit && p.unit !== 'pcs' ? `/${p.unit}` : ''}
-        {out && <span className="text-bad font-semibold"> · out</span>}
-      </span>
-      {qty > 0 && (
-        <span className="absolute top-1 right-1 min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-xs font-bold tabular-nums flex items-center justify-center" aria-hidden>
-          {qty}
-        </span>
-      )}
-    </button>
   )
 }

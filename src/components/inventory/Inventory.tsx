@@ -462,7 +462,7 @@ export function Inventory() {
         product={editingProduct}
         focusField={priceFocus ? 'salePrice' : undefined}
         // Phase 7b "Add a size": starts from the brand's name and a sibling's group, unit and GST settings.
-        initial={addSizeTo ? { name: `${addSizeTo.name} `, like: addSizeTo.members[0] } : undefined}
+        initial={addSizeTo ? { name: `${addSizeTo.name} `, like: addSizeTo.members[0], brand: addSizeTo.name } : undefined}
         onSuccess={async (saved) => {
           if (addSizeTo && saved?.id) {
             const r = await offlineFetch(`/api/products/families/${addSizeTo.id}`, {

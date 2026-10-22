@@ -71,8 +71,11 @@ test.describe('Critical Flow: record a sale and find it in the ledger', () => {
     await expect(productResult).toBeVisible({ timeout: 15_000 })
     await productResult.click()
 
-    // Adding it a second time makes the quantity 2 — the same way a shopkeeper
-    // ringing up two of something does it.
+    // Adding it a second time makes the quantity 2. Phase 7c (#301): adding clears
+    // the search, ready for the next item — so, as a shopkeeper would, find it
+    // again. (The second tap used to land on a tile, which only a one-item shop has.)
+    await page.locator('#field-search-product').fill(E2E_PRODUCT.name)
+    await expect(productResult).toBeVisible({ timeout: 15_000 })
     await productResult.click()
 
     // ── Choose the customer ───────────────────────────────────────────────
