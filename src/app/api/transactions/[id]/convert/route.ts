@@ -3,7 +3,8 @@ import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibility'
-import { computeLineItems } from '@/lib/line-items'
+import { computeLineItems, mrpCheckLines } from '@/lib/line-items'
+import { linesAboveMrp, mrpRefusalMessage } from '@/lib/unit-profit'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { refillPrice } from '@/lib/refill-line'
 import { normalizeToUnit } from '@/lib/units'
@@ -143,6 +144,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         unit: item.enteredUnit ?? (product?.unit || item.unit || 'pcs'),
       }
     })
+
+    // Phase 7e: the sale may not go above the printed MRP — the same refusal
+    // as a new sale (transactions/route.ts). An estimate is a quote, not a
+    // sale, so its price is not "already sold"; it is fixed on the estimate.
+    const above = linesAboveMrp(mrpCheckLines(items, productMap), (pid) => productMap.get(pid), { chargesGst: chargesGstOnSales(gstStatus(setting)) })
+    if (above.length) {
+      return NextResponse.json({ error: 'Price above MRP', message: mrpRefusalMessage(above) }, { status: 400 })
+    }
 
     const orderDiscount = toMoney(estimate.discountAmount)
     const computed = computeLineItems({

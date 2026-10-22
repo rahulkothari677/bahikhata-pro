@@ -25,7 +25,31 @@
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney, toPaise, fromPaise, multiplyPaise, calculateGstPaise, splitGstPaise, addPaise } from './money'
 import { normalizeUnitName, resolveEnteredQuantity, isSubUnit } from './units'
 import { isOutwardDocument } from './shop-tax'
-import { hasCostPrice } from './unit-profit'
+import { hasCostPrice, type MrpCheckLine } from './unit-profit'
+import { refillPrice } from './refill-line'
+
+/**
+ * Phase 7e: request lines as computeLineItems reads them — the price as typed,
+ * the line's own rate, and "includes GST" from the line or else the item — for
+ * the MRP check (unit-profit.ts linesAboveMrp). Read here, beside the engine,
+ * so the check can never read a line differently from the bill it guards.
+ */
+export function mrpCheckLines(items: RawLineItem[], productMap: Map<string, any>): MrpCheckLine[] {
+  return items.map((item) => {
+    const product = item.productId ? productMap.get(item.productId) : null
+    return {
+      productId: item.productId ?? null,
+      unitPrice: toMoney(item.unitPrice),
+      gstRate: toMoney(item.gstRate) || 0,
+      priceIncludesGst: item.priceIncludesGst ?? product?.priceIncludesGst ?? false,
+    }
+  })
+}
+
+/** A SAVED bill's lines for the same check, refilled by the one refill rule (#130). */
+export function savedMrpCheckLines(lines: Array<{ productId: string | null; unitPrice: number; enteredPrice?: number | null; priceIncludesGst?: boolean | null; gstRate: number }>): MrpCheckLine[] {
+  return lines.map((l) => ({ productId: l.productId, gstRate: l.gstRate, ...refillPrice(l) }))
+}
 
 export interface RawLineItem {
   productId?: string | null

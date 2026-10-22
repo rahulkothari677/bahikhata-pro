@@ -75,7 +75,8 @@ import { istDateString } from '@/lib/timezone'
 import { refillPrice, resolveLineIncludesGst } from '@/lib/refill-line'
 import { lineTaxable } from '@/lib/line-taxable'
 import { gstStatus, chargesGstOnSales, claimsInputCredit, isOutwardDocument } from '@/lib/shop-tax'
-import { purchaseCostPerUnit, purchaseRateFromCost, isNoCostLine, marginOnCosted } from '@/lib/unit-profit'
+import { purchaseCostPerUnit, purchaseRateFromCost, isNoCostLine, marginOnCosted, linesAboveMrp } from '@/lib/unit-profit'
+import { quantityForAmount } from '@/lib/loose-amount'
 import { StateField, GstinField } from '@/components/common/StateField'
 
 const PAYMENT_MODES = [
@@ -872,7 +873,41 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
   const handleRemoveItem = (index: number) => {
     setPresetLoaded(false) // User manually removed — resume autosave
+    const removed = items[index]
     setItems(items.filter((_, i) => i !== index))
+    setByAmount(null)
+    // Phase 7e: a wrong tap on ✕ is one tap to put right — the line comes back where it was.
+    if (removed) {
+      sonnerToast(`${removed.productName} removed`, {
+        action: { label: 'Undo', onClick: () => setItems((now) => [...now.slice(0, index), removed, ...now.slice(index)]) },
+        duration: 6000,
+      })
+    }
+  }
+
+  /*
+   * Phase 7e — loose goods by rupees ("₹50 of sugar" at ₹44 a kg = 1.136 kg):
+   * the line's quantity from what the customer pays, by the bill's own price
+   * rule (lib/loose-amount.ts). The line then shows what it comes to (₹49.98).
+   */
+  const [byAmount, setByAmount] = useState<{ line: number; value: string } | null>(null)
+  const setLineByAmount = (index: number, value: string) => {
+    setByAmount({ line: index, value })
+    const item = items[index]
+    if (!item) return
+    const p = item.productId ? productMap.get(item.productId) : null
+    const q = quantityForAmount(
+      parseFloat(value) || 0,
+      { unitPrice: Number(item.unitPrice) || 0, gstRate: Number(item.gstRate) || 0, priceIncludesGst: lineIncludesGst(item, p), unit: item.unit },
+      p?.unit,
+      { chargesGst: shopChargesGst },
+    )
+    if (q !== null) handleUpdateItem(index, 'quantity', q)
+  }
+  /** Phase 7e: one tap from "above MRP" to the MRP — an MRP includes GST, so the line does too. */
+  const sellAtMrp = (index: number, mrp: number) => {
+    setPresetLoaded(false)
+    setItems((now) => now.map((it, i) => (i === index ? { ...it, unitPrice: mrp, priceIncludesGst: true } : it)))
   }
 
   // V17 Audit §1: Load items from the original sale when creating a credit note.
@@ -1159,6 +1194,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
   // In 'block' mode, the Save button is disabled if any item would go negative.
   const hasStockBlock = stockPolicy === 'block' && liveStockWarnings.length > 0
+  // Phase 7e: no sale above the printed MRP — shown on the line, Save waits. The
+  // server refuses the same lines (lib/unit-profit.ts linesAboveMrp, one rule).
+  const mrpOver = actualType === 'sale'
+    ? linesAboveMrp(computeInput, (id) => productMap.get(id), { chargesGst: shopChargesGst })
+    : []
+  const hasMrpBlock = mrpOver.length > 0
+  const saveBlocked = hasStockBlock || hasMrpBlock
 
   const handleSave = async (payOpts?: { paymentMode?: string; paidAmount?: string; given?: number | null }) => {
     // Phase 6d: the Counter's Pay sheet passes its choice here; the form's own fields otherwise.
@@ -1235,6 +1277,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       ).join('\n')
       sonnerToast.error('Not enough stock', {
         description: `${lines}\n\nRecord a purchase first, or enable "Allow overselling" in Settings.`,
+        duration: 8000,
+      })
+      return
+    }
+    if (hasMrpBlock) {
+      sonnerToast.error('Price above MRP', {
+        description: mrpOver.map((m) => `• ${m.name}: ${formatINR(m.pays)} each, MRP ${formatINR(m.mrp)}`).join('\n'),
         duration: 8000,
       })
       return
@@ -1454,7 +1503,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
   // F10 (7c-2): exactly what the bar's button does — Pay on a plain sale, Save on any other bill.
   finishRef.current = () => {
-    if (saving || hasStockBlock) return
+    if (saving || saveBlocked) return
     if (counterMode) setPaySheetOpen(true)
     else handleSave()
   }
@@ -2197,7 +2246,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             compact
                             aria-label="Price"
                             value={item.unitPrice}
-                            onValueChange={(v) => handleUpdateItem(i, 'unitPrice', parseFloat(v) || 0)}
+                            onValueChange={(v) => {
+                              handleUpdateItem(i, 'unitPrice', parseFloat(v) || 0)
+                              if (byAmount?.line === i) setByAmount(null)
+                            }}
                             className="flex-1 min-w-0"
                             inputClassName="tabular-nums"
                             min={0}
@@ -2227,14 +2279,43 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         </div>
                         {/* 🔒 V12: Inline, self-verifying math so the shopkeeper
                             instantly sees the real per-unit calculation. */}
-                        <div className="pl-5 mt-1 text-xs text-muted-foreground tabular-nums">
-                          {item.quantity} {normalizeUnitName(item.unit)}
-                          {converted && <span className="text-primary"> = {roundMoney(normQty)} {normUnit}</span>}
-                          {' '}× ₹{item.unitPrice}/{normUnit}
-                          {/* "1 × ₹230 = ₹241.50" read as bad maths: say where the GST went. */}
-                          {lineRate > 0 && (lineInclusive ? ' (incl. GST)' : ` + ${lineRate}% GST`)}
-                          {' '}= <span className="font-semibold text-foreground">{formatINR(itemTotal)}</span>
+                        <div className="pl-5 mt-1 flex items-center gap-2">
+                          <p className="flex-1 min-w-0 text-xs text-muted-foreground tabular-nums">
+                            {item.quantity} {normalizeUnitName(item.unit)}
+                            {converted && <span className="text-primary"> = {roundMoney(normQty)} {normUnit}</span>}
+                            {' '}× ₹{item.unitPrice}/{normUnit}
+                            {/* "1 × ₹230 = ₹241.50" read as bad maths: say where the GST went. */}
+                            {lineRate > 0 && (lineInclusive ? ' (incl. GST)' : ` + ${lineRate}% GST`)}
+                            {' '}= <span className="font-semibold text-foreground">{formatINR(itemTotal)}</span>
+                          </p>
+                          {/* Phase 7e: loose goods by rupees — on the line's own row, so it adds no height. */}
+                          {!isCountUnit(item.unit) && Number(item.unitPrice) > 0 && byAmount?.line !== i && (
+                            <button type="button" className="min-h-12 px-2 -mr-1 flex-shrink-0 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10" onClick={() => setByAmount({ line: i, value: '' })}>
+                              Sell by ₹
+                            </button>
+                          )}
                         </div>
+                        {byAmount?.line === i && (
+                          <div className="pl-5 mt-1 flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground flex-shrink-0">Customer pays</span>
+                            <NumberField
+                              compact
+                              prefix="₹"
+                              aria-label={`Amount for ${item.productName}`}
+                              value={byAmount.value}
+                              onValueChange={(v) => setLineByAmount(i, v)}
+                              className="flex-1 min-w-0"
+                              inputClassName="tabular-nums"
+                              min={0}
+                              step={10}
+                              decimals={2}
+                              placeholder="Amount"
+                            />
+                            <button type="button" className="min-h-12 px-2 -mr-1 flex-shrink-0 rounded-lg text-xs font-semibold text-primary hover:bg-primary/10" onClick={() => setByAmount(null)}>
+                              Done
+                            </button>
+                          </div>
+                        )}
                         {/* 🔒 V11 STOCK POLICY: Live stock warning per item.
                             Shows immediately when the user enters a quantity
                             that exceeds available stock — no need to hit Save. */}
@@ -2249,6 +2330,20 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             )}>
                               <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                               {isBlock ? 'Not enough stock' : 'Will go negative'}: have {warning.currentStock}, selling {warning.requestedQty} → {warning.resultingStock}
+                            </div>
+                          )
+                        })()}
+                        {/* Phase 7e: above the printed MRP — said on the line, fixed in one tap. */}
+                        {(() => {
+                          const over = mrpOver.find((m) => m.index === i)
+                          if (!over) return null
+                          return (
+                            <div className="pl-5 mt-1 flex items-center gap-2 text-xs font-medium text-bad">
+                              <AlertTriangle className="w-3 h-3 flex-shrink-0" aria-hidden />
+                              <span className="flex-1 min-w-0 tabular-nums">Above MRP: {formatINR(over.pays)} each, MRP {formatINR(over.mrp)}</span>
+                              <button type="button" className="min-h-12 px-2 -mr-1 flex-shrink-0 rounded-lg font-semibold text-primary hover:bg-primary/10" onClick={() => sellAtMrp(i, over.mrp)}>
+                                Sell at MRP
+                              </button>
                             </div>
                           )
                         })()}
@@ -3225,6 +3320,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           <p className="text-lg font-bold tabular-nums leading-tight">{formatINR(totalAmount)}</p>
           {hasStockBlock ? (
             <p className="text-xs text-rose-600 font-medium">Not enough stock</p>
+          ) : hasMrpBlock ? (
+            <p className="text-xs text-bad font-medium">Price above MRP</p>
           ) : due > 0 && items.length > 0 ? (
             <p className="text-xs text-rose-600 font-medium tabular-nums">
               {formatINR(due)} due
@@ -3235,11 +3332,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           Cancel
         </Button>
         {counterMode ? (
-          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-6 tabular-nums" onClick={() => setPaySheetOpen(true)} disabled={saving || hasStockBlock || items.length === 0}>
+          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-6 tabular-nums" onClick={() => setPaySheetOpen(true)} disabled={saving || saveBlocked || items.length === 0}>
             Pay {formatINR(totalAmount)}
           </Button>
         ) : (
-          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-6" onClick={() => handleSave()} disabled={saving || hasStockBlock}>
+          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-6" onClick={() => handleSave()} disabled={saving || saveBlocked}>
             <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
           </Button>
         )}
@@ -3258,7 +3355,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             </p>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
           </div>
-          {due > 0 && items.length > 0 && !hasStockBlock && (
+          {due > 0 && items.length > 0 && !saveBlocked && (
             <div className="text-sm font-medium text-rose-600 tabular-nums">
               {formatINR(due)} due
             </div>
@@ -3269,16 +3366,22 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <span>Not enough stock — record a purchase or enable overselling in Settings</span>
             </div>
           )}
+          {!hasStockBlock && hasMrpBlock && (
+            <div className="flex items-center gap-1.5 text-sm text-bad font-medium bg-bad-soft px-3 py-1.5 rounded-lg">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>Price above MRP — lower it on the line</span>
+            </div>
+          )}
         </div>
         <Button variant="outline" onClick={handleCancel} className="h-11 px-5">
           Cancel
         </Button>
         {counterMode ? (
-          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-8 tabular-nums" onClick={() => setPaySheetOpen(true)} disabled={saving || hasStockBlock || items.length === 0}>
+          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-8 tabular-nums" onClick={() => setPaySheetOpen(true)} disabled={saving || saveBlocked || items.length === 0}>
             Pay {formatINR(totalAmount)}
           </Button>
         ) : (
-          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-8" onClick={() => handleSave()} disabled={saving || hasStockBlock}>
+          <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-8" onClick={() => handleSave()} disabled={saving || saveBlocked}>
             <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
           </Button>
         )}

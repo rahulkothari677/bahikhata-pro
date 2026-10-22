@@ -10,7 +10,8 @@ import { resolveBillDelivery, shipToChoiceRefusal } from '@/lib/bill-delivery'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { getOrCreateWalkInParty } from '@/lib/walk-in-party'
-import { computeLineItems } from '@/lib/line-items'
+import { computeLineItems, mrpCheckLines, savedMrpCheckLines } from '@/lib/line-items'
+import { linesAboveMrp, mrpRefusalMessage } from '@/lib/unit-profit'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
 import { UnitMismatchError } from '@/lib/unit-mismatch-error'
@@ -561,6 +562,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           stockWarnings,
           hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
         }, { status: 400 })
+      }
+    }
+
+    // Phase 7e: no sale above the printed MRP — the same refusal as create
+    // (transactions/route.ts). A line already saved at its price keeps it: the
+    // packet's MRP then may be higher than the item's MRP today.
+    if (type === 'sale') {
+      const above = linesAboveMrp(mrpCheckLines(items, productMap), (pid) => productMap.get(pid), { chargesGst: chargesGstOnSales(gstStatus(setting)) }, savedMrpCheckLines(oldItems))
+      if (above.length) {
+        return NextResponse.json({ error: 'Price above MRP', message: mrpRefusalMessage(above) }, { status: 400 })
       }
     }
 

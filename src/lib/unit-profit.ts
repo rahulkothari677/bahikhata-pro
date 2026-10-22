@@ -19,6 +19,7 @@
  * Margin is on the before-GST price, the same basis as the bill screen.
  */
 import { roundMoney, fromPaise, toPaise, multiplyPaise } from './money'
+import { formatINR } from './utils'
 
 export interface PricedProduct {
   salePrice?: number | null
@@ -61,6 +62,69 @@ export function customerPaysPerUnit(p: PricedProduct, opts: ProfitOptions = {}):
 export function aboveMrp(p: PricedProduct & { mrp?: number | null }, opts: ProfitOptions = {}): boolean {
   const mrp = Number(p.mrp) || 0
   return mrp > 0 && Math.round(customerPaysPerUnit(p, opts) * 100) > Math.round(mrp * 100)
+}
+
+/**
+ * Phase 7e — the same rule for a LINE on a bill: what the customer pays per
+ * unit on this line (its own price, its own "includes GST", its own rate), if
+ * that is above the item's printed MRP; null when it is not, or there is no
+ * MRP. A line's price is always per the ITEM's unit — the bill engine converts
+ * the quantity (1 dozen → 12 pcs, 500 g → 0.5 kg), never the price
+ * (line-items.ts) — so it compares with the MRP of one unit as it stands.
+ * One rule for the bill screen (shown on the line, Save waits) and the server
+ * (the sale is refused).
+ */
+export function lineAboveMrp(
+  line: { unitPrice: number; gstRate?: number | null; priceIncludesGst?: boolean | null },
+  product: { mrp?: number | null } | null | undefined,
+  opts: ProfitOptions = {},
+): number | null {
+  const mrp = Number(product?.mrp) || 0
+  if (!mrp) return null
+  const pays = customerPaysPerUnit({ salePrice: line.unitPrice, gstRate: line.gstRate ?? 0, priceIncludesGst: !!line.priceIncludesGst }, opts)
+  return Math.round(pays * 100) > Math.round(mrp * 100) ? pays : null
+}
+
+export interface MrpCheckLine {
+  productId?: string | null
+  unitPrice: number
+  gstRate?: number | null
+  priceIncludesGst?: boolean | null
+}
+
+/**
+ * Every line of a sale above its item's printed MRP — the list the server
+ * refuses and the bill screen flags (Phase 7e). `saved` is the bill as it was
+ * saved, on an edit: a line the customer already paid at that price (same item,
+ * same or higher price per unit) keeps it, because the MRP printed on the
+ * packet then may have been higher than the item's MRP today (GST 2.0 cut
+ * prices on 22 Sep 2025, 09/2025-CT(R)). An edit may not RAISE a line above
+ * today's MRP.
+ */
+export function linesAboveMrp<P extends { name: string; mrp?: number | null }>(
+  lines: MrpCheckLine[],
+  productOf: (id: string) => P | null | undefined,
+  opts: ProfitOptions = {},
+  saved: MrpCheckLine[] = [],
+): Array<{ index: number; name: string; pays: number; mrp: number }> {
+  const paysOf = (l: MrpCheckLine) => customerPaysPerUnit({ salePrice: l.unitPrice, gstRate: l.gstRate ?? 0, priceIncludesGst: !!l.priceIncludesGst }, opts)
+  const out: Array<{ index: number; name: string; pays: number; mrp: number }> = []
+  lines.forEach((line, index) => {
+    const p = line.productId ? productOf(line.productId) : null
+    if (!p) return
+    const pays = lineAboveMrp(line, p, opts)
+    if (pays === null) return
+    const keptFromSave = saved.some((s) => s.productId === line.productId
+      && Math.round(paysOf(s) * 100) >= Math.round(pays * 100))
+    if (!keptFromSave) out.push({ index, name: p.name, pays, mrp: Number(p.mrp) })
+  })
+  return out
+}
+
+/** The server's refusal for those lines — one message for create and edit. */
+export function mrpRefusalMessage(above: Array<{ name: string; pays: number; mrp: number }>): string {
+  const rows = above.map((a) => `• ${a.name}: ${formatINR(a.pays)} each, MRP ${formatINR(a.mrp)}`).join('\n')
+  return `A packet cannot be sold above its printed MRP:\n${rows}\n\nLower the price to the MRP or below.`
 }
 
 /**

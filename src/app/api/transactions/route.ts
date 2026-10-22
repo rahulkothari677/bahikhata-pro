@@ -20,7 +20,8 @@ import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
 import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
 import { gstStatus, chargesGstOnSales, claimsInputCredit } from '@/lib/shop-tax'
-import { purchaseCostPerUnit } from '@/lib/unit-profit'
+import { purchaseCostPerUnit, linesAboveMrp, mrpRefusalMessage } from '@/lib/unit-profit'
+import { mrpCheckLines } from '@/lib/line-items'
 import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
 import { tracksStock, stockAffectingLines } from '@/lib/inventory-tracking'
 import { encodeKeysetCursor, buildKeysetWhere, parseKeysetCursor } from '@/lib/pagination'
@@ -610,6 +611,21 @@ export async function POST(req: NextRequest) {
         stockWarnings,
         hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
       }, { status: 400 })
+    }
+
+    /*
+     * Phase 7e — no sale above the printed MRP: Legal Metrology (Packaged
+     * Commodities) Rules 2011, rule 18(2), and s.36 of the Legal Metrology Act
+     * (a fine up to ₹25,000 for a first offence). The bill screen shows it on
+     * the line and waits; this refuses it for any client. One rule
+     * (lineAboveMrp, lib/unit-profit.ts), read the way the bill engine reads
+     * a line's "price includes GST" (line-items.ts).
+     */
+    if (type === 'sale') {
+      const above = linesAboveMrp(mrpCheckLines(items, productMap), (id) => productMap.get(id), { chargesGst: chargesGstOnSales(gstStatus(setting)) })
+      if (above.length) {
+        return NextResponse.json({ error: 'Price above MRP', message: mrpRefusalMessage(above) }, { status: 400 })
+      }
     }
 
     // 🔒 V12: Price/unit anomaly guardrail (defense-in-depth). Non-blocking —

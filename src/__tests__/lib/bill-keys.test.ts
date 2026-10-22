@@ -67,7 +67,9 @@ describe('one add step on every bill', () => {
     expect(keys).toContain('scanBufferRef.current.push(e.key, e.timeStamp)')
     expect(code).not.toContain('if (!counterMode) return\n    const onKey')
     const finish = code.slice(at('finishRef.current = () => {'), at('const resetBill = () => {'))
-    expect(finish).toContain('if (saving || hasStockBlock) return')
+    // F10 waits on exactly what the bar's buttons wait on (7e: stock AND above-MRP — saveBlocked).
+    expect(finish).toContain('if (saving || saveBlocked) return')
+    expect(code).toMatch(/onClick=\{\(\) => setPaySheetOpen\(true\)\} disabled=\{saving \|\| saveBlocked \|\| items\.length === 0\}/)
     expect(finish).toContain('if (counterMode) setPaySheetOpen(true)')
     expect(finish).toContain('else handleSave()')
   })
