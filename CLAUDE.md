@@ -11,6 +11,36 @@ the person who caught my mistakes. That is the defect this file fixes.
 
 ---
 
+## SUPER RULES — compulsory. No exceptions, no "small" cases.
+
+*Rahul, 22 Oct 2026: "make some super standing rules which you have
+compulsory to follow and you don't divate from those rules."* Written the day
+he caught the Counter drifting from the plan he approved (#293). These ten
+come before everything else in this file. Breaking one is a defect in my work
+even when the code is perfect. **Every phase report carries a table S1–S10,
+each row with its evidence (a file, a command, a screenshot, a quote). A row
+without evidence is a ❌, and a ❌ is fixed before the report goes out.**
+
+| # | Rule | The check that proves it |
+|---|---|---|
+| **S1** | **The approved plan is the plan.** I build what the current master plan (`Downloads\EKBOOK-MASTER-PLAN-V4-OCT-2026.html`) says, in its order. A build plan only splits a phase into steps; it never moves, drops, adds or reorders scope. An improvement is welcome, but it goes into the master plan's change log first ("CHANGE: from X to Y, because Z"), and the next report names it. Removing a feature or replacing a design Rahul made or approved waits for his OK. | The plan section quoted; the change-log line for anything different |
+| **S2** | **Plan check before every phase**, posted in the reply: (a) what the master plan says, quoted; (b) Rahul's own words on this screen or topic, dated, searched in the session transcripts; (c) earlier findings: tasklog, `docs/entry-model/`, CA files, law report; (d) what the code does today; (e) how this moves the end goal. A missing answer means I do not start. | The five answers |
+| **S3** | **Never make the existing app worse.** Before changing a screen I list everything it does today (its feature inventory). After the change every item still works, in no more taps, unless the plan says otherwise. | Inventory before; each item ticked after, on the real screen |
+| **S4** | **Phone first, at real size.** The end goal: a shopkeeper does the job easily on a smartphone, one hand, at 375 px, with 1,000+ items in brands and sizes, 500 customers and years of bills. Long lists are rows, never a grid of cards; nothing is cut without saying so; the database does the counting, searching and sorting. | 375 px check with that volume; the numbers measured |
+| **S5** | **Look at it as a shopkeeper before calling it done.** Open the real screen at 375 px and 1024 px, do its three most common jobs, count the taps, judge the look. Every weakness is fixed now or logged with a number. | Screenshots I looked at; tap counts; tasklog rows |
+| **S6** | **Live, on Rahul's account, after every push.** Every GitHub check read (quality-check AND e2e-tests); the feature used on the live app with data I create and then remove. Rahul logs me in; I never type a password on the live site. | Commit, check results, live screenshots |
+| **S7** | **Money and law are never guessed.** Exact to the paisa; every GST rule names its notification and date and comes from the verified law report; refusing beats guessing; the AI never produces a number. | The instrument cited; hand-checked figures |
+| **S8** | **One rule per fact, and guard the class.** Before adding a list, map or calculation, find the one that exists; every new rule gets a guard I have watched fail on the bug. | The break-test output, with the count of failures expected |
+| **S9** | **Reports in simple words.** Verdict first; two plain sentences (what I did, is it finished); every issue FIXED / LOGGED (#n) / NEEDS-APPROVAL; what I could not check; what's next with a recommendation. HTML artifact link plus a copy in Downloads. | The report link |
+| **S10** | **When Rahul catches something, the miss is mine.** Stop, find the cause, fix this file the same day under that cause, and check my other work for the same miss before going on. | The CLAUDE.md edit; the sweep's result |
+
+**Working preferences that sit with the super rules (Rahul, 22 Oct):** no demo
+or prototype apps unless he asks; designs are built in the real app (local
+copy first, then live) and he checks them on the live app. GST work has its
+place in the master plan's order and is never left without a date.
+
+---
+
 ## GATE 1 — before any work. Post this in the reply.
 
 1. **Open** `C:\Users\rjrah\Downloads\EKBOOK-MASTER-PLAN-V2.md` — read §0 and §4.
@@ -241,6 +271,9 @@ save.
   No exceptions for small ones. **And an hour after writing that (6a-2), I
   used one again** — `\n` and `\"` inside, and it happened to work. Writing
   the rule is not following it; the habit has to change at the keyboard.
+  **22 Oct: four helper scripts written with `cat > file <<'EOF'`** in one
+  research pass, and one of them hung a shell for two minutes on a stray
+  `python -I - <<'EOF'`. Same rule, same fix: the Write tool for every script.
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck
@@ -448,6 +481,21 @@ cause**, never as a new line at the bottom.
   published a false "the CA never said that" correction and drafted questions
   he had already answered (#99–#102). **Before acting on "the CA said / did not
   say", grep every CA file.**
+· **22 Oct (#293): built the Counter's tile grid on flat items.** The approved
+  order (final plan §18, 4 Oct) put families and sizes + fast search in Phase
+  4, before the Counter. Phase 4 was split into 4a/4b/4c and that part
+  vanished; my own Phase 6 build plan then moved sizes to "Part B, after" and
+  I built from MY plan as if it were HIS. The grid came from prototype v3,
+  whose shape he replaced on 13 Oct, and I never re-checked it against his
+  4 Oct question (hundreds of items, one brand in many sizes) or the measured
+  entry-model study already in this repo (`docs/entry-model/`). Rahul caught
+  it. **Before each phase: open the APPROVED plan (not my build plan), list
+  every earlier request of his about that screen, and read
+  `docs/entry-model/RULEBOOK.md` for any item or bill-entry work. Any change
+  of order or scope is written as a change and approved — never folded into a
+  "build plan" as if it had been agreed.** A screen designed inside a shape he
+  rejected is re-designed for the new shape, not carried over. (Now SUPER
+  RULES S1–S3.)
 
 **Cause 2 — Two things describing one thing**
 · Parties filtered in one route, not another · Settle's allowlist lacked 'ask'
@@ -523,6 +571,14 @@ cause**, never as a new line at the bottom.
   rule is wider than order: **whenever a screen's controls change (a label,
   a button, the order, what happens after a tap), grep `e2e/` for that
   screen BEFORE pushing**, and replay the spec's steps on the local copy.
+  **And the replay was the wrong layer (fixed 22 Oct):** I clicked through
+  by hand, saw "Saved · INV-0018" and pushed — e2e stayed red for a day.
+  Playwright tests a text regex against the RAW text, untrimmed, and the
+  title's text was " Saved · INV-…" (a space before the word), so
+  `getByText(/^Saved/)` could never match. My eyes trim; the locator does
+  not. **Replay with the spec's own locators: run Playwright locally**
+  (Chromium installed 22 Oct; port 3000 must be free — look first), and
+  prefer `getByRole(…, { name })`, whose accessible name is trimmed.
 · **2 Oct: the new "Rates include GST" switch passed 18 tests and verify, and
   was invisible on a new purchase** — its condition needed at least one line,
   and a new bill starts with none. Only opening the screen showed it. **Open

@@ -189,7 +189,9 @@ export function SavedSheet({ bill, onShare, onPrint, onNext, sharing }: {
       <SheetContent side="bottom" className="rounded-t-3xl gap-0 pb-[calc(1rem+var(--safe-bottom))] lg:mx-auto lg:max-w-md">
         <SheetHeader className="pb-1">
           <SheetTitle className="text-base flex items-center gap-2 text-good">
-            <CheckCircle2 className="w-5 h-5" aria-hidden /> Saved{bill?.invoiceNo ? ` · ${bill.invoiceNo}` : ''}
+            {/* No space before "Saved": gap-2 spaces the icon, and a leading space made the title's text " Saved…". */}
+            <CheckCircle2 className="w-5 h-5" aria-hidden />
+            {`Saved${bill?.invoiceNo ? ` · ${bill.invoiceNo}` : ''}`}
           </SheetTitle>
           <SheetDescription className="sr-only">Share, print or start the next bill</SheetDescription>
         </SheetHeader>

@@ -93,7 +93,14 @@ test.describe('Critical Flow: record a sale and find it in the ledger', () => {
     // stays open with a "Saved" sheet; Next bill clears it.
     await page.getByRole('button', { name: /^Pay ₹/ }).first().click()
     await page.getByRole('button', { name: new RegExp(`^Save ₹\\s*${EXPECTED_TOTAL}(\\.00)?$`) }).click()
-    await expect(page.getByText(/^Saved/).first()).toBeVisible({ timeout: 30_000 })
+    /*
+     * By ROLE, not by text. Playwright tests a text regex against the raw
+     * text, untrimmed — the title read " Saved · INV-0001" (a space before
+     * the icon's word), so /^Saved/ never matched and e2e stayed red on main
+     * while the sheet was plainly on screen. A heading's accessible name is
+     * trimmed, and it says what the test means: the Saved sheet's title.
+     */
+    await expect(page.getByRole('heading', { name: /^Saved/ })).toBeVisible({ timeout: 30_000 })
     await page.getByRole('button', { name: /Next bill/ }).click()
 
     // ── The sale must now be in the ledger ────────────────────────────────

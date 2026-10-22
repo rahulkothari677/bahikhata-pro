@@ -49,6 +49,20 @@ export const test = base.extend<Fixtures>({
      * the suite was wrong to log in 22 times. A shopkeeper signs in once and
      * works for hours.
      */
+    /*
+     * The privacy question, answered once the way a shopkeeper answers it — and
+     * the private way ("No thanks"). Unanswered, ConsentModal opens two seconds
+     * after every load, on top of whatever the test is doing, and a modal stops
+     * every tap underneath it. The pop-up itself is #188 (asked mid-session;
+     * Phase 7h moves it to sign-up); a test must not depend on racing it.
+     */
+    await page.addInitScript(() => {
+      try {
+        if (localStorage.getItem('bahikhata-analytics-consent') === null) {
+          localStorage.setItem('bahikhata-analytics-consent', 'false')
+        }
+      } catch { /* storage blocked: the dialog may appear; the test then shows it */ }
+    })
     await page.goto('/')
 
     /*
