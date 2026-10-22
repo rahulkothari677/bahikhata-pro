@@ -47,12 +47,13 @@ export async function GET(req: NextRequest) {
      * whenever the list could have, so an unchanged catalog costs a 304 with no
      * body instead of the whole list on every bill.
      */
-    const stamp = await withConnectionRetry(() => db.product.aggregate({
-      where: { userId },
-      _count: { _all: true },
-      _max: { updatedAt: true },
-    }))
-    const etag = catalogEtag(userId, stamp._count._all, stamp._max.updatedAt, hideProfit)
+    const [stamp, famStamp] = await withConnectionRetry(() => Promise.all([
+      db.product.aggregate({ where: { userId }, _count: { _all: true }, _max: { updatedAt: true } }),
+      // Phase 7b: brands too — a renamed or deleted brand changes the list's tag.
+      db.productFamily.aggregate({ where: { userId }, _count: { _all: true }, _max: { updatedAt: true } }),
+    ]))
+    const etag = catalogEtag(userId, stamp._count._all, stamp._max.updatedAt, hideProfit,
+      { count: famStamp._count._all, newest: famStamp._max.updatedAt })
     const cacheHeaders = { ETag: etag, 'Cache-Control': CATALOG_CACHE_CONTROL }
     if (req.headers.get('if-none-match') === etag) {
       return new NextResponse(null, { status: 304, headers: cacheHeaders })
@@ -61,6 +62,8 @@ export async function GET(req: NextRequest) {
       where: { userId },
       orderBy: { name: 'asc' },
       take: CATALOG_FUSE,
+      // Phase 7b: each size carries its brand's name, for the one-row-per-brand lists.
+      include: { family: { select: { id: true, name: true } } },
     }))
 
     /*

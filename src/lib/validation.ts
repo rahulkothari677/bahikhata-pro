@@ -338,6 +338,25 @@ export const updateProductSchema = z.object({
 })
 
 /**
+ * Phase 7b (#293) — brands with sizes. A brand's name is what shops print
+ * ("Parle-G"); a size is short ("₹10", "500 g", "Pack of 4").
+ */
+const familyName = z.string().trim().min(1, 'Name the brand').max(80, 'Brand name is too long')
+const sizeLabel = z.string().trim().min(1).max(30, 'Size is too long')
+const familyMember = z.object({ productId: z.string().min(1).max(64), sizeLabel: sizeLabel.optional() })
+/** "Group these": one or many suggestions accepted in one tap. */
+export const createFamiliesSchema = z.object({
+  groups: z.array(z.object({ name: familyName, members: z.array(familyMember).min(1).max(100) })).min(1).max(200),
+})
+/** Rename a brand, add or take out sizes, or correct a size's label. */
+export const updateFamilySchema = z.object({
+  name: familyName.optional(),
+  add: z.array(familyMember).max(100).optional(),
+  remove: z.array(z.string().min(1).max(64)).max(100).optional(),
+  sizes: z.array(z.object({ productId: z.string().min(1).max(64), sizeLabel })).max(100).optional(),
+})
+
+/**
  * Validate a request body against a zod schema.
  * Returns { success: true, data } or { success: false, error }
  */

@@ -54,7 +54,8 @@ export async function GET(req: NextRequest) {
     const [hideProfit, setting, products, sold, month, focusSales, soldInWindow] = await Promise.all([
       shouldHideProfit(userId, authCtx.role),
       db.setting.findUnique({ where: { userId }, select: { compositionCategory: true, gstRegistered: true } }),
-      withConnectionRetry(() => db.product.findMany({ where: { userId } })),
+      // Phase 7b: each size with its brand's name, so the list can show one row per brand.
+      withConnectionRetry(() => db.product.findMany({ where: { userId }, include: { family: { select: { id: true, name: true } } } })),
       db.$queryRaw<Array<{ pid: string; last: Date }>>`
         SELECT ti."productId" AS "pid", MAX(t."date") AS "last"
         FROM "TransactionItem" ti JOIN "Transaction" t ON t."id" = ti."transactionId"

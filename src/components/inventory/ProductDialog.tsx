@@ -46,13 +46,20 @@ const EMPTY_FORM = {
   tracksInventory: true,
 }
 
-export function ProductDialog({ open, onOpenChange, product, onSuccess, focusField }: {
+export function ProductDialog({ open, onOpenChange, product, onSuccess, focusField, initial }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   product: any
-  onSuccess?: () => void
+  /** Called after a save; a new product is passed back (null when it was queued offline). */
+  onSuccess?: (saved?: any) => void
   /** #264: opened to change the price (Insights → Cost went up → Price): the sale price is selected, the MRP beside it. */
   focusField?: 'salePrice'
+  /**
+   * A NEW item started from what is already known: a scanned barcode (6e), a
+   * name, or (Phase 7b, "Add a size") a sibling size whose group, unit and
+   * GST settings the new size shares — so only the size and prices are typed.
+   */
+  initial?: { barcode?: string; name?: string; like?: any }
 }) {
   const [form, setForm] = useState(EMPTY_FORM)
   // Has the shopkeeper answered the goods/service question themselves? Once
@@ -161,7 +168,23 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
           tracksInventory: product.tracksInventory ?? true,
         })
       } else {
-        setForm(EMPTY_FORM)
+        const like = initial?.like
+        setForm({
+          ...EMPTY_FORM,
+          barcode: initial?.barcode ?? '',
+          name: initial?.name ?? '',
+          // Phase 7b: a new size of a brand shares its group, unit and GST settings; price, MRP and stock are its own.
+          ...(like ? {
+            category: like.category || '',
+            unit: like.unit || 'pcs',
+            hsn: like.hsn || '',
+            gstRate: String(like.gstRate ?? 0),
+            priceIncludesGst: like.priceIncludesGst ?? false,
+            gstTreatment: like.gstTreatment || 'taxable',
+            tracksInventory: like.tracksInventory ?? true,
+            lowStockThreshold: String(like.lowStockThreshold ?? 5),
+          } : {}),
+        })
       }
       // Reset per-open: the next product this dialog is used for starts with
       // the HSN hint live again. Without this, ticking the box once would
@@ -300,7 +323,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
       if (!queuedOffline && !product) {
         track(EVENTS.PRODUCT_ADDED, { gstRate: payload.gstRate, unit: payload.unit })
       }
-      onSuccess?.()
+      onSuccess?.(saved?.product ?? null)
       onOpenChange(false)
     } catch (e: any) {
       haptic.error()

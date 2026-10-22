@@ -137,6 +137,15 @@ const INTENTIONALLY_UNCONVERTED: Record<string, string> = {
    * the extension does intercept. Enforced by the companion test below, which
    * fails if any caller adds an `include` back onto a billShare query.
    */
+  /*
+   * Added 2026-10-22 with Phase 7b's ProductFamily (a brand and its sizes). It
+   * holds no money and has no handler, so a query rooted here that included
+   * its products would return their prices in raw paise. Nothing does: the
+   * families routes return ids, names and a COUNT of sizes, and every size is
+   * read through db.product, which is intercepted. Enforced by the
+   * productFamily-include test in one-item-search.test.ts.
+   */
+  'ProductFamily.products': 'Sizes are always read via db.product; enforced by the productFamily-include test.',
   'BillShare.transaction': 'Read via db.transaction instead; enforced by the billShare-include test.',
   'BillShare.user': 'User carries no money; the shop settings are fetched separately.',
 }

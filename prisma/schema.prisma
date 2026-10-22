@@ -45,6 +45,7 @@ model User {
 
   // Relations
   products            Product[]
+  productFamilies     ProductFamily[]
   parties             Party[]
   partyAliases        PartyAlias[]
   transactions        Transaction[]
@@ -184,6 +185,16 @@ model Product {
   /// constant expires every confirmation and asks again. A confirmation is
   /// against a specific set of rules, not forever.
   gstTreatmentConfirmedAt DateTime?
+  /// Phase 7b (#293): the brand this item is one size of ("Parle-G"), and its
+  /// size as printed ("₹10", "500 g"). Null = an item on its own (a family of
+  /// one). Each size keeps its own price, MRP, barcode and stock, and its own
+  /// `name` — bills, GST and reports never read these two fields.
+  familyId          String?
+  family            ProductFamily? @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  sizeLabel         String?
+  /// Order of sizes inside the brand (lib/product-sizes.ts: 50 g < 100 g < 1 kg;
+  /// ₹5 < ₹10), so "1 kg" never sorts before "100 g" (entry study D-08, D-17).
+  sizeRank          Float?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -191,6 +202,8 @@ model Product {
 
   // Unique SKU per user (not globally)
   @@unique([userId, sku])
+  // A brand's sizes, per shop
+  @@index([userId, familyId])
   // Performance: list products per user, search by name within user
   @@index([userId, name])
   // Scan lookup: exact code within a shop. Mirrors the partial index created in
@@ -2231,6 +2244,29 @@ model BillShare {
 
   @@index([userId, createdAt])
   @@index([transactionId])
+}
+
+/// Phase 7b (#293) — a brand with its sizes: "Parle-G" with ₹5, ₹10, ₹20, ₹50.
+///
+/// The bill screen and Items show ONE row per brand with its sizes as buttons,
+/// instead of four unrelated rows (Rahul, 4 and 22 Oct: hundreds of items, one
+/// brand in many sizes). Each size is still its own Product — price, MRP,
+/// barcode, stock, name — so no bill, GST figure or report changes.
+///
+/// Grouping is always the shop's tap: EkBook suggests ("these 4 look like sizes
+/// of Parle-G") and saves nothing until told. Deleting a family ungroups its
+/// items (Product.familyId is SET NULL); it never deletes an item.
+model ProductFamily {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+
+  /// One "Parle-G" per shop — a second would split its sizes in two.
+  @@unique([userId, name])
 }
 
 /// What THIS shop calls this party — C2c.

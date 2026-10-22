@@ -42,6 +42,13 @@ const ACCEPTED: Record<string, string> = {
     'Items (Phase 5e-2) counts every chip, totals the stock value and lists the categories over ALL items — a cap '
     + 'would make those lie. One row per product (bounded by the catalogue, not by time); only 60 go back to the '
     + 'screen. Replaces the 5,000-row fetch the screen summed itself.',
+  'app/api/products/families/route.ts:product':
+    'Phase 7b brand suggestions read id, name and familyId of EVERY item: a size left out of the read would '
+    + 'be left out of its brand\'s suggestion (or split it). Narrow select, one row per product (bounded by the '
+    + 'catalogue, not by time) — the same set the Items list already reads.',
+  'app/api/products/families/route.ts:productFamily':
+    'A shop\'s brands: id, name and a count of sizes. Bounded by the catalogue (fewer brands than items), '
+    + 'and the list must be whole for the brand picker to offer every brand.',
   // — Bounded by an explicit list of values, not by a row cap ——————————
   'app/api/gstr-1/route.ts:transaction':
     'Bounded by `invoiceNo: { in: nums }` — the invoice numbers already filed. '

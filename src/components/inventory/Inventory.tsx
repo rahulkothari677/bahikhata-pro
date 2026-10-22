@@ -1,6 +1,6 @@
 'use client'
 
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSetting } from '@/hooks/use-setting'
@@ -21,7 +21,8 @@ import { ExemptReclassifyReview } from './ExemptReclassifyReview'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { ChipRow } from '@/components/common/ChipRow'
 import { FocusChip } from '@/components/common/FocusChip'
-import { ITEM_SORTS, NO_CATEGORY, type ItemChip, type ItemSort } from '@/lib/items-list'
+import { ITEM_SORTS, NO_CATEGORY, isFamilyEntry, entryItems, type ItemChip, type ItemSort, type FamilyEntry } from '@/lib/items-list'
+import { FamilyRow, BrandSuggestions, FamilySheet } from './Families'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { EmptyState } from '@/components/common/EmptyState'
 import { WakingUpState } from '@/components/common/WakingUpState'
@@ -79,6 +80,16 @@ export function Inventory() {
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [subCategory, setSubCategory] = useState<string | null>(null)
   const [barcodeOpen, setBarcodeOpen] = useState(false)
+  // Phase 7b: a brand opened (its sheet), and a brand a new size is being added to.
+  const [openFamily, setOpenFamily] = useState<FamilyEntry | null>(null)
+  const [addSizeTo, setAddSizeTo] = useState<FamilyEntry | null>(null)
+  const queryClient = useQueryClient()
+  // Grouping changes how every item list reads: this screen, the bill screen's catalog, the suggestions.
+  const refreshItems = () => {
+    triggerRefresh()
+    queryClient.invalidateQueries({ queryKey: ['products'] })
+    queryClient.invalidateQueries({ queryKey: ['product-families'] })
+  }
 
   /*
    * Phase 5e-2: the list comes from /api/products/list — 60 items at a time,
@@ -122,7 +133,8 @@ export function Inventory() {
   useEffect(() => {
     if (!focus?.focus.startsWith('item:')) { openedFor.current = null; return }
     if (openedFor.current === focus.focus) return
-    const row = products.find((p) => `item:${p.id}` === focus.focus)
+    // Phase 7b: the item may be one size inside a brand's row.
+    const row = entryItems(products).find((p) => `item:${p.id}` === focus.focus)
     if (!row) return
     openedFor.current = focus.focus
     setEditingProduct(row)
@@ -198,6 +210,9 @@ export function Inventory() {
         * no GST, so its items need no GST-rules review.
         */}
       {gstStatus(setting) !== 'unregistered' && <ExemptReclassifyReview />}
+
+      {/* Phase 7b: items that are sizes of one brand — suggested, grouped only on the shop's tap. */}
+      {!debouncedSearch && !focus && <BrandSuggestions onChanged={refreshItems} />}
 
       {focus && <FocusChip label={focus.label} onClear={() => setListFocus(null)} clearLabel={t('list.clear_focus')} />}
 
@@ -327,7 +342,15 @@ export function Inventory() {
         </Card>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-          {filtered.map((p) => (
+          {/* Phase 7b: one row per brand (its sizes as buttons); an item on its own, as before. */}
+          {filtered.map((p) => isFamilyEntry(p) ? (
+            <FamilyRow
+              key={`f-${p.id}`}
+              family={p}
+              onOpenFamily={() => setOpenFamily(p)}
+              onEditSize={(m) => { setEditingProduct(m); setDialogOpen(true) }}
+            />
+          ) : (
             <ProductRow key={p.id} product={p} sort={sort} onEdit={() => { setEditingProduct(p); setDialogOpen(true) }} />
           ))}
         </div>
@@ -350,12 +373,26 @@ export function Inventory() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => {
+                {/* Phase 7b: a brand is a heading row, its sizes under it in size order. */}
+                {filtered.flatMap((e) => isFamilyEntry(e)
+                  ? [{ head: e }, ...e.members.map((m) => ({ item: m, inFamily: true }))]
+                  : [{ item: e, inFamily: false }]).map((r: any) => {
+                  if (r.head) {
+                    return (
+                      <tr key={`f-${r.head.id}`} className="border-b border-border/50 bg-muted/30">
+                        <td colSpan={hideProfit ? 5 : 8} className="py-2 px-4">
+                          <button type="button" onClick={() => setOpenFamily(r.head)} className="font-semibold hover:underline">{r.head.name}</button>
+                          <span className="text-xs text-muted-foreground ml-2">{r.head.members.length} sizes</span>
+                        </td>
+                      </tr>
+                    )
+                  }
+                  const p = r.item
                   const { profit, margin } = unitProfit(p, profitOpts)
                   return (
                     <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30 group">
-                      <td className="py-3 px-4">
-                        <div className="font-medium">{p.name}</div>
+                      <td className={cn('py-3 px-4', r.inFamily && 'pl-8')}>
+                        <div className="font-medium">{r.inFamily && p.sizeLabel ? p.sizeLabel : p.name}</div>
                         <div className="flex flex-wrap items-center gap-1 mt-0.5">
                           {p.sku && <Badge variant="outline" className="text-xs py-0">{p.sku}</Badge>}
                           {p.category && <Badge variant="secondary" className="text-xs py-0">{p.category}</Badge>}
@@ -421,10 +458,31 @@ export function Inventory() {
 
       <ProductDialog
         open={dialogOpen}
-        onOpenChange={(o) => { setDialogOpen(o); if (!o) setPriceFocus(false) }}
+        onOpenChange={(o) => { setDialogOpen(o); if (!o) { setPriceFocus(false); setAddSizeTo(null) } }}
         product={editingProduct}
         focusField={priceFocus ? 'salePrice' : undefined}
-        onSuccess={() => triggerRefresh()}
+        // Phase 7b "Add a size": starts from the brand's name and a sibling's group, unit and GST settings.
+        initial={addSizeTo ? { name: `${addSizeTo.name} `, like: addSizeTo.members[0] } : undefined}
+        onSuccess={async (saved) => {
+          if (addSizeTo && saved?.id) {
+            const r = await offlineFetch(`/api/products/families/${addSizeTo.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ add: [{ productId: saved.id }] }),
+            })
+            if (!r.ok) sonnerToast.error(`Saved, but not added to ${addSizeTo.name}. Open the brand to add it.`)
+          }
+          setAddSizeTo(null)
+          refreshItems()
+        }}
+      />
+
+      <FamilySheet
+        family={openFamily}
+        onClose={() => setOpenFamily(null)}
+        onChanged={refreshItems}
+        onAddSize={(f) => { setOpenFamily(null); setEditingProduct(null); setAddSizeTo(f); setDialogOpen(true) }}
+        onEditSize={(m) => { setOpenFamily(null); setEditingProduct(m); setDialogOpen(true) }}
       />
 
       {hasNextPage && (
@@ -448,7 +506,7 @@ export function Inventory() {
             // Check if any product matches
             // Ask the server (every item, not just the rows loaded): the same search rule, barcode first.
             offlineFetch(`/api/products/list?${new URLSearchParams({ search: code })}`).then((r) => r.json()).then((j) => {
-              if (j.matched > 0) sonnerToast.success(`Found: ${j.rows[0].name}`)
+              if (j.matched > 0) sonnerToast.success(`Found: ${isFamilyEntry(j.rows[0]) ? j.rows[0].members[0].name : j.rows[0].name}`)
               else sonnerToast.info(`No product matches barcode ${code}. You can add it as a new product.`)
             }).catch(() => {})
           }}

@@ -4,6 +4,8 @@
  * item-search.test.ts.
  */
 import { describe, test, expect } from '@jest/globals'
+import fs from 'fs'
+import path from 'path'
 import { readCode } from '@/test-support/read-source'
 import { catalogEtag, CATALOG_FUSE } from '@/lib/catalog-etag'
 
@@ -31,7 +33,9 @@ describe('every screen searches items with the one rule (#296)', () => {
   })
   test('the Items list filters with the same rule, not letters anywhere', () => {
     const list = readCode('src/lib/items-list.ts')
-    expect(list).toContain('(!opts.search.trim() || matchesProductSearch(p, opts.search))')
+    expect(list).toContain('(!opts.search.trim() || matchesProductSearch(p, opts.search)')
+    // Phase 7b: a size is also found by its brand's name — through the same rule.
+    expect(list).toContain('matchesProductSearch({ id: p.id, name: p.family.name }, opts.search)')
     expect(list).not.toMatch(/\.toLowerCase\(\)\.includes\(/)
   })
   test('matchesProductSearch (the door other code and the scan guard use) is the same rule', () => {
@@ -39,6 +43,26 @@ describe('every screen searches items with the one rule (#296)', () => {
     const body = fp.slice(at(fp, 'export function matchesProductSearch'))
     expect(body).toContain('return itemMatches(')
     expect(body).not.toMatch(/\.includes\(q\)/)
+  })
+})
+
+describe('brands never carry prices (Phase 7b)', () => {
+  test('productFamily-include: no query reads sizes THROUGH a brand (they would come back in paise)', () => {
+    // ProductFamily has no money handler (audit-money-relations-coverage.test.ts): sizes are read via db.product.
+    const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(path.join(d, e.name)) : /\.(ts|tsx)$/.test(e.name) ? [path.join(d, e.name)] : [])
+    const offenders: string[] = []
+    let calls = 0
+    for (const f of walk(path.join(process.cwd(), 'src')).filter((f) => !f.includes('__tests__'))) {
+      const src = fs.readFileSync(f, 'utf8').replace(/_count:\s*\{\s*select:\s*\{\s*products:\s*true\s*\}\s*\}/g, '')
+      for (const m of src.matchAll(/productFamily\.\w+\(/g)) {
+        calls++
+        const window = src.slice(m.index, (m.index ?? 0) + 500)
+        if (/\bproducts\s*:\s*(true|\{)/.test(window)) offenders.push(path.relative(process.cwd(), f))
+      }
+    }
+    expect(calls).toBeGreaterThan(3) // the families routes really are scanned
+    expect(offenders).toEqual([])
   })
 })
 
@@ -51,6 +75,17 @@ describe('every item reachable, and the catalog kept on the phone (#297)', () =>
     expect(catalogEtag('u1', 10, d, true)).not.toBe(catalogEtag('u1', 10, d, false))
     expect(catalogEtag('u2', 10, d, false)).not.toBe(catalogEtag('u1', 10, d, false)) // two accounts, one phone
     expect(catalogEtag('u1', 0, null, false)).toMatch(/^W\/"items-u1-0-0-full"$/)
+    // Phase 7b: a brand renamed (newest change) or deleted (count) changes the tag.
+    const fam = (count: number, t: number) => catalogEtag('u1', 10, d, false, { count, newest: new Date(t) })
+    expect(fam(2, 1)).toBe(fam(2, 1))
+    expect(fam(2, 2)).not.toBe(fam(2, 1))
+    expect(fam(1, 1)).not.toBe(fam(2, 1))
+  })
+  test('the route versions the list by its brands as well, and sends each size its brand', () => {
+    const r = readCode('src/app/api/products/route.ts')
+    expect(r).toContain('db.productFamily.aggregate({ where: { userId }, _count: { _all: true }, _max: { updatedAt: true } })')
+    expect(r).toContain('{ count: famStamp._count._all, newest: famStamp._max.updatedAt }')
+    expect(r).toContain('include: { family: { select: { id: true, name: true } } }')
   })
   test('the phone sends its kept copy\'s tag and answers a 304 from that copy', () => {
     const of = readCode('src/lib/offline-fetch.ts')

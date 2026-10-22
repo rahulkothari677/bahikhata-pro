@@ -16,8 +16,16 @@
  *  - whose list it is: the phone keeps one copy per address, so two accounts
  *    signed in on one phone must never answer each other's 304.
  */
-export function catalogEtag(shopKey: string, count: number, newestChange: Date | null | undefined, hideProfit: boolean): string {
-  return `W/"items-${shopKey}-${count}-${newestChange ? newestChange.getTime() : 0}-${hideProfit ? 'nocost' : 'full'}"`
+export function catalogEtag(
+  shopKey: string,
+  count: number,
+  newestChange: Date | null | undefined,
+  hideProfit: boolean,
+  /** Phase 7b: the shop's brands — a rename or a deleted brand changes the list too. */
+  families?: { count: number; newest: Date | null | undefined },
+): string {
+  const fam = families ? `-f${families.count}.${families.newest ? families.newest.getTime() : 0}` : ''
+  return `W/"items-${shopKey}-${count}-${newestChange ? newestChange.getTime() : 0}${fam}-${hideProfit ? 'nocost' : 'full'}"`
 }
 
 /** Revalidate every time; never serve a stale stock figure without asking. */
