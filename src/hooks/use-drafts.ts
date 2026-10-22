@@ -4,7 +4,14 @@
  * Multi-draft manager for form autosave.
  *
  * Supports MULTIPLE drafts per form type (e.g. many sale drafts, many purchase drafts).
- * Each draft has a unique ID and timestamp. Drafts auto-expire after 24 hours.
+ * Each draft has a unique ID and timestamp.
+ *
+ * Phase 7f — a draft is a HELD BILL. The shop holds a bill to serve the next
+ * customer and comes back to it later, sometimes the next day. Drafts used to
+ * expire after 24 hours and the eleventh pushed out the oldest — a held bill
+ * could vanish without a word. Now nothing is dropped silently: a bill stays
+ * until it is finished or discarded, and at MAX_HELD the app says so (Hold is
+ * refused with a message) instead of losing one.
  *
  * IMPORTANT DESIGN: The `save` callback uses a REF for activeDraftId (not state)
  * so it never needs to be recreated. This prevents stale closure bugs where
@@ -14,12 +21,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 const DRAFT_VERSION = 2
-const DRAFT_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
-const MAX_DRAFTS = 10 // per form type
+/** Bills kept per form type. Reaching it is said on screen; nothing is dropped. */
+export const MAX_HELD = 20
 
 export type DraftEnvelope<T> = {
   id: string
   savedAt: number
+  /** When the shop held it (Hold, or "Hold bill" on leaving); unset for a bill saved only by autosave. */
+  heldAt?: number
   data: T
 }
 
@@ -39,8 +48,6 @@ function read<T>(formType: string): Store<T> {
     if (!raw) return { v: DRAFT_VERSION, drafts: [] }
     const s = JSON.parse(raw) as Store<T>
     if (s.v !== DRAFT_VERSION) return { v: DRAFT_VERSION, drafts: [] }
-    const now = Date.now()
-    s.drafts = s.drafts.filter((d) => now - d.savedAt < DRAFT_TTL_MS)
     s.drafts.sort((a, b) => b.savedAt - a.savedAt)
     return s
   } catch {
@@ -51,7 +58,6 @@ function read<T>(formType: string): Store<T> {
 function write<T>(formType: string, store: Store<T>) {
   if (typeof window === 'undefined') return
   try {
-    store.drafts = store.drafts.slice(0, MAX_DRAFTS)
     localStorage.setItem(key(formType), JSON.stringify(store))
   } catch {
     // silent
@@ -132,14 +138,16 @@ export function useDrafts<T>(formType: string) {
         if (idx >= 0) {
           store.drafts[idx] = { ...store.drafts[idx], savedAt: Date.now(), data: currentData }
         } else {
-          // Active draft was deleted — create a new one
+          // Active draft was deleted — create a new one (never past MAX_HELD: Hold says so)
+          if (store.drafts.length >= MAX_HELD) return
           const newDraft: DraftEnvelope<T> = { id: genId(), savedAt: Date.now(), data: currentData }
           store.drafts.unshift(newDraft)
           activeDraftIdRef.current = newDraft.id
           setActiveDraftId(newDraft.id)
         }
       } else {
-        // Create a new draft
+        // Create a new draft (never past MAX_HELD: Hold says so)
+        if (store.drafts.length >= MAX_HELD) return
         const newDraft: DraftEnvelope<T> = { id: genId(), savedAt: Date.now(), data: currentData }
         store.drafts.unshift(newDraft)
         activeDraftIdRef.current = newDraft.id
@@ -180,6 +188,38 @@ export function useDrafts<T>(formType: string) {
     }
   }, [formType, persist])
 
+  /*
+   * Phase 7f: hold the bill on screen NOW — written at once, not after the
+   * 600 ms autosave pause (a tap on Hold right after a change would otherwise
+   * lose that change), marked held, and let go as the active draft so the next
+   * bill starts fresh. 'empty': nothing worth keeping; 'full': MAX_HELD bills
+   * already held — the caller says so, nothing is dropped.
+   */
+  const holdNow = useCallback((data: T): 'held' | 'empty' | 'full' => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
+    }
+    if (isEmptyDraft(data)) return 'empty'
+    const store = read<T>(formType)
+    const now = Date.now()
+    const id = activeDraftIdRef.current
+    const idx = id ? store.drafts.findIndex((d) => d.id === id) : -1
+    if (idx >= 0) {
+      store.drafts[idx] = { ...store.drafts[idx], savedAt: now, heldAt: now, data }
+    } else {
+      if (store.drafts.length >= MAX_HELD) return 'full'
+      store.drafts.unshift({ id: genId(), savedAt: now, heldAt: now, data })
+    }
+    store.drafts.sort((a, b) => b.savedAt - a.savedAt)
+    persist(store)
+    activeDraftIdRef.current = null
+    setActiveDraftId(null)
+    hasInteractedRef.current = false
+    dataRef.current = null
+    return 'held'
+  }, [formType, persist])
+
   const clearActive = useCallback(() => {
     activeDraftIdRef.current = null
     setActiveDraftId(null)
@@ -213,32 +253,10 @@ export function useDrafts<T>(formType: string) {
     restoreDraft: restore,
     deleteDraft,
     clearActive,
+    holdNow,
     refresh,
     hasDrafts: drafts.length > 0,
   }
 }
-
-export function getDraftLabel(data: any): string {
-  const parts: string[] = []
-  if (data?.items?.length > 0) {
-    parts.push(`${data.items.length} item${data.items.length === 1 ? '' : 's'}`)
-  }
-  if (data?.partyName) {
-    parts.push(data.partyName)
-  } else if (data?.partyId) {
-    parts.push('Party selected')
-  }
-  if (data?.invoiceNo) {
-    parts.push(`#${data.invoiceNo}`)
-  }
-  return parts.length > 0 ? parts.join(' · ') : 'Empty draft'
-}
-
-export function getDraftTotal(data: any): number {
-  if (!data?.items?.length) return 0
-  return data.items.reduce((sum: number, item: any) => {
-    const qty = Number(item.quantity) || 0
-    const price = Number(item.unitPrice) || 0
-    return sum + qty * price
-  }, 0)
-}
+// A held bill's name and total: lib/bill-total.ts (heldBillName, heldBillFigures) —
+// the total by the bill engine (#187), never Σ quantity × price.

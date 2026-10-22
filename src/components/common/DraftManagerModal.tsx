@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { FileText, RotateCcw, Trash2, Clock, Package, IndianRupee, ChevronDown, ChevronUp, Eye } from 'lucide-react'
 import { cn, formatINR } from '@/lib/utils'
-import { getDraftLabel, getDraftTotal, type DraftEnvelope } from '@/hooks/use-drafts'
+import { type DraftEnvelope } from '@/hooks/use-drafts'
 
 // Local haptic wrapper — avoids importing the haptic module inside the modal,
 // which was causing 'ez is not a function' in production minified builds
@@ -41,6 +41,8 @@ export function DraftManagerModal({
   activeDraftId,
   onRestore,
   onDelete,
+  figuresOf,
+  nameOf,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -48,6 +50,9 @@ export function DraftManagerModal({
   activeDraftId: string | null
   onRestore: (id: string) => void
   onDelete: (id: string) => void
+  /** Phase 7f (#187): the bill's total and line totals by the bill engine (lib/bill-total.ts). */
+  figuresOf: (data: any) => { total: number; lineTotals: number[] }
+  nameOf: (data: any) => string
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -84,12 +89,10 @@ export function DraftManagerModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
-            Saved Drafts
+            Held bills
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
-            Drafts auto-expire after 24 hours. {drafts.length} saved.
-            <br />
-            <span className="text-xs">Tap a draft to view its contents.</span>
+            {drafts.length} on this phone · kept until finished or discarded
           </p>
         </DialogHeader>
 
@@ -107,8 +110,8 @@ export function DraftManagerModal({
             {drafts.map((draft) => {
               const data = draft.data as any
               const itemCount = data?.items?.length || 0
-              const total = getDraftTotal(data)
-              const label = getDraftLabel(data)
+              const { total, lineTotals } = figuresOf(data)
+              const label = nameOf(data)
               const isActive = draft.id === activeDraftId
               const isConfirming = confirmDeleteId === draft.id
               const isExpanded = expandedId === draft.id
@@ -207,7 +210,7 @@ export function DraftManagerModal({
                                   <td className="p-1.5 truncate max-w-[120px]">{item.productName}</td>
                                   <td className="p-1.5 text-right">{item.quantity}</td>
                                   <td className="p-1.5 text-right">{formatINR(item.unitPrice)}</td>
-                                  <td className="p-1.5 text-right font-medium">{formatINR(item.unitPrice * item.quantity)}</td>
+                                  <td className="p-1.5 text-right font-medium">{formatINR(lineTotals[i] ?? 0)}</td>
                                 </tr>
                               ))}
                             </tbody>

@@ -11,7 +11,7 @@ taps, unless the master plan says otherwise. Add to it when the screen gains a j
 | 2 | Voice: whole sale when the bill is empty; "Add via Voice" once it has lines; 11 languages | entry header, phone header mic, Bill card, menu "Voice Entry" | switch `voiceEntry` | ✓ |
 | 3 | Scan Bill (AI photo of a bill or list) — not on notes or estimates | entry header, phone header ✨, empty state | switch `aiScanner` | ✓ |
 | 4 | Barcode camera from the search box; a barcode gun anywhere; unknown code → "New item?" | search box | switch `barcodeScanner` (camera only; the gun always works) | ✓ |
-| 5 | Drafts: autosave, drafts list, leave-with-three-answers | entry header, leave guard | ✓ unchanged | ✓ |
+| 5 | Drafts: autosave, drafts list, leave-with-three-answers — 7f: drafts are held bills (Hold beside Pay, F8, the Held row with real totals, bring one back and the bill on screen is held in its place; kept until finished or discarded, never expired or pushed out; "Hold bill" on leaving) | entry header, leave guard | ✓ unchanged | ✓ |
 | 6 | Search: 2–3 letters, Hindi words, a price, a code; "8 of N, keep typing"; close spellings | ItemPicker | ✓ unchanged | search rows now show in the list window, 30 before "keep typing" |
 | 7 | Qty for the next item ("6, then tap or scan"); F4 — step 2c: the number pad with a unit (× 23, 400 g, 1.25 kg, 750 ml, ₹50); a packet takes whole counts only; number keys type into it on a computer | below search | switch `billQtyButton` | ✓ |
 | 8 | Price check (sale): tap or scan shows price, nothing added; F6 | below search | switch `billPriceCheck` | ✓ |

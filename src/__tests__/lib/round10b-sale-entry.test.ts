@@ -29,10 +29,12 @@ function readStripped(rel: string): string {
 const entry = readStripped('components/ledger/TransactionEntry.tsx')
 
 describe('drafts remember what the form was', () => {
+  // Phase 7f: the payload is ONE list (draftData) that autosave (save(draftData)) and Hold both write.
   test('the autosave payload carries the transaction mode', () => {
-    const start = entry.indexOf('save({')
+    const start = entry.indexOf('const draftData = useMemo(() => ({')
     expect(start).toBeGreaterThan(-1)
-    const payload = entry.slice(start, entry.indexOf('})', start))
+    expect(entry).toContain('save(draftData)')
+    const payload = entry.slice(start, entry.indexOf('}), [', start))
     for (const field of ['actualType', 'noteReason', 'affectsStock', 'originalTransactionId']) {
       expect(payload).toMatch(new RegExp(`\\b${field}\\b`))
     }
@@ -41,10 +43,11 @@ describe('drafts remember what the form was', () => {
   test('the autosave effect re-runs when the mode changes', () => {
     // Otherwise switching into note mode would not be persisted until some
     // other field happened to change.
-    const start = entry.indexOf('save({')
-    const deps = entry.slice(entry.indexOf('}, [', start), entry.indexOf('])', entry.indexOf('}, [', start)))
+    const start = entry.indexOf('const draftData = useMemo(() => ({')
+    const deps = entry.slice(entry.indexOf('}), [', start), entry.indexOf('])', entry.indexOf('}), [', start)))
     expect(deps).toMatch(/actualType/)
     expect(deps).toMatch(/originalTransactionId/)
+    expect(entry).toMatch(/\}, \[draftData, presetChecked, presetLoaded, save\]\)/)
   })
 
   test('restore applies the mode, and an older draft without it does not downgrade a note', () => {

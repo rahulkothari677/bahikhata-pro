@@ -84,6 +84,11 @@ import { parseTypedLine, splitTypedList, isTypedList } from '@/lib/typed-line'
 import { pickTypedLine, teach, learnedId } from '@/lib/typed-pick'
 import { TypedChecks, type TypedCheck } from '@/components/ledger/TypedChecks'
 import { OneOffLine } from '@/components/ledger/OneOffLine'
+import { entryLineInputs, billTotalAfterRoundOff, heldBillFigures, heldBillName, heldBillWhen } from '@/lib/bill-total'
+import { MAX_HELD } from '@/hooks/use-drafts'
+
+/** Phase 7f: held bills shown as chips on the Held row; the rest behind "All". */
+const HELD_CHIPS = 2
 import { StateField, GstinField } from '@/components/common/StateField'
 
 const PAYMENT_MODES = [
@@ -290,7 +295,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // Multi-draft autosave — supports multiple saved drafts per form type.
   // Each draft has a unique ID; the hook tracks which draft is "active" (currently being edited).
   const draftFormType = `txn-${type}`
-  const { drafts, activeDraftId, save, restoreDraft, deleteDraft, clearActive, refresh: refreshDrafts, hasDrafts } = useDrafts<{
+  const { drafts, activeDraftId, save, restoreDraft, deleteDraft, clearActive, holdNow, refresh: refreshDrafts } = useDrafts<{
     partyId: string
     date: string
     invoiceNo: string
@@ -382,21 +387,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       ? ({ 'credit-note': 'credit note', 'debit-note': 'debit note', estimate: 'estimate' } as Record<string, string>)[draft.actualType] || draft.actualType
       : null
     sonnerToast.success(
-      `Draft restored — ${draft.items?.length || 0} item${(draft.items?.length || 0) === 1 ? '' : 's'}`
+      `Bill back — ${draft.items?.length || 0} item${(draft.items?.length || 0) === 1 ? '' : 's'}`
       + (restoredAs ? ` (${restoredAs})` : ''),
     )
   }, [restoreDraft, type])
 
   // Autosave on form changes (debounced inside the hook).
-  // Skip autosave when:
-  // - preset check hasn't completed yet (avoid empty drafts during mount)
-  // - form was filled by a preset (Repeat Last Sale / Scanner) — the user
-  //   intends to save immediately, not come back later. Autosave resumes
-  //   once the user manually modifies the form (presetLoaded cleared).
-  useEffect(() => {
-    if (!presetChecked) return
-    if (presetLoaded) return // Don't autosave preset-filled forms
-    save({
+  // Phase 7f: what a bill on this screen IS — one list, used by autosave and by Hold.
+  const draftData = useMemo(() => ({
       partyId,
       date,
       invoiceNo,
@@ -425,9 +423,17 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       shipElsewhere,
       deliveryState,
       deliveryAddress,
-    })
-
-  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded, actualType, noteReason, affectsStock, originalTransactionId, cashRefund, purchaseRatesIncludeGst, shipElsewhere, deliveryState, deliveryAddress])
+  }), [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, actualType, noteReason, affectsStock, originalTransactionId, cashRefund, purchaseRatesIncludeGst, shipElsewhere, deliveryState, deliveryAddress])
+  // Skip autosave when:
+  // - preset check hasn't completed yet (avoid empty drafts during mount)
+  // - form was filled by a preset (Repeat Last Sale / Scanner) — the user
+  //   intends to save immediately, not come back later. Autosave resumes
+  //   once the user manually modifies the form (presetLoaded cleared).
+  useEffect(() => {
+    if (!presetChecked) return
+    if (presetLoaded) return // Don't autosave preset-filled forms
+    save(draftData)
+  }, [draftData, presetChecked, presetLoaded, save])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -577,8 +583,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       // 🔒 R10b-2 (Phase 2b): Was: `localStorage.removeItem(KEY)` — wiped ALL
       // saved drafts for this form type when a preset arrived with items. A
       // shopkeeper with 5 in-progress sale drafts who taps "Repeat Last Sale"
-      // lost all 5 with no warning. The "prevent accumulation" intent is
-      // already handled by MAX_DRAFTS=10 + 24h TTL in use-drafts.ts. Now:
+      // lost all 5 with no warning. (Phase 7f: drafts are held bills, kept
+      // until finished or discarded — use-drafts.ts MAX_HELD.) Now:
       // only clear the ACTIVE draft (so the new preset starts fresh), but
       // leave all other saved drafts intact.
       if (stored.data.items?.length > 0) {
@@ -810,6 +816,18 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     resolveLeave(true)
   }
 
+  // Phase 7f: "Hold bill" writes the bill at once — leaving inside the 600 ms
+  // autosave pause used to drop the last change (the pending save was cancelled
+  // on unmount). At MAX_HELD nothing could hold it, so the shop stays on it.
+  const handleHoldAndLeave = () => {
+    if (holdNow(draftData) === 'full') {
+      sonnerToast.error(`${MAX_HELD} bills are on hold`, { description: 'Finish or discard one first.' })
+      resolveLeave(false)
+      return
+    }
+    resolveLeave(true)
+  }
+
 
   const handleAddProduct = (product: any, qty = 1) => {
     // User manually added a product — clear presetLoaded so autosave resumes
@@ -1019,18 +1037,21 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   itemCountRef.current = items.length
   // F10: Pay on a plain sale (the Pay sheet), Save on every other bill — the same as tapping it.
   const finishRef = useRef<() => void>(() => {})
+  // F8 (7f): hold this bill and start the next one — the same as tapping Hold.
+  const holdRef = useRef<() => void>(() => {})
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement | null
       const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
       const sheetOpen = !!document.querySelector('[role=dialog]')
       // The bill's keys (final plan §5) work while typing too; never under an open sheet.
-      if (!sheetOpen && /^F(2|3|4|6|10)$/.test(e.key)) {
+      if (!sheetOpen && /^F(2|3|4|6|8|10)$/.test(e.key)) {
         e.preventDefault()
         if (e.key === 'F2') document.getElementById('field-search-product')?.focus()
         else if (e.key === 'F3') document.getElementById('field-party-search')?.focus()
         else if (e.key === 'F4' && switchesRef.current.qtyButtonOn) { setKb(null); setQtyOpen(true) }
         else if (e.key === 'F6' && switchesRef.current.priceCheckOn) setPriceCheck((v) => !v)
+        else if (e.key === 'F8' && itemCountRef.current > 0) holdRef.current()
         else if (e.key === 'F10' && itemCountRef.current > 0) finishRef.current()
         return
       }
@@ -1179,18 +1200,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       ? `Above the printed MRP ${formatINR(Number(product.mrp))} — not allowed`
       : null
   }
-  const computeInput = items.map(item => {
-    const p = item.productId ? productMap.get(item.productId) : null
-    return {
-      productId: item.productId || null,
-      productName: item.productName,
-      quantity: Number(item.quantity) || 0,
-      unitPrice: Number(item.unitPrice) || 0,
-      gstRate: Number(item.gstRate) || 0,
-      unit: item.unit || p?.unit || 'pcs',
-      priceIncludesGst: lineIncludesGst(item, p),
-    }
-  })
+  // Phase 7f: the same reading of a line as every held bill's total (lib/bill-total.ts, #187).
+  const computeInput = entryLineInputs(items, productMap, { isPurchaseSide, purchaseRatesIncludeGst })
   const preview = computeLineItems({
     items: computeInput,
     productMap,
@@ -1267,9 +1278,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // Now: the client computes the same round-off as the server, so the preview
   // total matches the stored total.
   const roundOffEnabled = settingData?.setting?.roundOffEnabled ?? false
-  const totalAmount = roundOffEnabled
-    ? Math.round(preview.totalBeforeRoundOff)
-    : preview.totalBeforeRoundOff
+  const totalAmount = billTotalAfterRoundOff(preview.totalBeforeRoundOff, roundOffEnabled)
   const cgst = preview.cgst
   const sgst = preview.sgst
   const igst = preview.igst
@@ -1682,6 +1691,46 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     resetBill()
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
   }
+
+  /*
+   * Phase 7f — hold this bill and start the next customer's (Hold beside Pay,
+   * or F8). Written at once (use-drafts holdNow) and kept on this phone until
+   * it is finished or discarded; the Held row brings it back in one tap.
+   */
+  const holdBill = (opts: { quiet?: boolean } = {}): boolean => {
+    const name = heldBillName(draftData, selectedParty?.name)
+    const r = holdNow(draftData)
+    if (r === 'full') {
+      sonnerToast.error(`${MAX_HELD} bills are on hold`, { description: 'Finish or discard one first.' })
+      return false
+    }
+    if (r === 'held' && !opts.quiet) {
+      try { haptic.success() } catch {}
+      sonnerToast.success(`Held · ${name}`, { duration: 3000 })
+    }
+    resetBill()
+    return true
+  }
+  holdRef.current = () => { if (!saving) holdBill() }
+  /** Bring a held bill back; a bill already on screen is held in its place, never lost. */
+  const resumeHeld = (id: string) => {
+    if (id === activeDraftId) return
+    if ((items.length > 0 || !!partyId) && !holdBill({ quiet: true })) return
+    handleRestoreDraft(id)
+  }
+  // The held bills other than the one on screen, newest first, with the engine's totals (#187).
+  const heldOthers = useMemo(() => drafts
+    .filter((d) => d.id !== activeDraftId)
+    .map((d) => {
+      const data = d.data as any
+      const party = data?.partyId ? allParties.find((p) => p.id === data.partyId) : null
+      return {
+        id: d.id,
+        name: heldBillName(data, party?.name),
+        when: heldBillWhen(d.savedAt),
+        total: heldBillFigures(data, { formType: type, productMap, chargesGst: shopChargesGst, roundOffEnabled }).total,
+      }
+    }), [drafts, activeDraftId, allParties, type, productMap, shopChargesGst, roundOffEnabled])
   // The same flow as the bill screen's "Send bill" (lib/share-bill-flow.ts), on the bill as saved.
   const handleShareSaved = async () => {
     if (!savedBill?.id) return
@@ -1777,26 +1826,35 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
        * silent-but-safe. An explicit "leave / discard" confirmation on the way
        * out is the right completion of this and is tracked separately.)
        */}
-      {hasDrafts && items.length === 0 && (
-        <button
-          onClick={() => { haptic.click(); setDraftModalOpen(true) }}
-          className="w-full flex items-center justify-between gap-2 p-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition text-left"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <Clock className="w-4 h-4 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-primary">
-                {drafts.length} saved draft{drafts.length === 1 ? '' : 's'}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                {activeDraftId ? 'Editing a restored draft' : 'Tap to restore or delete previous drafts'}
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-primary flex-shrink-0" />
-        </button>
+      {/*
+        * Phase 7f (#144): the Held row — one line, only the bills NOT on screen
+        * (the one being typed is never announced to itself). Tap a bill to bring
+        * it back; the bill on screen is held in its place. "All" opens the list
+        * (delete lives there).
+        */}
+      {heldOthers.length > 0 && (
+        <div className="flex items-center gap-2 min-w-0" role="group" aria-label="Held bills">
+          <span className="text-xs font-semibold text-muted-foreground flex-shrink-0">Held</span>
+          {heldOthers.slice(0, HELD_CHIPS).map((h) => (
+            <button
+              key={h.id}
+              type="button"
+              onClick={() => { haptic.click(); resumeHeld(h.id) }}
+              className="min-h-12 flex-1 min-w-0 px-3 py-1 rounded-xl border border-border bg-card text-left hover:border-primary/40 transition"
+              aria-label={`Bring back ${h.name}, ${formatINR(h.total)}`}
+            >
+              <span className="block text-sm font-medium truncate">{h.name}</span>
+              <span className="block text-xs text-muted-foreground tabular-nums truncate">{formatINR(h.total)} · {h.when}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => { haptic.click(); setDraftModalOpen(true) }}
+            className="min-h-12 px-3 flex-shrink-0 rounded-xl text-sm font-semibold text-primary hover:bg-primary/10 transition"
+          >
+            All {heldOthers.length}
+          </button>
+        </div>
       )}
 
       {/* Asked before saving a purchase with no supplier bill number. */}
@@ -1810,8 +1868,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               Leave this {estimateMode ? 'estimate' : isSale ? 'sale' : 'purchase'}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              It is saved in Drafts, so you can finish it later — or discard it now and
-              keep your drafts clean.
+              Hold it to finish later, or discard it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
@@ -1821,8 +1878,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             <Button variant="destructive" className="min-h-[44px]" onClick={handleDiscardAndLeave}>
               Discard
             </Button>
-            <Button variant="outline" className="min-h-[44px]" onClick={() => resolveLeave(true)}>
-              Keep draft
+            <Button variant="outline" className="min-h-[44px]" onClick={handleHoldAndLeave}>
+              Hold bill
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1834,8 +1891,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         onOpenChange={setDraftModalOpen}
         drafts={drafts}
         activeDraftId={activeDraftId}
-        onRestore={handleRestoreDraft}
+        onRestore={resumeHeld}
         onDelete={deleteDraft}
+        figuresOf={(data) => heldBillFigures(data, { formType: type, productMap, chargesGst: shopChargesGst, roundOffEnabled })}
+        nameOf={(data) => heldBillName(data, data?.partyId ? allParties.find((p) => p.id === data.partyId)?.name : null)}
       />
 
       <OneOffLine
@@ -2194,7 +2253,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     )}
                     {priceCheck && isSale && <p className="text-xs font-semibold text-check">Price check: tap or scan an item — nothing is added</p>}
                     {nextErr && !qtyOpen && <p role="status" className="text-xs font-semibold text-bad">{nextErr} · still waiting on Qty</p>}
-                    <p className="hidden lg:block text-xs text-muted-foreground">F2 search · F3 {isSale ? 'customer' : 'supplier'}{qtyButtonOn ? ' · F4 quantity' : ''}{priceCheckOn ? ' · F6 price check' : ''} · F10 {counterMode ? 'pay' : 'save'} · a barcode gun works anywhere</p>
+                    <p className="hidden lg:block text-xs text-muted-foreground">F2 search · F3 {isSale ? 'customer' : 'supplier'}{qtyButtonOn ? ' · F4 quantity' : ''}{priceCheckOn ? ' · F6 price check' : ''} · F8 hold · F10 {counterMode ? 'pay' : 'save'} · a barcode gun works anywhere</p>
                   </>
                 )}
                 scanButton={features?.barcodeScanner ? (
@@ -3539,9 +3598,22 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             </p>
           ) : null}
         </div>
-        <Button variant="outline" size="sm" onClick={handleCancel} className="h-11 px-4">
-          Cancel
-        </Button>
+        {/* 7f: Hold beside Pay — this bill waits, the next customer starts. On a phone Cancel
+            becomes ✕ while a bill has lines, so the three fit at 375 px. */}
+        {items.length > 0 ? (
+          <>
+            <Button variant="outline" size="icon" onClick={handleCancel} className="h-11 w-11" aria-label="Cancel this bill">
+              <X className="w-4 h-4" aria-hidden />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { if (!saving) holdBill() }} className="h-11 px-3" aria-label="Hold this bill and start the next">
+              Hold
+            </Button>
+          </>
+        ) : (
+          <Button variant="outline" size="sm" onClick={handleCancel} className="h-11 px-4">
+            Cancel
+          </Button>
+        )}
         {counterMode ? (
           <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-6 tabular-nums" onClick={() => setPaySheetOpen(true)} disabled={saving || saveBlocked || items.length === 0}>
             Pay {formatINR(totalAmount)}
@@ -3587,6 +3659,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         <Button variant="outline" onClick={handleCancel} className="h-11 px-5">
           Cancel
         </Button>
+        {items.length > 0 && (
+          <Button variant="outline" onClick={() => { if (!saving) holdBill() }} className="h-11 px-5" title="Hold this bill (F8)">
+            Hold
+          </Button>
+        )}
         {counterMode ? (
           <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-8 tabular-nums" onClick={() => setPaySheetOpen(true)} disabled={saving || saveBlocked || items.length === 0}>
             Pay {formatINR(totalAmount)}
