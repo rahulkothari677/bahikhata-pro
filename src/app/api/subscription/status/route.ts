@@ -144,7 +144,9 @@ const PLANS_CATALOG = [
     },
     limits: {
       transactions: 0,
-      products: 50,
+      // #304: read from the one plan table (lib/subscription.ts) — this catalog
+      // said 50 on its own, a second copy of the cap.
+      products: PLAN_LIMITS.free.products,
       aiScans: 20,         // per day
       voiceEntries: 20,    // per day
       aiScansPeriod: 'day',
@@ -175,7 +177,7 @@ const PLANS_CATALOG = [
     },
     limits: {
       transactions: 0,
-      products: 0,
+      products: PLAN_LIMITS.pro.products,
       aiScans: 50,         // per day — marketed as "Unlimited"
       voiceEntries: 50,
       aiScansPeriod: 'day',
@@ -206,7 +208,7 @@ const PLANS_CATALOG = [
     },
     limits: {
       transactions: 0,
-      products: 0,
+      products: PLAN_LIMITS.elite.products,
       aiScans: 100,        // per day — marketed as "Truly Unlimited"
       voiceEntries: 100,
       aiScansPeriod: 'day',

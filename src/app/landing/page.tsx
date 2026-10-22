@@ -155,7 +155,7 @@ export default function LandingPage() {
               <a href="/" className="block w-full py-2.5 rounded-lg border border-border text-center text-sm font-medium hover:bg-muted transition">Get Started</a>
               <div className="mt-4 space-y-2 text-sm">
                 <PricingItem text="Unlimited transactions" />
-                <PricingItem text="50 products" />
+                <PricingItem text="Unlimited products" />
                 <PricingItem text="20 AI scans/day" />
                 <PricingItem text="20 voice entries/day" />
                 <PricingItem text="1 shop" />
@@ -206,7 +206,7 @@ export default function LandingPage() {
         <div className="max-w-3xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-12">Frequently Asked Questions</h2>
           <div className="space-y-6">
-            <FAQItem q="Is EkBook really free?" a="Yes! The Free plan is free forever — unlimited transactions, 50 products, 20 AI scans/day. No credit card needed. Upgrade to Pro only when you need more." />
+            <FAQItem q="Is EkBook really free?" a="Yes! The Free plan is free forever — unlimited transactions and products, 20 AI scans/day. No credit card needed. Upgrade to Pro only when you need more." />
             <FAQItem q="Does it work without internet?" a="Yes! EkBook works completely offline. You can create sales, add products, check inventory — everything works without internet. Data syncs automatically when you reconnect." />
             <FAQItem q="Is my data safe?" a="Absolutely. Your data is encrypted, stored securely on cloud servers, and never sold. We comply with India's DPDP Act 2023. You can delete all your data anytime from Settings." />
             <FAQItem q="Can I use it on my phone and computer?" a="Yes! EkBook works on any device — mobile, tablet, desktop. It's a Progressive Web App (PWA), so you can install it on your phone like a native app." />

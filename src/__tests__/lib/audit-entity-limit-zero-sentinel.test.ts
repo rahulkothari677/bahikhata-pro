@@ -124,10 +124,13 @@ describe('the 0-means-unlimited sentinel still applies where it should', () => {
     expect(result.limit).toBe(Infinity)
   })
 
-  it('still caps Free products at 50', async () => {
+  // #304 (Rahul, 22 Oct 2026): no item cap on any plan — Free reads products: 0 too.
+  it('leaves Free products unlimited as well', async () => {
     onPlan('free')
-    mockProductCount.mockResolvedValue(50)
-    expect((await checkEntityLimit('user_1', 'products')).allowed).toBe(false)
+    mockProductCount.mockResolvedValue(10_000)
+    const result = await checkEntityLimit('user_1', 'products')
+    expect(result.allowed).toBe(true)
+    expect(result.limit).toBe(Infinity)
   })
 
   it('still caps Pro shops at 3 — the control that exposed the staff bug', async () => {
@@ -165,10 +168,10 @@ describe('the upgrade prompt names a plan that actually sells the thing', () => 
     expect(msg).not.toMatch(/Upgrade to/)
   })
 
-  it('points a Free user at Pro for products, where Pro genuinely is the answer', async () => {
+  it('never sells an upgrade for items — no plan caps them (#304)', async () => {
     onPlan('free')
-    mockProductCount.mockResolvedValue(50)
-    expect((await checkEntityLimit('user_1', 'products')).upgradeMessage).toMatch(/Pro/)
+    mockProductCount.mockResolvedValue(10_000)
+    expect((await checkEntityLimit('user_1', 'products')).upgradeMessage || '').not.toMatch(/Upgrade to/)
   })
 })
 

@@ -7,6 +7,7 @@
  * Now: single source of truth (PRICING_CONFIG) verified by these tests.
  */
 import { PRICING_CONFIG, type Plan } from '@/lib/subscription'
+import { readCode } from '@/test-support/read-source'
 
 describe('subscription.ts — Pricing config consistency', () => {
   describe('PRICING_CONFIG', () => {
@@ -50,9 +51,18 @@ describe('subscription.ts — Pricing config consistency', () => {
       expect(PRICING_CONFIG.free.limits.dailyVoiceEntries).toBeLessThanOrEqual(PRICING_CONFIG.pro.limits.dailyVoiceEntries)
     })
 
-    it('free has limited products, pro has unlimited (0)', () => {
-      expect(PRICING_CONFIG.free.limits.products).toBe(50)
-      expect(PRICING_CONFIG.pro.limits.products).toBe(0) // 0 = unlimited
+    // #304 (Rahul, 22 Oct 2026): no item cap on any plan — a kirana holds
+    // hundreds of items and every size is one. 0 = unlimited (entityLimitFor).
+    it('no plan caps the number of items', () => {
+      for (const plan of ['free', 'pro', 'elite'] as const) {
+        expect(PRICING_CONFIG[plan].limits.products).toBe(0)
+      }
+    })
+
+    it('the pricing catalog reads the item limit from the plan table, never its own number', () => {
+      const code = readCode('src/app/api/subscription/status/route.ts')
+      expect(code.match(/products: PLAN_LIMITS\.(free|pro|elite)\.products/g)).toHaveLength(3)
+      expect(code).not.toMatch(/products:\s*\d/)
     })
 
     it('pro has lower limits than elite', () => {

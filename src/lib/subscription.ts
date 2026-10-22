@@ -13,7 +13,9 @@ import { db } from '@/lib/db'
  * usage-limits.ts and create-order/route.ts import from it.
  *
  * Final pricing (matches Razorpay):
- *   - Free: ₹0 — 20 AI scans/day, 20 voice/day, 50 products, 1 shop
+ *   - Free: ₹0 — 20 AI scans/day, 20 voice/day, unlimited items, 1 shop
+ *     (#304, Rahul 22 Oct 2026: no item cap on any plan. A kirana holds hundreds
+ *     of items and every size is one, so 50 could not hold even its biscuits.)
  *   - Pro: ₹299/mo (₹2999/yr) — 50 AI scans/day, 50 voice/day, 3 shops
  *   - Elite: ₹599/mo (₹5999/yr) — 100 AI scans/day, 100 voice/day, unlimited shops, 5 staff
  */
@@ -67,7 +69,7 @@ export const PRICING_CONFIG: Record<Plan, PlanConfig> = {
     color: 'text-slate-600',
     limits: {
       transactions: 0,        // unlimited
-      products: 50,
+      products: 0,            // unlimited (#304)
       dailyAiScans: 20,
       dailyVoiceEntries: 20,
       monthlyAiCostCapInr: 15,
