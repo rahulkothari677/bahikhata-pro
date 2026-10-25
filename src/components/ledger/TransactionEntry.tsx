@@ -25,7 +25,7 @@ import {
   ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
   TrendingUp, TrendingDown, Calendar, User, ScanLine, Folder, FolderOpen,
   Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock, AlertTriangle, Minus,
-  FileDown, Settings2,
+  Settings2,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { BillScreenSettings } from '@/components/ledger/BillScreenSettings'
@@ -43,6 +43,7 @@ import { haptic } from '@/lib/haptic'
 import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
 import { freezeWhileBillOpen } from '@/lib/pick-rows'
 import { ItemPicker } from './ItemPicker'
+import { ReturnFromBill } from './ReturnFromBill'
 import { partyMatchesSearch, partyPrefillFromSearch } from '@/lib/party-search'
 import { PaySheet, SavedSheet, type SavedBill } from '@/components/ledger/PaySheet'
 import { buildUpiLink, invoiceShopFromSetting } from '@/lib/invoice-document'
@@ -74,7 +75,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
-import { refillPrice, resolveLineIncludesGst } from '@/lib/refill-line'
+import { resolveLineIncludesGst } from '@/lib/refill-line'
+import { originalLinesOf, setReturnedQty, returnAll, type OriginalLine } from '@/lib/return-lines'
 import { lineTaxable } from '@/lib/line-taxable'
 import { gstStatus, chargesGstOnSales, claimsInputCredit, isOutwardDocument } from '@/lib/shop-tax'
 import { purchaseCostPerUnit, purchaseRateFromCost, isNoCostLine, marginOnCosted, linesAboveMrp, lineAboveMrp, customerPaysPerUnit } from '@/lib/unit-profit'
@@ -962,12 +964,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     setItems((now) => now.map((it, i) => (i === index ? { ...it, unitPrice: mrp, priceIncludesGst: true } : it)))
   }
 
-  // V17 Audit §1: Load items from the original sale when creating a credit note.
-  // The form starts BLANK (partial returns are the common case). This button lets
-  // the user pull in ALL items from the original sale for full returns — they then
-  // adjust quantities or delete non-returned items. Fetches the original transaction
-  // by ID and maps its items to the ItemRow shape.
-  const [loadingOriginal, setLoadingOriginal] = useState(false)
+  // #190 (7g-4): a return picks from the bill it reverses — its lines with − / + and
+  // "Return all" (lib/return-lines.ts). The note still starts BLANK (V17 Audit §1:
+  // partial returns are the common case); the shop-wide picker folds behind a button.
+  const [fromBill, setFromBill] = useState<{ id: string; billNo: string; lines: OriginalLine[] } | null>(null)
+  const [fromBillState, setFromBillState] = useState<'idle' | 'loading' | 'failed'>('idle')
+  const [notePickerOpen, setNotePickerOpen] = useState(false)
   /*
    * Phase 7c-2 (from 6e, now for every bill) — ONE add step: a picker row, a
    * search pick, a gun scan and the camera all come here. Quantity first ("6,
@@ -1079,38 +1081,24 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       window.removeEventListener('keydown', onEscape, true)
     }
   }, [isSale])
-  const handleLoadOriginalItems = async () => {
-    if (!originalTransactionId) return
-    setLoadingOriginal(true)
-    try {
-      const r = await offlineFetch(`/api/transactions/${originalTransactionId}`)
-      if (!r.ok) throw new Error(await readError(r))
-      const data = await r.json()
-      const originalItems = data.transaction?.items || []
-      if (originalItems.length === 0) {
-        sonnerToast.info('The original sale has no items to load.')
-        setLoadingOriginal(false)
-        return
-      }
-      setPresetLoaded(false) // resume autosave — user is making changes
-      setItems(originalItems.map((item: any) => ({
-        productId: item.productId || '',
-        productName: item.productName || '',
-        // 🔒 V17 Audit Phase 10: Use enteredQuantity/enteredUnit if available
-        // (preserves the user's original input like "500ml" instead of "0.5ltr")
-        quantity: item.enteredQuantity ?? item.quantity ?? 1,
-        ...refillPrice(item),
-        gstRate: item.gstRate || 0,
-        unit: item.enteredUnit ?? item.unit ?? 'pcs',
-        discountAmount: 0,
-      })))
-      sonnerToast.success(`Loaded ${originalItems.length} item${originalItems.length !== 1 ? 's' : ''} from the original sale`)
-    } catch (e: any) {
-      sonnerToast.error(e?.message || "Couldn\'t load items from the original sale")
-    } finally {
-      setLoadingOriginal(false)
-    }
-  }
+  // #190: read the original bill once its id is known (a return opened from the bill, or a restored draft).
+  useEffect(() => {
+    if (!isNote || !originalTransactionId) { setFromBill(null); setFromBillState('idle'); return }
+    let gone = false
+    setFromBillState('loading')
+    offlineFetch(`/api/transactions/${originalTransactionId}`)
+      .then(async (r) => { if (!r.ok) throw new Error(await readError(r)); return r.json() })
+      .then((data) => {
+        if (gone) return
+        const bill = data.transaction || {}
+        setFromBill({ id: originalTransactionId, billNo: bill.invoiceNo || 'the bill', lines: originalLinesOf(bill.items || []) })
+        setFromBillState('idle')
+      })
+      .catch(() => { if (!gone) setFromBillState('failed') })
+    return () => { gone = true }
+  }, [isNote, originalTransactionId])
+  const setFromBillQty = (line: OriginalLine, qty: number) => { markDirty(); setItems((now) => setReturnedQty(now, line, qty)) }
+  const returnAllFromBill = () => { if (fromBill) { markDirty(); setItems((now) => returnAll(now, fromBill.lines)) } }
 
   // Totals — 🔒 V12: Use the SAME computeLineItems() the server uses. Because
   // line-items.ts is pure (no DB), importing it here guarantees the preview the
@@ -1291,6 +1279,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     ? (cashRefundOn ? (paidAmount === '' ? totalAmount : paid) : 0)
     : (paidAmount === '' ? totalAmount : paid)
   const due = roundMoney(totalAmount - finalPaid)
+  // #190: on a return the unrefunded part goes to the khata — the bars said "₹52 due" in red, as if owed.
+  const barDue = isNote
+    ? { text: `${formatINR(due)} to ${isCreditNote ? 'customer' : 'supplier'} khata`, cls: isCreditNote ? 'text-good' : 'text-check' }
+    : { text: `${formatINR(due)} due`, cls: 'text-rose-600' }
 
   // 🔒 V11 STOCK POLICY: Live stock check per cart item. Computes which items
   // would push stock below 0 (using the same normalizeToUnit logic as the server).
@@ -2188,8 +2180,27 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         {/* LEFT: the picker + the bill (takes 2 cols) */}
         <div className="contents lg:block lg:space-y-4 lg:col-span-2">
           <Card className="shadow-card border-border/60 order-2 lg:order-none py-0">
-            {/* Phase 7c: the ONE item picker (components/ledger/ItemPicker.tsx) — a row per brand with its
-                sizes as buttons, "Often sold", the customer's usual items, Groups; nothing cut silently. */}
+            {/* #190 (7g-4): a return against a bill starts from that bill's lines. */}
+            {isNote && originalTransactionId && (
+              <ReturnFromBill
+                billNo={fromBill?.billNo || 'the bill'}
+                lines={fromBill?.lines || []}
+                rows={items}
+                onSet={setFromBillQty}
+                onAll={returnAllFromBill}
+                loading={fromBillState === 'loading'}
+                failed={fromBillState === 'failed'}
+              />
+            )}
+            {isNote && originalTransactionId && !notePickerOpen && fromBillState !== 'failed' ? (
+              <div className="p-3 sm:p-4 border-b border-border">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setNotePickerOpen(true)} className="gap-1.5 text-muted-foreground">
+                  <Plus className="w-4 h-4" aria-hidden /> Item not on {fromBill?.billNo || 'the bill'}
+                </Button>
+              </div>
+            ) : (
+            /* Phase 7c: the ONE item picker (components/ledger/ItemPicker.tsx) — a row per brand with its
+                sizes as buttons, "Often sold", the customer's usual items, Groups; nothing cut silently. */
             <div className="p-3 sm:p-4 border-b border-border">
               <ItemPicker
                 products={products}
@@ -2279,6 +2290,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 )}
               />
             </div>
+            )}
 
             {/* Items list */}
             <div className="p-3 sm:p-4">
@@ -2392,29 +2404,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 </Card>
               )}
 
-              {/* V17 Audit §1: "Load items from original" button for credit/debit notes.
-                  🔒 R10b-6 (Phase 3): Was gated on isCreditNote only — debit notes
-                  (purchase returns) also have originalTransactionId and benefit from
-                  loading all items for a full return. Now: gate on isNote. */}
-              {isNote && originalTransactionId && (
-                <button
-                  type="button"
-                  onClick={handleLoadOriginalItems}
-                  disabled={loadingOriginal}
-                  className={cn(
-                    'w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-violet-300 bg-violet-50 dark:bg-violet-950/20 text-violet-700 dark:text-violet-300 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-950/30 transition mb-2',
-                    loadingOriginal && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  <FileDown className="w-4 h-4" />
-                  {loadingOriginal
-                    ? 'Loading...'
-                    : items.length > 0
-                      ? `Reload all items from original ${isCreditNote ? 'sale' : 'purchase'}`
-                      : `Load all items from original ${isCreditNote ? 'sale' : 'purchase'}`
-                  }
-                </button>
-              )}
+              {/* #190: "Load all items from original" became "Return all" on the From-bill card above
+                  (credit and debit notes alike, R10b-6). */}
 
               {items.length === 0 && counterMode ? (
                 /* 6c: on a phone the tiles must be in the first screen; an empty bill is one line, not a 140px box. */
@@ -3609,8 +3600,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           ) : hasChecks ? (
             <p className="text-xs text-check font-medium">{checks.length} to check</p>
           ) : due > 0 && items.length > 0 ? (
-            <p className="text-xs text-rose-600 font-medium tabular-nums">
-              {formatINR(due)} due
+            <p className={cn('text-xs font-medium tabular-nums', barDue.cls)}>
+              {barDue.text}
             </p>
           ) : null}
         </div>
@@ -3655,8 +3646,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
           </div>
           {due > 0 && items.length > 0 && !saveBlocked && (
-            <div className="text-sm font-medium text-rose-600 tabular-nums">
-              {formatINR(due)} due
+            <div className={cn('text-sm font-medium tabular-nums', barDue.cls)}>
+              {barDue.text}
             </div>
           )}
           {hasStockBlock && (
