@@ -62,6 +62,10 @@ export interface ItemPickerProps {
   /** Weight buttons on a loose good's row (250 g, 500 g, 1 kg…), each adding that much. */
   weightButtons?: boolean
   onAddQty?: (p: any, q: number) => void
+  /** C12: what Enter will do with the typed line ("Enter adds 400 g of Toor Dal (loose)"). */
+  searchHint?: string | null
+  /** C12: a pasted list keeps its lines (a one-line box would join them into one item). */
+  listPaste?: boolean
   onAdd: (p: any) => void
   onDecrement: (id: string) => void
   catalogCutNote?: string | null
@@ -84,7 +88,7 @@ const WINDOW_FOLDED = 300
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
 export function ItemPicker(props: ItemPickerProps) {
-  const { products, query, onQuery, onEnter, catalogCutNote, scanButton, belowSearch, empty } = props
+  const { products, query, onQuery, onEnter, catalogCutNote, scanButton, belowSearch, empty, listPaste } = props
   return (
     <div className="space-y-2">
       <div className="relative">
@@ -96,6 +100,13 @@ export function ItemPicker(props: ItemPickerProps) {
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
+          onPaste={(e) => {
+            const text = e.clipboardData.getData('text')
+            if (!listPaste || !/\n/.test(text)) return
+            e.preventDefault()
+            const lines = text.replace(/\r?\n+/g, ', ').replace(/[,\s]+$/, '')
+            onQuery(query.trim() ? `${query.trim()}, ${lines}` : lines)
+          }}
           className={cn('pl-9', scanButton ? 'pr-24' : 'pr-12')}
           autoComplete="off"
         />
@@ -204,7 +215,9 @@ function ListArea(p: ItemPickerProps) {
     <TabRow label="Products" small items={['All', ...types.tabs].map((t) => ({ id: t, label: t, n: 0 }))} current={subNow} onPick={goSub} />
   ) : null
   const searchNote = searching
-    ? <p className="text-xs font-semibold text-muted-foreground px-1">{p.result.close ? 'No exact match · close spellings' : 'Searching every item'}</p>
+    ? <p className={cn('text-xs font-semibold px-1', p.searchHint ? 'text-primary' : 'text-muted-foreground')}>
+        {p.searchHint ?? (p.result.close ? 'No exact match · close spellings' : 'Searching every item')}
+      </p>
     : null
   const windowBox = (cls: string) => (
     <div ref={listRef} data-list-window style={side ? undefined : sized} className={cn('overflow-y-auto overscroll-contain min-w-0', cls)}>

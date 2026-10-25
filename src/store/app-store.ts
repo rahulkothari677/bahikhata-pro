@@ -1,5 +1,9 @@
 import type { ListFocus } from '@/lib/list-focus'
+import type { LearnedPicks } from '@/lib/typed-pick'
 import { create } from 'zustand'
+
+/** Where this device keeps its learned picks (C12). */
+export const LEARNED_PICKS_KEY = 'bahikhata:learned-picks'
 import { rememberScroll, restoreScroll, scrollToTop } from '@/lib/scroll-memory'
 
 /** What a screen should do when it arrives (pendingArrival / useArrivalRequest). */
@@ -109,6 +113,9 @@ export type FeatureKey =
   | 'billBigPad'
   | 'billGramsRule'
   | 'billCheckAmounts'
+  | 'billTypedAmounts'
+  | 'billListEntry'
+  | 'billLearnPicks'
   | 'billQtyButton'
   | 'billPriceCheck'
   | 'billOftenList'
@@ -152,6 +159,9 @@ const DEFAULT_FEATURES: FeatureFlags = {
   billBigPad: false,
   billGramsRule: true,
   billCheckAmounts: true,
+  billTypedAmounts: true,
+  billListEntry: true,
+  billLearnPicks: true,
   billQtyButton: true,
   billPriceCheck: true,
   billOftenList: true,
@@ -237,6 +247,9 @@ interface AppState {
   /** C12: ⚙ Bill screen settings — opened from the phone's top bar or the desktop bill header. */
   billSettingsOpen: boolean
   setBillSettingsOpen: (open: boolean) => void
+  /** C12: picks this device made twice for the same typed words (lib/typed-pick.ts), kept on the phone. */
+  learnedPicks: LearnedPicks
+  setLearnedPicks: (p: LearnedPicks) => void
   triggerBarcodeOpen: number
   fireTriggerBarcodeOpen: () => void
   // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Deep-link triggers for MoreScreen items.
@@ -453,6 +466,14 @@ export const useAppStore = create<AppState>()(
       fireTriggerVoiceOpen: () => set((s) => ({ triggerVoiceOpen: s.triggerVoiceOpen + 1 })),
       billSettingsOpen: false,
       setBillSettingsOpen: (open) => set({ billSettingsOpen: open }),
+      learnedPicks: (() => {
+        if (typeof window === 'undefined') return {}
+        try { return JSON.parse(localStorage.getItem(LEARNED_PICKS_KEY) || '{}') as LearnedPicks } catch { return {} }
+      })(),
+      setLearnedPicks: (p) => {
+        set({ learnedPicks: p })
+        if (typeof window !== 'undefined') { try { localStorage.setItem(LEARNED_PICKS_KEY, JSON.stringify(p)) } catch {} }
+      },
       triggerBarcodeOpen: 0,
       fireTriggerBarcodeOpen: () => set((s) => ({ triggerBarcodeOpen: s.triggerBarcodeOpen + 1 })),
       // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Deep-link trigger implementations.

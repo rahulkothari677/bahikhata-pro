@@ -59,7 +59,8 @@ describe('one add step on every bill', () => {
     const scan = code.slice(at('const handleScannedCode = (code: string) =>'), at('const scanBufferRef = useRef(createScanBuffer())'))
     expect(scan).toContain('else setUnknownCode(code)')
     expect(code).toContain('setUnknownCode(productSearch.trim())')
-    expect(code).toContain('initial={{ barcode: newItemCode ?? undefined }}')
+    // C12: the same form also takes a typed line's name (a card's "Add it as a new item").
+    expect(code).toContain('initial={{ barcode: newItemCode ?? undefined, name: newItemFor ? parseTypedLine(newItemFor.said).name : undefined }}')
     expect(code).toContain('if (saved) handleAddProduct(saved, 1)')
   })
   test('keys on every bill, never under a sheet; the gun only where no box has the cursor; F10 = the bar\'s button', () => {

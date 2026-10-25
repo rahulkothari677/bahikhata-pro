@@ -48,6 +48,18 @@ const CONSUMERS: Record<string, [string, RegExp][]> = {
     [ENTRY, /sideView=\{features\?\.billSideView === true\}/],
     [PICKER, /const side = !!p\.sideView/],
   ],
+  billTypedAmounts: [
+    [ENTRY, /const typedOn = features\?\.billTypedAmounts !== false/],
+    [ENTRY, /if \(!typedOn \|\| !line\.name/],
+  ],
+  billListEntry: [
+    [ENTRY, /const listOn = features\?\.billListEntry !== false/],
+    [PICKER, /if \(!listPaste \|\| !\/\\n\/\.test\(text\)\) return/],
+  ],
+  billLearnPicks: [
+    [ENTRY, /const learnOn = features\?\.billLearnPicks !== false/],
+    [ENTRY, /learned: learnOn \? \(k\) => learnedId\(learnedPicks, k\) : undefined/],
+  ],
   billPencil: [
     [ENTRY, /const pencilOn = features\?\.billPencil !== false/],
     [ENTRY, /onPencil=\{pencilOn \? \(row\) => \{ setQtyOpen\(false\); setKb\(row\) \} : undefined\}/],
@@ -138,6 +150,15 @@ describe('"Scan a bill (AI)" off means off on every screen', () => {
     const openers = walk('src/components').map((p) => p.replace(/\\/g, '/')).filter((p) => readCode(p).includes("setView('scanner')"))
     expect(openers.length).toBeGreaterThanOrEqual(5)
     for (const p of openers) expect([p, readCode(p).includes('aiScanner !== false')]).toEqual([p, true])
+  })
+})
+
+describe('a typed line never goes missing (C12)', () => {
+  it('Save waits while a card is open, and the bar says how many', () => {
+    const code = readCode(ENTRY)
+    expect(code).toMatch(/const saveBlocked = hasStockBlock \|\| hasMrpBlock \|\| hasChecks/)
+    expect(code).toMatch(/\{checks\.length\} to check/)
+    expect(code).toMatch(/const resetBill = \(\) => \{\s*setItems\(\[\]\)\s*setChecks\(\[\]\)/)
   })
 })
 

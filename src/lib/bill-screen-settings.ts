@@ -44,6 +44,10 @@ export const BILL_SCREEN_SETTINGS: readonly BillScreenSetting[] = [
   { key: 'voiceEntry', group: 'add', label: 'Voice', help: 'Say the items' },
   { key: 'aiScanner', group: 'add', label: 'Scan a bill (AI)', help: 'A photo of a written list or bill. Also in the menu' },
   { key: 'barcodeScanner', group: 'add', label: 'Barcode scanner', help: 'The camera reads the packet' },
+  // C12: what is typed in the search box.
+  { key: 'billTypedAmounts', group: 'add', label: 'Amount with the name', help: '"toor 400" goes straight on the bill' },
+  { key: 'billListEntry', group: 'add', label: 'Type or paste a whole list', help: 'Commas or lines; unsure items wait on the bill' },
+  { key: 'billLearnPicks', group: 'add', label: 'Learn my picks', help: 'The same pick twice is remembered' },
   // C11: your List design, or the same rows with the groups in a column on the left.
   { key: 'billSideView', group: 'screen', label: 'Side view', help: 'Groups in a column on the left', defaultOn: false },
   { key: 'billQtyButton', group: 'screen', label: 'Qty button', help: 'Type how many, then tap the item' },

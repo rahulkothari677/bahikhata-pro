@@ -79,7 +79,10 @@ import { lineTaxable } from '@/lib/line-taxable'
 import { gstStatus, chargesGstOnSales, claimsInputCredit, isOutwardDocument } from '@/lib/shop-tax'
 import { purchaseCostPerUnit, purchaseRateFromCost, isNoCostLine, marginOnCosted, linesAboveMrp, lineAboveMrp, customerPaysPerUnit } from '@/lib/unit-profit'
 import { quantityForAmount } from '@/lib/loose-amount'
-import { nextQtyFor, nextLabel, type NextQty } from '@/lib/loose-entry'
+import { nextQtyFor, nextLabel, looseLabel, isLooseUnit, type NextQty } from '@/lib/loose-entry'
+import { parseTypedLine, splitTypedList, isTypedList } from '@/lib/typed-line'
+import { pickTypedLine, teach, learnedId } from '@/lib/typed-pick'
+import { TypedChecks, type TypedCheck } from '@/components/ledger/TypedChecks'
 import { StateField, GstinField } from '@/components/common/StateField'
 
 const PAYMENT_MODES = [
@@ -527,10 +530,18 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     const ids = (topSellersData?.ids as string[] | undefined) ?? []
     return new Map(ids.map((id, i) => [id, 1 - i / Math.max(ids.length, 1)]))
   }, [topSellersData])
-  const productSearchResult = useMemo(
-    () => itemSearch(products, productSearch, { boost: searchBoost }),
-    [products, productSearch, searchBoost],
-  )
+  // C12: a typed line keeps its amount out of the search — "toor 400" lists the toor rows — while
+  // "parle 10" still finds the ₹10 packs. In a typed list the rows follow the line being typed.
+  const typedOn = features?.billTypedAmounts !== false
+  const listOn = features?.billListEntry !== false
+  const searchText = listOn && isTypedList(productSearch) ? (splitTypedList(productSearch).slice(-1)[0] ?? '') : productSearch
+  const productSearchResult = useMemo(() => {
+    const full = itemSearch(products, searchText, { boost: searchBoost })
+    if (!typedOn || (full.items.length && !full.close)) return full
+    const line = parseTypedLine(searchText)
+    const byName = line.name ? itemSearch(products, [line.name, ...line.sizes].join(' '), { boost: searchBoost }) : full
+    return byName.items.length ? byName : full
+  }, [products, searchText, searchBoost, typedOn])
   const filteredProducts = productSearchResult.items
   // Phase 6d: Pay opens one sheet; after saving, the Saved sheet offers Share / Print / Next bill (#145).
   const [paySheetOpen, setPaySheetOpen] = useState(false)
@@ -967,6 +978,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   useEffect(() => { if (!voiceOn) setShowVoiceEntry(false) }, [voiceOn])
   // Step 2b: the keypad bar for one row (✎, or a loose good's amount); closes when ✎ is switched off.
   const [kb, setKb] = useState<KeypadRow | null>(null)
+  // Step 2d: typed lines the bill was not sure of, waiting as cards (Save waits for them).
+  const [checks, setChecks] = useState<TypedCheck[]>([])
+  const checkSeq = useRef(0)
+  const [newItemFor, setNewItemFor] = useState<TypedCheck | null>(null)
   const pencilOn = features?.billPencil !== false
   useEffect(() => { if (!pencilOn) setKb(null) }, [pencilOn])
   const [checkedProduct, setCheckedProduct] = useState<any | null>(null)
@@ -1096,6 +1111,61 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     const line = lineOf(product)
     return quantityForAmount(rupees, { unitPrice: Number(line.unitPrice) || 0, gstRate: Number(line.gstRate) || 0, priceIncludesGst: lineIncludesGst(line, product), unit: line.unit }, product.unit, { chargesGst: shopChargesGst })
   }
+  // Step 2d (C12): Enter on a typed line or list — straight on when certain (lib/typed-pick.ts), a card when not.
+  const learnedPicks = useAppStore((s) => s.learnedPicks)
+  const setLearnedPicks = useAppStore((s) => s.setLearnedPicks)
+  const learnOn = features?.billLearnPicks !== false
+  const pickTyped = (text: string) => pickTypedLine(text, {
+    search: (q) => itemSearch(products, q, { boost: searchBoost, nameOnly: true }),
+    gramsRule: features?.billGramsRule !== false,
+    rupeesToQty: (p, rupees) => kbQtyForRupees(p, rupees),
+    learned: learnOn ? (k) => learnedId(learnedPicks, k) : undefined,
+  })
+  /** "400 g · ₹56", "× 3 · ₹30": what a typed choice puts on the bill. */
+  const describeQty = (product: any, qty: number) =>
+    `${isLooseUnit(product.unit) ? looseLabel(qty, product.unit) : `× ${qty}`} · ${formatINR(qty * kbPaysAt(product, kbPriceOf(product)))}`
+  const addQtyNow = (product: any, q: number) => setItems((now) => {
+    const at = now.findIndex((x) => x.productId === product.id)
+    if (at >= 0) return now.map((x, k) => (k === at ? { ...x, quantity: x.quantity + q } : x))
+    return [...now, newLineFor(product, q)]
+  })
+  /** Did the typed path take this Enter? A plain name or a barcode is left to the old path. */
+  const enterTyped = (text: string): boolean => {
+    if (priceCheck && isSale) return false
+    const parts = listOn && isTypedList(text) ? splitTypedList(text) : [text]
+    if (parts.length === 1) {
+      const line = parseTypedLine(parts[0])
+      if (!typedOn || !line.name || (line.amount === null && line.tail === null && line.count === null)) return false
+    }
+    setPresetLoaded(false)
+    setShowVoiceEntry(false)
+    const asked: TypedCheck[] = []
+    let added = 0
+    for (const part of parts) {
+      const r = pickTyped(part)
+      if (r.kind === 'add') { addQtyNow(r.product, r.qty); added++ }
+      else if (r.kind === 'ask') asked.push({ id: ++checkSeq.current, said: r.said, key: r.key, choices: r.choices, more: r.more })
+    }
+    if (asked.length) setChecks((c) => [...c, ...asked])
+    if (parts.length > 1) sonnerToast.info(`${added} added${asked.length ? ` · ${asked.length} to check on the bill` : ''}`)
+    setProductSearch('')
+    return true
+  }
+  /** What Enter will do, said under the search while typing. */
+  const typedHint = (() => {
+    const t = productSearch.trim()
+    if (!t || (priceCheck && isSale)) return null
+    if (listOn && isTypedList(t)) {
+      const rs = splitTypedList(t).map(pickTyped)
+      const asks = rs.filter((r) => r.kind === 'ask').length
+      return `Enter adds ${rs.filter((r) => r.kind === 'add').length} of ${rs.length}${asks ? ` · ${asks} to check on the bill` : ''}`
+    }
+    const line = parseTypedLine(t)
+    if (!typedOn || !line.name || (line.amount === null && line.tail === null && line.count === null)) return null
+    const r = pickTyped(t)
+    if (r.kind === 'add') return `Enter adds ${isLooseUnit(r.product.unit) ? `${looseLabel(r.qty, r.product.unit)} of` : `${r.qty} ×`} ${r.product.name}${r.learned ? ' (learned)' : ''}`
+    return r.kind === 'ask' ? 'Not sure which · Enter puts it on the bill to check' : null
+  })()
   const kbPriceProblem = (product: any, price: number) => {
     if (actualType !== 'sale') return null
     const line = lineOf(product)
@@ -1270,7 +1340,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     ? linesAboveMrp(computeInput, (id) => productMap.get(id), { chargesGst: shopChargesGst })
     : []
   const hasMrpBlock = mrpOver.length > 0
-  const saveBlocked = hasStockBlock || hasMrpBlock
+  // C12: a typed line still waiting as a card is not on the bill yet — Save waits, nothing is dropped silently.
+  const hasChecks = checks.length > 0
+  const saveBlocked = hasStockBlock || hasMrpBlock || hasChecks
 
   const handleSave = async (payOpts?: { paymentMode?: string; paidAmount?: string; given?: number | null }) => {
     // Phase 6d: the Counter's Pay sheet passes its choice here; the form's own fields otherwise.
@@ -1581,6 +1653,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   /** Phase 6d: a fresh bill on the Counter — the same screen, nothing carried over but the date. */
   const resetBill = () => {
     setItems([])
+    setChecks([])
     setPartyId('')
     setPartySearch('')
     setPaidAmount('')
@@ -2046,6 +2119,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 query={productSearch}
                 onQuery={setProductSearch}
                 onEnter={() => {
+                  // C12: a typed amount ("toor 400") or a whole list goes through the typed path first.
+                  if (enterTyped(productSearch)) return
                   // A wedge scanner gun types the code then presses Enter.
                   const match = resolveProductForEnterKey(productSearch, products, filteredProducts)
                   if (match) {
@@ -2064,6 +2139,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 sizeStock={features?.billSizeStock !== false}
                 sizeMark={features?.billSizeMark !== false}
                 sideView={features?.billSideView === true}
+                searchHint={typedHint}
+                listPaste={listOn}
                 onPencil={pencilOn ? (row) => { setQtyOpen(false); setKb(row) } : undefined}
                 kbRowKey={kb?.key ?? null}
                 weightButtons={features?.billWeightButtons !== false}
@@ -2141,6 +2218,23 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </Button>
                 )}
               </div>
+
+              <TypedChecks
+                checks={checks}
+                describe={describeQty}
+                onPick={(c, ch) => {
+                  setPresetLoaded(false)
+                  addQtyNow(ch.product, ch.qty)
+                  setChecks((now) => now.filter((x) => x.id !== c.id))
+                  if (learnOn && c.key) {
+                    const t = teach(learnedPicks, c.key, ch.product.id)
+                    setLearnedPicks(t.picks)
+                    if (t.learnedNow) sonnerToast.success(`Learned: next time “${c.key}” is ${ch.product.name}`)
+                  }
+                }}
+                onDrop={(id) => setChecks((now) => now.filter((x) => x.id !== id))}
+                onNewItem={(c) => setNewItemFor(c)}
+              />
 
               {/* Inline voice entry for adding more items */}
               {voiceOn && showVoiceEntry && items.length > 0 && (
@@ -3415,6 +3509,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             <p className="text-xs text-rose-600 font-medium">Not enough stock</p>
           ) : hasMrpBlock ? (
             <p className="text-xs text-bad font-medium">Price above MRP</p>
+          ) : hasChecks ? (
+            <p className="text-xs text-check font-medium">{checks.length} to check</p>
           ) : due > 0 && items.length > 0 ? (
             <p className="text-xs text-rose-600 font-medium tabular-nums">
               {formatINR(due)} due
@@ -3541,14 +3637,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         </SheetContent>
       </Sheet>
       <ProductDialog
-        open={!!newItemCode}
-        onOpenChange={(o) => { if (!o) setNewItemCode(null) }}
+        open={!!newItemCode || !!newItemFor}
+        onOpenChange={(o) => { if (!o) { setNewItemCode(null); setNewItemFor(null) } }}
         product={null}
-        initial={{ barcode: newItemCode ?? undefined }}
+        initial={{ barcode: newItemCode ?? undefined, name: newItemFor ? parseTypedLine(newItemFor.said).name : undefined }}
         onSuccess={(saved) => {
           queryClient.invalidateQueries({ queryKey: ['products'] })
-          // The new item goes straight on the bill — what the scan was for.
+          // The new item goes straight on the bill — what the scan (or the typed line) was for.
           if (saved) handleAddProduct(saved, 1)
+          if (newItemFor) { const id = newItemFor.id; setChecks((now) => now.filter((x) => x.id !== id)); setNewItemFor(null) }
         }}
       />
 

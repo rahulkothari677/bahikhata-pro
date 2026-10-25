@@ -14,7 +14,7 @@ const at = (code: string, s: string) => { const i = code.indexOf(s); expect({ s,
 describe('every screen searches items with the one rule (#296)', () => {
   test('the bill screen ranks with itemSearch, lifting the shop\'s best sellers', () => {
     const te = readCode('src/components/ledger/TransactionEntry.tsx')
-    expect(te).toContain('itemSearch(products, productSearch, { boost: searchBoost })')
+    expect(te).toContain('itemSearch(products, searchText, { boost: searchBoost })')
     expect(te).toContain('const filteredProducts = productSearchResult.items')
     expect(te).not.toMatch(/matchesProductSearch|\.name\.toLowerCase\(\)\.includes\(/)
     // Close matches are labelled, never passed off as matches — by the one picker (Phase 7c).

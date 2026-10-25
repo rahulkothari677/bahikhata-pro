@@ -36,6 +36,10 @@ export function BillScreenSettings({ open, onClose, isSale, shopGst }: {
   const setFeature = useAppStore((s) => s.setFeature)
   const rows = billSettingsFor(isSale)
   const atDefaults = rows.every((r) => !!features[r.key] === startsOn(r))
+  // C12: picks remembered on this device (the same pick twice for the same typed words).
+  const learnedPicks = useAppStore((s) => s.learnedPicks)
+  const setLearnedPicks = useAppStore((s) => s.setLearnedPicks)
+  const learned = Object.values(learnedPicks).filter((e) => e.n >= 2).length
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto pb-[calc(1rem+var(--safe-bottom))] lg:mx-auto lg:max-w-lg">
@@ -69,6 +73,15 @@ export function BillScreenSettings({ open, onClose, isSale, shopGst }: {
               </section>
             )
           })}
+          {learned > 0 && (
+            <div className="rounded-lg border border-border min-h-14 px-3 py-2 flex items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">Learned picks</span>
+                <span className="block text-xs text-muted-foreground">{learned} remembered on this device</span>
+              </span>
+              <Button type="button" variant="outline" className="h-12 shrink-0" onClick={() => setLearnedPicks({})}>Forget</Button>
+            </div>
+          )}
           <section aria-labelledby="bill-set-tax">
             <h3 id="bill-set-tax" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Tax</h3>
             <div className="rounded-lg border border-border min-h-14 px-3 py-2 flex items-center justify-between gap-3">

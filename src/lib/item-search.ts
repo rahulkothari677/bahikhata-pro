@@ -172,7 +172,7 @@ type How = 'name' | 'synonym' | 'number' | 'price' | 'group' | 'close'
 interface Hit { how: How; first: boolean; whole?: boolean }
 
 /** How one typed word matches the item, best way first; null when it does not. */
-function matchWord(ix: Indexed, w: QWord, allowClose: boolean): Hit | null {
+function matchWord(ix: Indexed, w: QWord, allowClose: boolean, nameOnly = false): Hit | null {
   const { t: q, unit, syn } = w
   if (q.num !== null) {
     const at = ix.name.findIndex((t) => t.num !== null && t.num === q.num)
@@ -200,7 +200,9 @@ function matchWord(ix: Indexed, w: QWord, allowClose: boolean): Hit | null {
     const at = ix.name.findIndex((t) => syn.some((s) => isShopWord(t, s)))
     if (at >= 0) return { how: 'synonym', first: at === 0 }
   }
-  if (ix.group.some((t) => startsWith(t, q) || syn.some((s) => isShopWord(t, s)))) return { how: 'group', first: false }
+  // nameOnly (a typed bill line, lib/typed-pick.ts): the item's own name must answer — "cheeni"
+  // is Sugar, never Gud for sitting in the "Sugar & salt" group.
+  if (!nameOnly && ix.group.some((t) => startsWith(t, q) || syn.some((s) => isShopWord(t, s)))) return { how: 'group', first: false }
   // One letter off — but the first two letters agree, or "cheeni" would turn into "Clinic Plus";
   // and never for a known shop word: "cheeni" is spelt right, the shop just has no sugar.
   if (allowClose && q.fold.length >= 4 && !syn.length) {
@@ -218,7 +220,7 @@ function queryWords(query: string): QWord[] {
     .map((t) => ({ t, unit: unitGroupFor(t), syn: t.num === null ? synonymsFor(t) : [] }))
 }
 
-function score(item: SearchableItem, ix: Indexed, qs: QWord[], codeQuery: string, allowClose: boolean): number | null {
+function score(item: SearchableItem, ix: Indexed, qs: QWord[], codeQuery: string, allowClose: boolean, nameOnly = false): number | null {
   if (codeQuery) {
     if (ix.codes.includes(codeQuery)) return 10_000
     if (codeQuery.length >= 4 && ix.codes.some((c) => c.startsWith(codeQuery))) return 5_000
@@ -226,7 +228,7 @@ function score(item: SearchableItem, ix: Indexed, qs: QWord[], codeQuery: string
   let total = 0
   let firstHit = false
   for (const q of qs) {
-    const m = matchWord(ix, q, allowClose)
+    const m = matchWord(ix, q, allowClose, nameOnly)
     if (!m) {
       // An HSN typed as the only word still finds its items (it did before 7a).
       if (qs.length === 1 && q.t.num !== null && ix.hsn.startsWith(q.t.light)) return 1
@@ -246,7 +248,7 @@ function score(item: SearchableItem, ix: Indexed, qs: QWord[], codeQuery: string
 export function itemSearch<T extends SearchableItem>(
   items: readonly T[],
   query: string,
-  opts: { boost?: ReadonlyMap<string, number> } = {},
+  opts: { boost?: ReadonlyMap<string, number>; nameOnly?: boolean } = {},
 ): ItemSearchResult<T> {
   const qs = queryWords(query)
   const compact = String(query || '').trim().toLowerCase().replace(/\s+/g, '')
@@ -257,7 +259,7 @@ export function itemSearch<T extends SearchableItem>(
     const scored: { item: T; s: number; k: string }[] = []
     for (const item of items) {
       const ix = indexOf(item)
-      const s = score(item, ix, qs, codeQuery, allowClose)
+      const s = score(item, ix, qs, codeQuery, allowClose, !!opts.nameOnly)
       if (s !== null) scored.push({ item, s: s + 9 * (opts.boost?.get(item.id) ?? 0), k: ix.sortKey })
     }
     scored.sort((a, b) => b.s - a.s || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0))
