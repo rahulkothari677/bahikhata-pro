@@ -67,6 +67,15 @@ describe('held bills are never dropped silently', () => {
     expect(result.current.drafts[0].heldAt).toBeGreaterThan(0)
     expect(result.current.activeDraftId).toBeNull()
   })
+  test('a bill emptied by hand stops being held — its last full copy does not stay behind', () => {
+    jest.useFakeTimers()
+    const { result } = renderHook(() => useDrafts<any>('sale'))
+    act(() => { result.current.save(bill(1)); jest.advanceTimersByTime(700) })
+    expect(result.current.drafts).toHaveLength(1)
+    act(() => { result.current.save({ items: [] }); jest.advanceTimersByTime(700) })
+    expect(result.current.drafts).toHaveLength(0)
+    jest.useRealTimers()
+  })
   test('nothing to keep is not held', () => {
     const { result } = renderHook(() => useDrafts<any>('sale'))
     let r: string = ''

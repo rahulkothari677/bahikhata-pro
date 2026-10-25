@@ -126,7 +126,24 @@ export function useDrafts<T>(formType: string) {
     debounceRef.current = setTimeout(() => {
       const currentData = dataRef.current
       if (!currentData) return
-      if (isEmptyDraft(currentData)) return
+      if (isEmptyDraft(currentData)) {
+        /*
+         * 7f: a bill emptied by hand (every line taken off) holds nothing, so its
+         * copy goes. Before, an empty bill was simply not saved, which left its
+         * last full copy behind; the 24-hour expiry hid that, and with held
+         * bills kept until finished, a stale bill sat in the Held row (found on
+         * the live check, 25 Oct: two emptied test bills still "held").
+         */
+        const id = activeDraftIdRef.current
+        if (id) {
+          const store = read<T>(formType)
+          const left = store.drafts.filter((d) => d.id !== id)
+          if (left.length !== store.drafts.length) persist({ ...store, drafts: left })
+          activeDraftIdRef.current = null
+          setActiveDraftId(null)
+        }
+        return
+      }
 
       // Read the LATEST activeDraftId from the ref (not from closure)
       const currentActiveId = activeDraftIdRef.current
