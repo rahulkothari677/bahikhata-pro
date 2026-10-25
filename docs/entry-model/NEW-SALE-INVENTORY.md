@@ -13,7 +13,7 @@ taps, unless the master plan says otherwise. Add to it when the screen gains a j
 | 4 | Barcode camera from the search box; a barcode gun anywhere; unknown code → "New item?" | search box | switch `barcodeScanner` (camera only; the gun always works) | ✓ |
 | 5 | Drafts: autosave, drafts list, leave-with-three-answers | entry header, leave guard | ✓ unchanged | ✓ |
 | 6 | Search: 2–3 letters, Hindi words, a price, a code; "8 of N, keep typing"; close spellings | ItemPicker | ✓ unchanged | search rows now show in the list window, 30 before "keep typing" |
-| 7 | Qty for the next item ("6, then tap or scan"); F4 | below search | switch `billQtyButton` | ✓ |
+| 7 | Qty for the next item ("6, then tap or scan"); F4 — step 2c: the number pad with a unit (× 23, 400 g, 1.25 kg, 750 ml, ₹50); a packet takes whole counts only; number keys type into it on a computer | below search | switch `billQtyButton` | ✓ |
 | 8 | Price check (sale): tap or scan shows price, nothing added; F6 | below search | switch `billPriceCheck` | ✓ |
 | 9 | Often sold / Often bought rows, frozen while a bill is open; fold after 6 lines | ItemPicker | switch `billOftenList` | ★ Often is the first tab (24 best sellers, frozen while a bill is open); a long bill shortens the window instead of folding (#229) |
 | 10 | The customer's usual items | ItemPicker | switch `billUsualList` | at the top of ★ Often (12) |

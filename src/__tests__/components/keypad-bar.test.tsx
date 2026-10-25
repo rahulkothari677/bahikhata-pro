@@ -9,7 +9,8 @@
  */
 import React from 'react'
 import { render, screen, fireEvent, within } from '@testing-library/react'
-import { KeypadBar, type KeypadBarProps } from '@/components/ledger/KeypadBar'
+import { KeypadBar, QtyPad, type KeypadBarProps } from '@/components/ledger/KeypadBar'
+import type { NextQty } from '@/lib/loose-entry'
 
 const sugar = { id: 'sugar', name: 'Sugar (loose)', unit: 'kg', gstRate: 0 }
 const eggs = { id: 'eggs', name: 'Eggs', unit: 'pcs', gstRate: 0 }
@@ -118,5 +119,41 @@ describe('Big number pad (⚙)', () => {
     expect(log[log.length - 1]).toBe('qty sugar 0.25')
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(log[log.length - 1]).toBe('closed')
+  })
+})
+
+describe('Qty first (step 2c)', () => {
+  function drawQty(over: Partial<React.ComponentProps<typeof QtyPad>> = {}) {
+    const sets: (NextQty | null)[] = []
+    let closed = false
+    render(<QtyPad next={null} setNext={(n) => sets.push(n)} onClose={() => { closed = true }} error="" big={false} {...over} />)
+    return { sets, closed: () => closed }
+  }
+  test('an amount and its unit wait for the next tap: × 23, then 400 g', () => {
+    const { sets } = drawQty()
+    keys('2', '3')
+    expect(sets[sets.length - 1]).toEqual({ n: 23, unit: 'count' })
+    expect(screen.getByRole('button', { name: '.' })).toBeDisabled() // a count has no point
+    fireEvent.click(within(screen.getByRole('group', { name: 'Unit' })).getByRole('button', { name: 'g' }))
+    keys('⌫', '⌫', '4', '0', '0')
+    expect(sets[sets.length - 1]).toEqual({ n: 400, unit: 'g' })
+  })
+  test('₹ and Clear', () => {
+    const { sets } = drawQty({ next: { n: 50, unit: 'rs' } })
+    expect(screen.getByText('₹50')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(sets[sets.length - 1]).toBeNull()
+  })
+  test('says why the last tap could not take it', () => {
+    drawQty({ next: { n: 2.5, unit: 'kg' }, error: 'Sold in packets — type how many: 2.5 kg on Parle-G ₹10' })
+    expect(screen.getByRole('status').textContent).toBe('Sold in packets — type how many: 2.5 kg on Parle-G ₹10')
+  })
+  test('on a computer the number keys type into the pad and Enter is Done', () => {
+    const { sets, closed } = drawQty()
+    fireEvent.keyDown(window, { key: '1' })
+    fireEvent.keyDown(window, { key: '2' })
+    expect(sets[sets.length - 1]).toEqual({ n: 12, unit: 'count' })
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(closed()).toBe(true)
   })
 })

@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { BillScreenSettings } from '@/components/ledger/BillScreenSettings'
-import { KeypadBar, type KeypadRow } from '@/components/ledger/KeypadBar'
+import { KeypadBar, QtyPad, type KeypadRow } from '@/components/ledger/KeypadBar'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -79,6 +79,7 @@ import { lineTaxable } from '@/lib/line-taxable'
 import { gstStatus, chargesGstOnSales, claimsInputCredit, isOutwardDocument } from '@/lib/shop-tax'
 import { purchaseCostPerUnit, purchaseRateFromCost, isNoCostLine, marginOnCosted, linesAboveMrp, lineAboveMrp, customerPaysPerUnit } from '@/lib/unit-profit'
 import { quantityForAmount } from '@/lib/loose-amount'
+import { nextQtyFor, nextLabel, type NextQty } from '@/lib/loose-entry'
 import { StateField, GstinField } from '@/components/common/StateField'
 
 const PAYMENT_MODES = [
@@ -943,7 +944,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
    * then tap or scan"); on a sale, price check shows price, MRP and stock and
    * adds nothing.
    */
-  const [nextQty, setNextQty] = useState('')
+  // Step 2c (C11): Qty first — an amount with its unit (× 23, 400 g, ₹50) for the next item tapped or scanned.
+  const [next, setNext] = useState<NextQty | null>(null)
+  const [nextErr, setNextErr] = useState('')
   const [qtyOpen, setQtyOpen] = useState(false)
   const [priceCheck, setPriceCheck] = useState(false)
   // C12: the bill screen's switches, changed from ⚙ on this screen (lib/bill-screen-settings.ts).
@@ -960,7 +963,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   switchesRef.current = { qtyButtonOn, priceCheckOn }
   // A switch turned off while its tool is in use puts the tool away: nothing hidden stays active.
   useEffect(() => { if (!priceCheckOn) setPriceCheck(false) }, [priceCheckOn])
-  useEffect(() => { if (!qtyButtonOn) { setQtyOpen(false); setNextQty('') } }, [qtyButtonOn])
+  useEffect(() => { if (!qtyButtonOn) { setQtyOpen(false); setNext(null) } }, [qtyButtonOn])
   useEffect(() => { if (!voiceOn) setShowVoiceEntry(false) }, [voiceOn])
   // Step 2b: the keypad bar for one row (✎, or a loose good's amount); closes when ✎ is switched off.
   const [kb, setKb] = useState<KeypadRow | null>(null)
@@ -971,9 +974,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [newItemCode, setNewItemCode] = useState<string | null>(null)
   const pickAdd = (p: any) => {
     if (priceCheck && isSale) { setCheckedProduct(p); return }
-    const q = parseFloat(nextQty)
-    handleAddProduct(p, q > 0 ? q : 1)
-    if (nextQty !== '') { setNextQty(''); setQtyOpen(false) }
+    if (next) { addWithNext(p); return }
+    handleAddProduct(p, 1)
+  }
+  /** The waiting Qty goes on the tapped item in its unit — or says why it cannot, and keeps waiting. */
+  const addWithNext = (p: any) => {
+    if (!next) return
+    const r = nextQtyFor(next, p.unit, features?.billGramsRule !== false, (rupees) => kbQtyForRupees(p, rupees))
+    if ('error' in r) { setNextErr(`${r.error}: ${nextLabel(next)} on ${p.name}`); return }
+    handleAddProduct(p, r.qty)
+    setNext(null); setNextErr(''); setQtyOpen(false)
   }
   // An unknown barcode asks "New item?" instead of leaving a number in the search box.
   const handleScannedCode = (code: string) => {
@@ -998,7 +1008,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         e.preventDefault()
         if (e.key === 'F2') document.getElementById('field-search-product')?.focus()
         else if (e.key === 'F3') document.getElementById('field-party-search')?.focus()
-        else if (e.key === 'F4' && switchesRef.current.qtyButtonOn) { setQtyOpen(true); setTimeout(() => document.getElementById('field-next-qty')?.focus(), 50) }
+        else if (e.key === 'F4' && switchesRef.current.qtyButtonOn) { setKb(null); setQtyOpen(true) }
         else if (e.key === 'F6' && switchesRef.current.priceCheckOn) setPriceCheck((v) => !v)
         else if (e.key === 'F10' && itemCountRef.current > 0) finishRef.current()
         return
@@ -1015,7 +1025,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       if (e.key !== 'Escape' || document.querySelector('[role=dialog]') || itemCountRef.current === 0) return
       e.preventDefault()
       setProductSearch('')
-      setNextQty('')
+      setNext(null)
+      setNextErr('')
       setQtyOpen(false)
       setPriceCheck(false)
     }
@@ -1749,6 +1760,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       />
 
       <BillScreenSettings open={billSettingsOpen} onClose={() => setBillSettingsOpen(false)} isSale={isSale} shopGst={shopGstStatus} />
+      {qtyOpen && qtyButtonOn && !kb && (
+        <QtyPad next={next} setNext={(n) => { setNext(n); setNextErr('') }} onClose={() => setQtyOpen(false)} error={nextErr} big={features?.billBigPad === true} />
+      )}
       {kb && (
         <KeypadBar
           key={kb.key}
@@ -2050,10 +2064,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 sizeStock={features?.billSizeStock !== false}
                 sizeMark={features?.billSizeMark !== false}
                 sideView={features?.billSideView === true}
-                onPencil={pencilOn ? (row) => setKb(row) : undefined}
+                onPencil={pencilOn ? (row) => { setQtyOpen(false); setKb(row) } : undefined}
                 kbRowKey={kb?.key ?? null}
                 weightButtons={features?.billWeightButtons !== false}
-                onAddQty={(p, q) => { if (priceCheck && isSale) { setCheckedProduct(p); return } handleAddProduct(p, q) }}
+                onAddQty={(p, q) => { if (priceCheck && isSale) { setCheckedProduct(p); return } if (next) { addWithNext(p); return } handleAddProduct(p, q) }}
                 customerName={selectedParty?.name ?? null}
                 billLines={items.length}
                 qtyOf={(id) => items.find((i) => i.productId === id)?.quantity ?? 0}
@@ -2067,26 +2081,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     {/* 7c-2: quantity first ("6, then tap or scan"); on a sale, price check (nothing is added). */}
                     {(qtyButtonOn || priceCheckOn) && (
                     <div className="flex items-center gap-2">
-                      {!qtyButtonOn ? null : qtyOpen ? (
-                        <div className="flex items-center gap-1 min-w-0 flex-1">
-                          <NumberField
-                            id="field-next-qty"
-                            aria-label="Quantity for the next item"
-                            value={nextQty}
-                            onValueChange={setNextQty}
-                            placeholder="Qty for next item"
-                            min={0}
-                            step={1}
-                            decimals={3}
-                            className="flex-1 min-w-0"
-                          />
-                          <button type="button" onClick={() => { setNextQty(''); setQtyOpen(false) }} className="w-12 h-12 shrink-0 inline-flex items-center justify-center rounded-lg hover:bg-muted" aria-label="Clear quantity">
-                            <X className="w-4 h-4" aria-hidden />
-                          </button>
-                        </div>
-                      ) : (
-                        <Button type="button" variant="outline" className="h-12 tabular-nums" onClick={() => { setQtyOpen(true); setTimeout(() => document.getElementById('field-next-qty')?.focus(), 50) }}>
-                          {nextQty ? `× ${nextQty} next` : 'Qty'}
+                      {qtyButtonOn && (
+                        <Button type="button" variant={next ? 'default' : 'outline'} className="h-12 tabular-nums" aria-pressed={qtyOpen}
+                          onClick={() => { setKb(null); setQtyOpen((o) => !o) }}>
+                          {next ? `${nextLabel(next)} next` : 'Qty'}
                         </Button>
                       )}
                       {priceCheckOn && (
@@ -2097,6 +2095,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </div>
                     )}
                     {priceCheck && isSale && <p className="text-xs font-semibold text-check">Price check: tap or scan an item — nothing is added</p>}
+                    {nextErr && !qtyOpen && <p role="status" className="text-xs font-semibold text-bad">{nextErr} · still waiting on Qty</p>}
                     <p className="hidden lg:block text-xs text-muted-foreground">F2 search · F3 {isSale ? 'customer' : 'supplier'}{qtyButtonOn ? ' · F4 quantity' : ''}{priceCheckOn ? ' · F6 price check' : ''} · F10 {counterMode ? 'pay' : 'save'} · a barcode gun works anywhere</p>
                   </>
                 )}

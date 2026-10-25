@@ -97,3 +97,44 @@ export function unusualAmount(q: number, itemUnit: string | null | undefined, li
   if (lineTotal > 10000) return `Check: ₹${Math.round(lineTotal).toLocaleString('en-IN')}?`
   return null
 }
+
+/**
+ * Step 2c (C11) — "Qty" first, then tap: an amount for the NEXT item tapped or
+ * scanned. Rahul, 24 Oct: "if the user has to add a big number or decimal number
+ * or in weight then 'how many' can't work". So the amount carries its unit:
+ * × count, g, kg, ml, L, or ₹.
+ */
+export type NextUnit = 'count' | 'g' | 'kg' | 'ml' | 'ltr' | 'rs'
+export interface NextQty { n: number; unit: NextUnit }
+
+/** What the Qty button says while an amount waits: "× 23", "400 g", "₹50". */
+export function nextLabel(next: NextQty): string {
+  if (next.unit === 'count') return `× ${next.n}`
+  if (next.unit === 'rs') return `₹${next.n}`
+  return `${next.n} ${next.unit === 'ltr' ? 'L' : next.unit}`
+}
+
+/**
+ * The quantity a waiting amount puts on the tapped item, or why it cannot. A
+ * packet takes a whole count only (a weight on a packet waits for pack sizes,
+ * change C13); a loose good takes a count as its own unit (400 = 400 g by the
+ * same rule as the keypad), a weight in a matching unit, or rupees.
+ */
+export function nextQtyFor(
+  next: NextQty,
+  itemUnit: string | null | undefined,
+  gramsRule: boolean,
+  rupeesToQty: (rupees: number) => number | null,
+): { qty: number } | { error: string } {
+  const text = String(next.n)
+  if (isCountUnit(itemUnit)) {
+    if (next.unit !== 'count') return { error: 'Sold in packets — type how many' }
+    return Number.isInteger(next.n) ? { qty: next.n } : { error: 'Packets are whole numbers' }
+  }
+  if (next.unit === 'rs') {
+    const q = rupeesToQty(next.n)
+    return q ? { qty: q } : { error: 'That amount does not buy any' }
+  }
+  const q = typedQuantity(text, next.unit === 'count' ? 'auto' : next.unit, itemUnit, gramsRule)
+  return q ? { qty: q } : { error: `${nextLabel(next)} does not fit an item sold by ${normalizeUnitName(itemUnit)}` }
+}

@@ -50,7 +50,7 @@ const CONSUMERS: Record<string, [string, RegExp][]> = {
   ],
   billPencil: [
     [ENTRY, /const pencilOn = features\?\.billPencil !== false/],
-    [ENTRY, /onPencil=\{pencilOn \? \(row\) => setKb\(row\) : undefined\}/],
+    [ENTRY, /onPencil=\{pencilOn \? \(row\) => \{ setQtyOpen\(false\); setKb\(row\) \} : undefined\}/],
     [PICKER, /const pencil = p\.onPencil \?/],
   ],
   billWeightButtons: [
@@ -71,7 +71,8 @@ const CONSUMERS: Record<string, [string, RegExp][]> = {
   ],
   billQtyButton: [
     [ENTRY, /const qtyButtonOn = features\?\.billQtyButton !== false/],
-    [ENTRY, /!qtyButtonOn \? null :/],
+    [ENTRY, /\{qtyButtonOn && \(/],
+    [ENTRY, /\{qtyOpen && qtyButtonOn && !kb && \(/],
   ],
   billPriceCheck: [
     [ENTRY, /const priceCheckOn = isSale && features\?\.billPriceCheck !== false/],

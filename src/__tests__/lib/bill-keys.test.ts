@@ -43,7 +43,10 @@ describe('one add step on every bill', () => {
   test('quantity first; price check (a sale only) adds nothing', () => {
     const add = code.slice(at('const pickAdd = (p: any) =>'), at('const handleScannedCode = (code: string) =>'))
     expect(add).toContain('if (priceCheck && isSale) { setCheckedProduct(p); return }')
-    expect(add).toContain('handleAddProduct(p, q > 0 ? q : 1)')
+    // Step 2c: a waiting Qty carries its unit (× 23, 400 g, ₹50) and goes on by lib/loose-entry.ts nextQtyFor.
+    expect(add).toContain('if (next) { addWithNext(p); return }')
+    expect(add).toContain('handleAddProduct(p, 1)')
+    expect(add).toContain("const r = nextQtyFor(next, p.unit, features?.billGramsRule !== false, (rupees) => kbQtyForRupees(p, rupees))")
     expect(code).toContain('quantity: i.quantity + qty')
     expect(code).toContain('quantity: qty,')
   })

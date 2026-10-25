@@ -4,7 +4,7 @@
  * rules that turn what is typed into it.
  */
 import { describe, test, expect } from '@jest/globals'
-import { typedQuantity, shownUnit, looseLabel, weightButtons, unusualAmount, smallUnitOf, isLooseUnit } from '@/lib/loose-entry'
+import { typedQuantity, shownUnit, looseLabel, weightButtons, unusualAmount, smallUnitOf, isLooseUnit, nextQtyFor, nextLabel } from '@/lib/loose-entry'
 
 describe('typedQuantity — what goes on the bill, in the item\'s unit', () => {
   test('on a kg item: 400 is 400 g, 1.25 is 1.25 kg, 2 is 2 kg', () => {
@@ -69,5 +69,28 @@ describe('unusual amounts are asked, never blocked', () => {
     expect(unusualAmount(0.5, 'kg', 70)).toBeNull()
     expect(unusualAmount(300, 'pcs', 300)).toBe('Check: 300?')
     expect(unusualAmount(2, 'pcs', 12000)).toBe('Check: ₹12,000?')
+  })
+})
+
+describe('Qty first: an amount with its unit for the next item (step 2c)', () => {
+  const rupees = (r: number) => Math.round((r / 44) * 1000) / 1000
+  test('says what is waiting: × 23, 400 g, 1.5 L, ₹50', () => {
+    expect([nextLabel({ n: 23, unit: 'count' }), nextLabel({ n: 400, unit: 'g' }), nextLabel({ n: 1.5, unit: 'ltr' }), nextLabel({ n: 50, unit: 'rs' })])
+      .toEqual(['× 23', '400 g', '1.5 L', '₹50'])
+  })
+  test('on a loose good: a count is its own unit (400 = 400 g), a weight converts, rupees buy', () => {
+    expect(nextQtyFor({ n: 400, unit: 'count' }, 'kg', true, rupees)).toEqual({ qty: 0.4 })
+    expect(nextQtyFor({ n: 1.25, unit: 'kg' }, 'kg', true, rupees)).toEqual({ qty: 1.25 })
+    expect(nextQtyFor({ n: 250, unit: 'g' }, 'kg', true, rupees)).toEqual({ qty: 0.25 })
+    expect(nextQtyFor({ n: 50, unit: 'rs' }, 'kg', true, rupees)).toEqual({ qty: 1.136 })
+  })
+  test('a weight in the wrong family is refused, never guessed', () => {
+    expect(nextQtyFor({ n: 500, unit: 'ml' }, 'kg', true, rupees)).toEqual({ error: '500 ml does not fit an item sold by kg' })
+  })
+  test('a packet takes whole counts only; a weight or ₹ on a packet waits for pack sizes (C13)', () => {
+    expect(nextQtyFor({ n: 23, unit: 'count' }, 'pcs', true, rupees)).toEqual({ qty: 23 })
+    expect(nextQtyFor({ n: 2.5, unit: 'count' }, 'pcs', true, rupees)).toEqual({ error: 'Packets are whole numbers' })
+    expect(nextQtyFor({ n: 400, unit: 'g' }, 'pcs', true, rupees)).toEqual({ error: 'Sold in packets — type how many' })
+    expect(nextQtyFor({ n: 50, unit: 'rs' }, 'pcs', true, rupees)).toEqual({ error: 'Sold in packets — type how many' })
   })
 })
