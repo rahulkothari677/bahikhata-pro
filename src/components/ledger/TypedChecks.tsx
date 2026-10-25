@@ -19,13 +19,15 @@ export interface TypedCheck {
   more: number
 }
 
-export function TypedChecks({ checks, describe, onPick, onDrop, onNewItem }: {
+export function TypedChecks({ checks, describe, onPick, onDrop, onNewItem, onOneOff }: {
   checks: TypedCheck[]
   /** "400 g · ₹56", "× 3 · ₹30" — what a choice would put on the bill. */
   describe: (product: any, qty: number) => string
   onPick: (check: TypedCheck, choice: { product: any; qty: number }) => void
   onDrop: (id: number) => void
   onNewItem: (check: TypedCheck) => void
+  /** "Bill it once" — only for a shop that charges no GST (OneOffLine.tsx). */
+  onOneOff?: (check: TypedCheck) => void
 }) {
   if (!checks.length) return null
   return (
@@ -54,6 +56,11 @@ export function TypedChecks({ checks, describe, onPick, onDrop, onNewItem }: {
                 {ch.product.name} · {describe(ch.product, ch.qty)}
               </button>
             ))}
+            {!c.choices.length && onOneOff && (
+              <button type="button" onClick={() => onOneOff(c)} className="hit-48 shrink-0 min-h-10 rounded-lg border border-primary text-primary bg-card px-2.5 text-xs font-semibold whitespace-nowrap">
+                + Bill it once
+              </button>
+            )}
             {!c.choices.length && (
               <button type="button" onClick={() => onNewItem(c)} className="hit-48 shrink-0 min-h-10 rounded-lg border border-primary text-primary bg-card px-2.5 text-xs font-semibold whitespace-nowrap">
                 + Add it as a new item

@@ -83,6 +83,7 @@ import { nextQtyFor, nextLabel, looseLabel, isLooseUnit, type NextQty } from '@/
 import { parseTypedLine, splitTypedList, isTypedList } from '@/lib/typed-line'
 import { pickTypedLine, teach, learnedId } from '@/lib/typed-pick'
 import { TypedChecks, type TypedCheck } from '@/components/ledger/TypedChecks'
+import { OneOffLine } from '@/components/ledger/OneOffLine'
 import { StateField, GstinField } from '@/components/common/StateField'
 
 const PAYMENT_MODES = [
@@ -981,8 +982,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // Step 2d: typed lines the bill was not sure of, waiting as cards (Save waits for them).
   const [checks, setChecks] = useState<TypedCheck[]>([])
   const checkSeq = useRef(0)
-  const [newItemFor, setNewItemFor] = useState<TypedCheck | null>(null)
+  // A new item from a typed line or an empty search; checkId closes its card once saved.
+  const [newItemFor, setNewItemFor] = useState<{ name: string; checkId: number | null } | null>(null)
+  // C11 "Not in list": a one-off line (a shop that charges no GST; a GST shop adds the item).
+  const [oneOff, setOneOff] = useState<{ name: string; checkId: number | null } | null>(null)
   const pencilOn = features?.billPencil !== false
+  const notInListOn = features?.billNotInList !== false
+  const oneOffOn = notInListOn && !shopChargesGst
   useEffect(() => { if (!pencilOn) setKb(null) }, [pencilOn])
   const [checkedProduct, setCheckedProduct] = useState<any | null>(null)
   const [unknownCode, setUnknownCode] = useState<string | null>(null)
@@ -1832,6 +1838,18 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         onDelete={deleteDraft}
       />
 
+      <OneOffLine
+        open={!!oneOff}
+        initialName={oneOff?.name ?? ''}
+        onClose={() => setOneOff(null)}
+        onAdd={(l) => {
+          setPresetLoaded(false)
+          setItems((now) => [...now, { productId: '', productName: l.name, quantity: l.qty, unitPrice: l.price, gstRate: 0, gstTreatment: null, unit: 'pcs' }])
+          const id = oneOff?.checkId ?? null
+          if (id !== null) setChecks((now) => now.filter((x) => x.id !== id))
+          setProductSearch('')
+        }}
+      />
       <BillScreenSettings open={billSettingsOpen} onClose={() => setBillSettingsOpen(false)} isSale={isSale} shopGst={shopGstStatus} />
       {qtyOpen && qtyButtonOn && !kb && (
         <QtyPad next={next} setNext={(n) => { setNext(n); setNextErr('') }} onClose={() => setQtyOpen(false)} error={nextErr} big={features?.billBigPad === true} />
@@ -2140,6 +2158,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 sizeMark={features?.billSizeMark !== false}
                 sideView={features?.billSideView === true}
                 searchHint={typedHint}
+                notFound={notInListOn ? (oneOffOn
+                  ? { label: '+ Bill it once', run: (t) => setOneOff({ name: parseTypedLine(t).name || t.trim(), checkId: null }) }
+                  : { label: '+ Add it as a new item', run: (t) => setNewItemFor({ name: parseTypedLine(t).name || t.trim(), checkId: null }) }) : null}
                 listPaste={listOn}
                 onPencil={pencilOn ? (row) => { setQtyOpen(false); setKb(row) } : undefined}
                 kbRowKey={kb?.key ?? null}
@@ -2233,7 +2254,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   }
                 }}
                 onDrop={(id) => setChecks((now) => now.filter((x) => x.id !== id))}
-                onNewItem={(c) => setNewItemFor(c)}
+                onNewItem={(c) => setNewItemFor({ name: parseTypedLine(c.said).name, checkId: c.id })}
+                onOneOff={oneOffOn ? (c) => setOneOff({ name: parseTypedLine(c.said).name, checkId: c.id }) : undefined}
               />
 
               {/* Inline voice entry for adding more items */}
@@ -3640,12 +3662,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         open={!!newItemCode || !!newItemFor}
         onOpenChange={(o) => { if (!o) { setNewItemCode(null); setNewItemFor(null) } }}
         product={null}
-        initial={{ barcode: newItemCode ?? undefined, name: newItemFor ? parseTypedLine(newItemFor.said).name : undefined }}
+        initial={{ barcode: newItemCode ?? undefined, name: newItemFor?.name || undefined }}
         onSuccess={(saved) => {
           queryClient.invalidateQueries({ queryKey: ['products'] })
           // The new item goes straight on the bill — what the scan (or the typed line) was for.
           if (saved) handleAddProduct(saved, 1)
-          if (newItemFor) { const id = newItemFor.id; setChecks((now) => now.filter((x) => x.id !== id)); setNewItemFor(null) }
+          if (newItemFor) { const id = newItemFor.checkId; if (id !== null) setChecks((now) => now.filter((x) => x.id !== id)); setNewItemFor(null) }
         }}
       />
 

@@ -60,6 +60,10 @@ const CONSUMERS: Record<string, [string, RegExp][]> = {
     [ENTRY, /const learnOn = features\?\.billLearnPicks !== false/],
     [ENTRY, /learned: learnOn \? \(k\) => learnedId\(learnedPicks, k\) : undefined/],
   ],
+  billNotInList: [
+    [ENTRY, /const notInListOn = features\?\.billNotInList !== false/],
+    [ENTRY, /notFound=\{notInListOn \?/],
+  ],
   billPencil: [
     [ENTRY, /const pencilOn = features\?\.billPencil !== false/],
     [ENTRY, /onPencil=\{pencilOn \? \(row\) => \{ setQtyOpen\(false\); setKb\(row\) \} : undefined\}/],
@@ -159,6 +163,16 @@ describe('a typed line never goes missing (C12)', () => {
     expect(code).toMatch(/const saveBlocked = hasStockBlock \|\| hasMrpBlock \|\| hasChecks/)
     expect(code).toMatch(/\{checks\.length\} to check/)
     expect(code).toMatch(/const resetBill = \(\) => \{\s*setItems\(\[\]\)\s*setChecks\(\[\]\)/)
+  })
+})
+
+describe('"Bill it once" never makes a line the GST return cannot place (C11 Not in list)', () => {
+  it('a one-off line only for a shop that charges no GST; a GST shop adds the item (HSN and rate)', () => {
+    const code = readCode(ENTRY)
+    expect(code).toMatch(/const oneOffOn = notInListOn && !shopChargesGst/)
+    expect(code).toMatch(/notFound=\{notInListOn \? \(oneOffOn/)
+    expect(code).toMatch(/onOneOff=\{oneOffOn \?/)
+    expect(code).toMatch(/productId: '', productName: l\.name, quantity: l\.qty, unitPrice: l\.price, gstRate: 0/)
   })
 })
 

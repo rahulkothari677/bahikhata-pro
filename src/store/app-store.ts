@@ -116,6 +116,7 @@ export type FeatureKey =
   | 'billTypedAmounts'
   | 'billListEntry'
   | 'billLearnPicks'
+  | 'billNotInList'
   | 'billQtyButton'
   | 'billPriceCheck'
   | 'billOftenList'
@@ -162,6 +163,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
   billTypedAmounts: true,
   billListEntry: true,
   billLearnPicks: true,
+  billNotInList: true,
   billQtyButton: true,
   billPriceCheck: true,
   billOftenList: true,

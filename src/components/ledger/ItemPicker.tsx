@@ -64,6 +64,8 @@ export interface ItemPickerProps {
   onAddQty?: (p: any, q: number) => void
   /** C12: what Enter will do with the typed line ("Enter adds 400 g of Toor Dal (loose)"). */
   searchHint?: string | null
+  /** C11 "Not in list": what to offer when nothing matches ("Bill it once", or "Add it as a new item"). */
+  notFound?: { label: string; run: (typed: string) => void } | null
   /** C12: a pasted list keeps its lines (a one-line box would join them into one item). */
   listPaste?: boolean
   onAdd: (p: any) => void
@@ -199,7 +201,14 @@ function ListArea(p: ItemPickerProps) {
           <Rows rows={found.slice(0, SEARCH_ROWS)} p={p} wrap={side} />
           {found.length > SEARCH_ROWS && <p className="text-center text-xs text-muted-foreground py-2">{SEARCH_ROWS} of {found.length} shown · keep typing</p>}
         </>
-      : <p className="text-sm text-muted-foreground py-6 text-center">No item matches &quot;{p.query}&quot;</p>
+      : <div className="py-6 text-center space-y-2">
+          <p className="text-sm text-muted-foreground">No item matches &quot;{p.query}&quot;</p>
+          {p.notFound && (
+            <button type="button" onClick={() => p.notFound!.run(p.query)} className="min-h-12 px-4 rounded-lg border border-primary text-primary text-sm font-semibold">
+              {p.notFound.label}
+            </button>
+          )}
+        </div>
   } else if (tab === OFTEN) {
     body = <>
       {usual.length > 0 && <ListHeading>{p.customerName ? `${p.customerName} usually buys` : 'Usually buys'}</ListHeading>}
