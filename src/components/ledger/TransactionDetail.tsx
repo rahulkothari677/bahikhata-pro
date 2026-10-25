@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
+import { InfoHint } from '@/components/common/InfoHint'
 import { formatINR, formatDateTime, formatDate, formatDateMaybeTime, cn } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
 // 🔒 AUDIT C5: shared due rule + the breakdown that lets a bill explain where
@@ -48,7 +49,7 @@ import { NumberField } from '@/components/ui/number-field'
 import { supplyKind, savedBillToShipTo } from '@/lib/gst-states'
 import { GST_RATES } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
-import { refillPrice } from '@/lib/refill-line'
+import { refillPrice, shownLinePrice } from '@/lib/refill-line'
 import { gstStatus, documentTitle, billCarriesGstColumns, claimsInputCredit } from '@/lib/shop-tax'
 import { purchaseRateFromCost, isNoCostLine } from '@/lib/unit-profit'
 import { lineTaxable } from '@/lib/line-taxable'
@@ -391,11 +392,16 @@ export function TransactionDetail() {
   // V17-Ext Tier 3: Credit/debit note display helpers
   const isNote = isCreditNote || isDebitNote
   const noteLabel = isCreditNote ? 'Credit Note' : isDebitNote ? 'Debit Note' : isSale ? 'Sales Invoice' : 'Purchase Bill'
+  // 7g (#186): the typed price leads; a GST bill adds the before-GST figure (lib/refill-line.ts).
+  const linePrice = (item: any): { main: string; sub: string | null } => {
+    const shown = shownLinePrice(item, billShowsGst)
+    return { main: formatINR(shown.price), sub: shown.beforeGst != null ? `${formatINR(shown.beforeGst)} before GST` : null }
+  }
 
   return (
     <div className="space-y-4">
-      {/* Action bar */}
-      <div className="flex flex-wrap items-center gap-2 no-print">
+      {/* Action bar — 7g (#153): equal columns on a phone (three to a row), not uneven wrapped rows. */}
+      <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center no-print [&>*]:w-full sm:[&>*]:w-auto">
         <Button variant="outline" size="touch" onClick={() => setEditOpen(true)} className="gap-2">
           <Edit2 className="w-4 h-4" /> Edit
         </Button>
@@ -405,9 +411,12 @@ export function TransactionDetail() {
         <Button variant="outline" size="touch" onClick={handleDownload} className="gap-2">
           <Download className="w-4 h-4" /> PDF
         </Button>
-        <Button variant="outline" size="touch" onClick={() => handleWhatsAppShare()} className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50">
-          <MessageCircle className="w-4 h-4" /> Send bill
-        </Button>
+        {/* 7g (#153): a bill the shop RECEIVED (a purchase) or a cash entry is not sent to anyone. */}
+        {!(isPurchase || isIncome || isExpense) && (
+          <Button variant="outline" size="touch" onClick={() => handleWhatsAppShare()} className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50">
+            <MessageCircle className="w-4 h-4" /> Send bill
+          </Button>
+        )}
         {/*
           🔒 SETTLE, from the bill itself (2026-08-03, requested by Rahul).
 
@@ -427,7 +436,7 @@ export function TransactionDetail() {
           <Button
             variant="outline"
             size="touch"
-            className="gap-2 border-primary/40 text-primary hover:bg-primary/5"
+            className="col-span-3 order-first sm:order-none gap-2 border-primary/40 text-primary hover:bg-primary/5"
             onClick={() => {
               setSelectedPartyId(txn.partyId)
               setPendingSettle({
@@ -510,14 +519,14 @@ export function TransactionDetail() {
             sale AND marks the estimate as converted in one $transaction.
             If already converted, shows a "Converted → INV-XXXX" badge instead. */}
         {txn.type === 'estimate' && txn.convertedToTransactionId ? (
-          <Badge className="bg-emerald-600 text-white gap-1">
+          <Badge className="col-span-3 order-first sm:order-none justify-center bg-emerald-600 text-white gap-1">
             <FileCheck className="w-3 h-3" /> Converted to Sale
           </Badge>
         ) : txn.type === 'estimate' && (
           <Button
             variant="default"
             size="touch"
-            className="gap-2 bg-gradient-saffron text-white"
+            className="col-span-3 order-first sm:order-none gap-2 bg-gradient-saffron text-white"
             onClick={async () => {
               try {
                 const r = await offlineFetch(`/api/transactions/${txn.id}/convert`, {
@@ -562,7 +571,7 @@ export function TransactionDetail() {
             <ShoppingCart className="w-4 h-4" /> Convert to Sale
           </Button>
         )}
-        <div className="flex-1" />
+        <div className="hidden sm:block flex-1" />
         <Button variant="outline" size="touch" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
           <Trash2 className="w-4 h-4" /> Delete
         </Button>
@@ -786,7 +795,26 @@ export function TransactionDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {/* 7g (#193): on a phone each line is name, then qty × price, with its amount — not a 6-column table. */}
+              <ul className="sm:hidden divide-y divide-border/50">
+                {txn.items.map((item: any) => {
+                  const price = linePrice(item)
+                  return (
+                    <li key={item.id} className="py-2.5">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-sm font-medium break-words min-w-0">{item.productName}</span>
+                        <span className="text-sm font-semibold tabular-nums shrink-0">{formatINR(item.total)}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {item.quantity}{item.unit && item.unit !== 'pcs' ? ` ${item.unit}` : ''} × {price.main}
+                        {billShowsGst && ` · GST ${item.gstRate}%`}
+                        {price.sub && ` · ${price.sub}`}
+                      </p>
+                    </li>
+                  )
+                })}
+              </ul>
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -799,16 +827,22 @@ export function TransactionDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {txn.items.map((item: any, i: number) => (
-                      <tr key={item.id} className="border-b border-border/50">
-                        <td className="py-2.5 pr-2 text-muted-foreground">{i + 1}</td>
-                        <td className="py-2.5 px-2 font-medium">{item.productName}</td>
-                        <td className="py-2.5 px-2 text-right">{item.quantity}</td>
-                        <td className="py-2.5 px-2 text-right">{formatINR(item.unitPrice)}</td>
-                        {billShowsGst && <td className="py-2.5 px-2 text-right">{item.gstRate}%</td>}
-                        <td className="py-2.5 px-2 text-right font-semibold">{formatINR(item.total)}</td>
-                      </tr>
-                    ))}
+                    {txn.items.map((item: any, i: number) => {
+                      const price = linePrice(item)
+                      return (
+                        <tr key={item.id} className="border-b border-border/50">
+                          <td className="py-2.5 pr-2 text-muted-foreground">{i + 1}</td>
+                          <td className="py-2.5 px-2 font-medium">{item.productName}</td>
+                          <td className="py-2.5 px-2 text-right">{item.quantity}</td>
+                          <td className="py-2.5 px-2 text-right">
+                            {price.main}
+                            {price.sub && <span className="block text-xs text-muted-foreground">{price.sub}</span>}
+                          </td>
+                          {billShowsGst && <td className="py-2.5 px-2 text-right">{item.gstRate}%</td>}
+                          <td className="py-2.5 px-2 text-right font-semibold">{formatINR(item.total)}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1755,7 +1789,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
             <tr key={i} className="border-b border-gray-200">
               <td className="py-2 px-2 text-gray-600">{i + 1}</td>
               <td className="py-2 px-2 font-medium">{item.productName}</td>
-              {billShowsGst && <td className="py-2 px-2 text-right text-gray-600">{item.hsnCode || '\u2014'}</td>}
+              {billShowsGst && <td className="py-2 px-2 text-right text-gray-600">{item.hsn || '\u2014'}</td>}
               <td className="py-2 px-2 text-right">{item.quantity}</td>
               <td className="py-2 px-2 text-right">₹{item.unitPrice.toFixed(2)}</td>
               {billShowsGst && <td className="py-2 px-2 text-right">{item.gstRate}%</td>}
@@ -2080,11 +2114,8 @@ function EInvoiceCard({ txn }: { txn: any }) {
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Generate the IRN request JSON, submit it to the NIC e-Invoice portal
-              (or your API provider), then store the returned IRN + QR here.
-            </p>
+          // 7g (#153): the how-to sits behind ⓘ — on screen, the action.
+          <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="sm"
@@ -2095,6 +2126,10 @@ function EInvoiceCard({ txn }: { txn: any }) {
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               Generate IRN Request JSON
             </Button>
+            <InfoHint
+              label="the IRN request"
+              text="Generate the IRN request JSON, submit it to the NIC e-Invoice portal (or your API provider), then store the returned IRN + QR here."
+            />
           </div>
         )}
       </CardContent>

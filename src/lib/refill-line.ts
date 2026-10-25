@@ -30,6 +30,22 @@ export function refillPrice(line: {
 }
 
 /**
+ * The price a saved bill SHOWS on each line (7g, #186, 25 Oct 2026): the price as
+ * the shopkeeper typed it — atta at ₹255 reads ₹255, not the ₹242.86 stored for
+ * the tax invoice. A GST bill also shows that before-GST figure beside it; a bill
+ * without GST columns never does. Same source as refilling (refillPrice).
+ */
+export function shownLinePrice(
+  line: { unitPrice?: number | null; enteredPrice?: number | null; priceIncludesGst?: boolean | null },
+  billShowsGst: boolean,
+): { price: number; beforeGst: number | null } {
+  const typed = refillPrice(line)
+  const exGst = Number(line.unitPrice) || 0
+  const differs = typed.priceIncludesGst && Math.abs(typed.unitPrice - exGst) >= 0.005
+  return { price: typed.unitPrice, beforeGst: billShowsGst && differs ? exGst : null }
+}
+
+/**
  * Does this line's price include GST? One rule for the bill screen's preview
  * AND its save (#130, #135, 2 Oct 2026):
  *
