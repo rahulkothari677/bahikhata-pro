@@ -58,6 +58,7 @@ export function Ledger({ type }: { type: LedgerType }) {
     transactionsViewMode, setTransactionsViewMode, triggerNewEntry, triggerNewEntryView,
     setSelectedTransactionId, setSelectedTransactionType, setPreviousView, pendingDateRange, setPendingDateRange,
     returnMode,  // 🔒 V26 N11: reactive subscription so dismiss re-renders
+    features,
   } = useAppStore()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -834,7 +835,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                 onClick: handleNewEntry,
               }}
               secondaryAction={
-                isSale
+                isSale && features?.aiScanner !== false
                   ? { label: 'Scan Bill', onClick: () => setView('scanner') }
                   : undefined
               }

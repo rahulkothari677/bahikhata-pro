@@ -25,9 +25,10 @@ import {
   ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
   TrendingUp, TrendingDown, Calendar, User, ScanLine, Folder, FolderOpen,
   Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock, AlertTriangle, Minus,
-  FileDown,
+  FileDown, Settings2,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
+import { BillScreenSettings } from '@/components/ledger/BillScreenSettings'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -925,6 +926,22 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [nextQty, setNextQty] = useState('')
   const [qtyOpen, setQtyOpen] = useState(false)
   const [priceCheck, setPriceCheck] = useState(false)
+  // C12: the bill screen's switches, changed from ⚙ on this screen (lib/bill-screen-settings.ts).
+  const voiceOn = features?.voiceEntry !== false
+  const scanBillOn = features?.aiScanner !== false
+  const qtyButtonOn = features?.billQtyButton !== false
+  const priceCheckOn = isSale && features?.billPriceCheck !== false
+  // In the store, not here: on a phone ⚙ sits in the app's top bar (Header.tsx), beside the mic.
+  const billSettingsOpen = useAppStore((s) => s.billSettingsOpen)
+  const setBillSettingsOpen = useAppStore((s) => s.setBillSettingsOpen)
+  // Leaving the bill screen never leaves the sheet open for the next visit.
+  useEffect(() => () => setBillSettingsOpen(false), [setBillSettingsOpen])
+  const switchesRef = useRef({ qtyButtonOn, priceCheckOn })
+  switchesRef.current = { qtyButtonOn, priceCheckOn }
+  // A switch turned off while its tool is in use puts the tool away: nothing hidden stays active.
+  useEffect(() => { if (!priceCheckOn) setPriceCheck(false) }, [priceCheckOn])
+  useEffect(() => { if (!qtyButtonOn) { setQtyOpen(false); setNextQty('') } }, [qtyButtonOn])
+  useEffect(() => { if (!voiceOn) setShowVoiceEntry(false) }, [voiceOn])
   const [checkedProduct, setCheckedProduct] = useState<any | null>(null)
   const [unknownCode, setUnknownCode] = useState<string | null>(null)
   const [newItemCode, setNewItemCode] = useState<string | null>(null)
@@ -957,8 +974,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         e.preventDefault()
         if (e.key === 'F2') document.getElementById('field-search-product')?.focus()
         else if (e.key === 'F3') document.getElementById('field-party-search')?.focus()
-        else if (e.key === 'F4') { setQtyOpen(true); setTimeout(() => document.getElementById('field-next-qty')?.focus(), 50) }
-        else if (e.key === 'F6' && isSale) setPriceCheck((v) => !v)
+        else if (e.key === 'F4' && switchesRef.current.qtyButtonOn) { setQtyOpen(true); setTimeout(() => document.getElementById('field-next-qty')?.focus(), 50) }
+        else if (e.key === 'F6' && switchesRef.current.priceCheckOn) setPriceCheck((v) => !v)
         else if (e.key === 'F10' && itemCountRef.current > 0) finishRef.current()
         return
       }
@@ -1689,6 +1706,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         onDelete={deleteDraft}
       />
 
+      <BillScreenSettings open={billSettingsOpen} onClose={() => setBillSettingsOpen(false)} isSale={isSale} shopGst={shopGstStatus} />
+
       {/* Barcode scanner — scan to find and add product */}
       {barcodeOpen && (
         <BarcodeScanner
@@ -1733,17 +1752,23 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <Button variant="outline" size="sm" onClick={() => setShowVoiceEntry(!showVoiceEntry)} className="gap-1.5">
-            <Mic className="w-4 h-4" /> <span className="hidden sm:inline">Voice</span>
-          </Button>
+          {voiceOn && (
+            <Button variant="outline" size="sm" onClick={() => setShowVoiceEntry(!showVoiceEntry)} className="gap-1.5">
+              <Mic className="w-4 h-4" /> <span className="hidden sm:inline">Voice</span>
+            </Button>
+          )}
           {/* 🔒 BUG-14 (Phase 2b): Hide Scan Bill button on note/estimate forms.
               The scanner always sets preset type to 'sale'/'purchase', which would
               reset actualType and lose the note mode + any non-autosaved fields. */}
-          {!isNote && !estimateMode && (
+          {!isNote && !estimateMode && scanBillOn && (
             <Button variant="outline" size="sm" onClick={() => { setScannerBillType(type); setView('scanner') }} className="gap-1.5">
               <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Scan Bill</span>
             </Button>
           )}
+          {/* C12: the bill screen's own settings, here so a change is one tap away and shows at once. */}
+          <Button variant="outline" size="sm" onClick={() => setBillSettingsOpen(true)} className="gap-1.5" aria-label="Bill screen settings">
+            <Settings2 className="w-4 h-4" aria-hidden /> <span className="hidden sm:inline">Settings</span>
+          </Button>
         </div>
       </div>
 
@@ -1761,7 +1786,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
        * (customer, items, payment), the other only appends items — so the right
        * fix is to pick by what the form already holds, not to merge them.
        */}
-      {showVoiceEntry && items.length === 0 && (
+      {voiceOn && showVoiceEntry && items.length === 0 && (
         <Card className="shadow-card border-border/60 border-primary/30">
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-start justify-between gap-2 mb-3">
@@ -1959,9 +1984,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   }
                 }}
                 result={productSearchResult}
-                oftenIds={oftenIds}
+                oftenIds={features?.billOftenList !== false ? oftenIds : []}
                 oftenLabel={isSale ? 'Often sold' : 'Often bought'}
-                usualIds={usualIds}
+                usualIds={features?.billUsualList !== false ? usualIds : []}
+                sizeStock={features?.billSizeStock !== false}
+                sizeMark={features?.billSizeMark !== false}
                 customerName={selectedParty?.name ?? null}
                 billLines={items.length}
                 qtyOf={(id) => items.find((i) => i.productId === id)?.quantity ?? 0}
@@ -1973,8 +2000,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 belowSearch={(
                   <>
                     {/* 7c-2: quantity first ("6, then tap or scan"); on a sale, price check (nothing is added). */}
+                    {(qtyButtonOn || priceCheckOn) && (
                     <div className="flex items-center gap-2">
-                      {qtyOpen ? (
+                      {!qtyButtonOn ? null : qtyOpen ? (
                         <div className="flex items-center gap-1 min-w-0 flex-1">
                           <NumberField
                             id="field-next-qty"
@@ -1996,14 +2024,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           {nextQty ? `× ${nextQty} next` : 'Qty'}
                         </Button>
                       )}
-                      {isSale && (
+                      {priceCheckOn && (
                         <Button type="button" variant={priceCheck ? 'default' : 'outline'} className="h-12 shrink-0" aria-pressed={priceCheck} onClick={() => setPriceCheck((v) => !v)}>
                           Price check
                         </Button>
                       )}
                     </div>
+                    )}
                     {priceCheck && isSale && <p className="text-xs font-semibold text-check">Price check: tap or scan an item — nothing is added</p>}
-                    <p className="hidden lg:block text-xs text-muted-foreground">F2 search · F3 {isSale ? 'customer' : 'supplier'} · F4 quantity{isSale ? ' · F6 price check' : ''} · F10 {counterMode ? 'pay' : 'save'} · a barcode gun works anywhere</p>
+                    <p className="hidden lg:block text-xs text-muted-foreground">F2 search · F3 {isSale ? 'customer' : 'supplier'}{qtyButtonOn ? ' · F4 quantity' : ''}{priceCheckOn ? ' · F6 price check' : ''} · F10 {counterMode ? 'pay' : 'save'} · a barcode gun works anywhere</p>
                   </>
                 )}
                 scanButton={features?.barcodeScanner ? (
@@ -2022,7 +2051,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     title="No products yet"
                     description="Add your first product, or scan a bill."
                     action={{ label: 'Add Product', onClick: () => setView('inventory') }}
-                    secondaryAction={{ label: 'Scan a Bill', onClick: () => { setScannerBillType(isSale ? 'sale' : 'purchase'); setView('scanner') } }}
+                    secondaryAction={scanBillOn ? { label: 'Scan a Bill', onClick: () => { setScannerBillType(isSale ? 'sale' : 'purchase'); setView('scanner') } } : undefined}
                     color="blue"
                     compact
                   />
@@ -2037,7 +2066,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <ShoppingCart className="w-4 h-4" /> Bill
                   {items.length > 0 && <Badge variant="secondary">{items.length}</Badge>}
                 </h3>
-                {items.length > 0 && (
+                {items.length > 0 && voiceOn && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -2050,7 +2079,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               </div>
 
               {/* Inline voice entry for adding more items */}
-              {showVoiceEntry && items.length > 0 && (
+              {voiceOn && showVoiceEntry && items.length > 0 && (
                 <Card className="shadow-card border-border/60 border-primary/30 mb-3">
                   <CardContent className="p-3 sm:p-4">
                     <div className="flex items-start justify-between gap-2 mb-3">

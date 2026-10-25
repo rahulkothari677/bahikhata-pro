@@ -62,7 +62,10 @@ describe('one add step on every bill', () => {
   test('keys on every bill, never under a sheet; the gun only where no box has the cursor; F10 = the bar\'s button', () => {
     const keys = code.slice(at('const onKey = (e: KeyboardEvent) =>'), at("window.addEventListener('keydown', onKey)"))
     expect(keys).toContain("if (!sheetOpen && /^F(2|3|4|6|10)$/.test(e.key)) {")
-    expect(keys).toContain("else if (e.key === 'F6' && isSale) setPriceCheck((v) => !v)")
+    // F6 = price check on a sale only. Since C12 (25 Oct) it also obeys the Price check switch;
+    // the sale-only rule now sits in priceCheckOn, which is asserted to start with isSale.
+    expect(keys).toContain("else if (e.key === 'F6' && switchesRef.current.priceCheckOn) setPriceCheck((v) => !v)")
+    expect(code).toContain('const priceCheckOn = isSale && ')
     expect(keys).toContain("if (typing || sheetOpen || e.ctrlKey || e.metaKey || e.altKey) { scanBufferRef.current.reset(); return }")
     expect(keys).toContain('scanBufferRef.current.push(e.key, e.timeStamp)')
     expect(code).not.toContain('if (!counterMode) return\n    const onKey')

@@ -113,8 +113,8 @@ export function KeyboardShortcuts() {
         return
       }
 
-      // A → AI Scanner
-      if (e.key === 'a' || e.key === 'A') {
+      // A → AI Scanner (not when the shop switched "Scan a bill (AI)" off)
+      if ((e.key === 'a' || e.key === 'A') && features.aiScanner !== false) {
         e.preventDefault()
         setView('scanner')
         return
@@ -159,7 +159,7 @@ export function KeyboardShortcuts() {
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [features.keyboardShortcuts, features.globalSearch, currentView, setView, setPreviousView, setSearchOpen, fireTriggerNewEntry])
+  }, [features.keyboardShortcuts, features.globalSearch, features.aiScanner, currentView, setView, setPreviousView, setSearchOpen, fireTriggerNewEntry])
 
   return <ShortcutsHelp open={showHelp} onClose={() => setShowHelp(false)} />
 }

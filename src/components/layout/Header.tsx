@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { Plus, Sparkles, ArrowLeft, Search, Check, Globe, Mic } from 'lucide-react'
+import { Plus, Sparkles, ArrowLeft, Search, Check, Globe, Mic, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
@@ -278,6 +278,8 @@ export function Header({ className }: { className?: string } = {}) {
 
           {isNewEntryView && (
             <div className="flex items-center gap-1 lg:hidden">
+              {/* C12: Voice and Scan Bill follow the bill screen's switches (⚙ on New Sale). */}
+              {features?.voiceEntry !== false && (
               <Button
                 size="iconTouch"
                 variant="ghost"
@@ -287,6 +289,7 @@ export function Header({ className }: { className?: string } = {}) {
               >
                 <Mic className="w-5 h-5" />
               </Button>
+              )}
               {/*
                * AI bill scan, NOT the barcode scanner.
                *
@@ -300,6 +303,7 @@ export function Header({ className }: { className?: string } = {}) {
                * holding; the AI scan reads a whole supplier bill and fills the
                * form from it. The second is the one worth a permanent slot.
                */}
+              {features?.aiScanner !== false && (
               <Button
                 size="iconTouch"
                 variant="ghost"
@@ -326,13 +330,25 @@ export function Header({ className }: { className?: string } = {}) {
               >
                 <Sparkles className="w-5 h-5" />
               </Button>
+              )}
+              {/* C12: the bill screen's settings, on the bill screen — beside the tools they switch. */}
+              <Button
+                size="iconTouch"
+                variant="ghost"
+                onClick={() => { haptic.click(); useAppStore.getState().setBillSettingsOpen(true) }}
+                title="Bill screen settings"
+                aria-label="Bill screen settings"
+              >
+                <Settings2 className="w-5 h-5" />
+              </Button>
             </div>
           )}
 
           {/* Dark mode toggle — removed from header, now in Settings */}
 
           {/* Quick action: AI Scan - desktop only (mobile uses dashboard hero button) */}
-          {currentView !== 'scanner' && isFlagEnabled('ai_scanner') && (
+          {/* C12: also the shop's own "Scan a bill" switch — off means off on every screen. */}
+          {currentView !== 'scanner' && isFlagEnabled('ai_scanner') && features?.aiScanner !== false && (
             <Button
               size="sm"
               variant="outline"

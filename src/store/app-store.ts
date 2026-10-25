@@ -101,6 +101,14 @@ export type FeatureKey =
   | 'repeatLastSale'
   | 'quickActions'
   | 'businessAnalytics'
+  // The bill screen's own switches (lib/bill-screen-settings.ts), changed from ⚙ on New Sale.
+  | 'voiceEntry'
+  | 'billQtyButton'
+  | 'billPriceCheck'
+  | 'billOftenList'
+  | 'billUsualList'
+  | 'billSizeStock'
+  | 'billSizeMark'
 
 export type FeatureFlags = Record<FeatureKey, boolean>
 
@@ -130,6 +138,14 @@ const DEFAULT_FEATURES: FeatureFlags = {
   repeatLastSale: true,
   quickActions: true,
   businessAnalytics: true,
+  // On by default: a shop that never opens ⚙ sees New Sale exactly as before.
+  voiceEntry: true,
+  billQtyButton: true,
+  billPriceCheck: true,
+  billOftenList: true,
+  billUsualList: true,
+  billSizeStock: true,
+  billSizeMark: true,
 }
 
 interface NavStackEntry {
@@ -206,6 +222,9 @@ interface AppState {
   // opened new-sale, leaving the user to find the mic/scan button.
   triggerVoiceOpen: number
   fireTriggerVoiceOpen: () => void
+  /** C12: ⚙ Bill screen settings — opened from the phone's top bar or the desktop bill header. */
+  billSettingsOpen: boolean
+  setBillSettingsOpen: (open: boolean) => void
   triggerBarcodeOpen: number
   fireTriggerBarcodeOpen: () => void
   // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Deep-link triggers for MoreScreen items.
@@ -420,6 +439,8 @@ export const useAppStore = create<AppState>()(
       // 🔒 V26 N23: Voice + Barcode deep-link triggers.
       triggerVoiceOpen: 0,
       fireTriggerVoiceOpen: () => set((s) => ({ triggerVoiceOpen: s.triggerVoiceOpen + 1 })),
+      billSettingsOpen: false,
+      setBillSettingsOpen: (open) => set({ billSettingsOpen: open }),
       triggerBarcodeOpen: 0,
       fireTriggerBarcodeOpen: () => set((s) => ({ triggerBarcodeOpen: s.triggerBarcodeOpen + 1 })),
       // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Deep-link trigger implementations.

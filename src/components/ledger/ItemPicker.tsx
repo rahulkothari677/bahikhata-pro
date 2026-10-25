@@ -44,6 +44,9 @@ export interface ItemPickerProps {
   qtyOf: (id: string) => number
   priceOf: (p: any) => number
   showsGst: boolean
+  /** C12 switches (⚙ on the bill screen): "out" on a size with no stock; the most-sold size marked. */
+  sizeStock?: boolean
+  sizeMark?: boolean
   onAdd: (p: any) => void
   onDecrement: (id: string) => void
   catalogCutNote?: string | null
@@ -210,15 +213,15 @@ function BrandRow({ row, p }: { row: PickRowGroup<any>; p: ItemPickerProps }) {
       </div>
       <div className="mt-1.5 flex flex-wrap gap-2" role="group" aria-label={`${row.brand!.name} sizes`}>
         {row.items.map((it) => (
-          <SizeButton key={it.id} product={it} qty={p.qtyOf(it.id)} price={p.priceOf(it)} top={row.items.length > 1 && it.id === row.topId} onAdd={() => p.onAdd(it)} />
+          <SizeButton key={it.id} product={it} qty={p.qtyOf(it.id)} price={p.priceOf(it)} top={p.sizeMark !== false && row.items.length > 1 && it.id === row.topId} showOut={p.sizeStock !== false} onAdd={() => p.onAdd(it)} />
         ))}
       </div>
     </div>
   )
 }
 
-function SizeButton({ product: it, qty, price, top, onAdd }: { product: any; qty: number; price: number; top: boolean; onAdd: () => void }) {
-  const out = !isService(it) && Number(it.currentStock) <= 0
+function SizeButton({ product: it, qty, price, top, showOut, onAdd }: { product: any; qty: number; price: number; top: boolean; showOut: boolean; onAdd: () => void }) {
+  const out = showOut && !isService(it) && Number(it.currentStock) <= 0
   const label: string = it.sizeLabel || it.name
   // A price pack ("₹10") already says its price; any other size shows it beside the size.
   const samePrice = /^₹\s?\d/.test(label) && Number(label.replace(/[^\d.]/g, '')) === Number(price)

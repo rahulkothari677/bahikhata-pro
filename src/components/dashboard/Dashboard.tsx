@@ -525,7 +525,8 @@ export function Dashboard() {
                 <ArrowRight className="w-4 h-4 text-saffron-600/60 group-hover:text-saffron-600 group-hover:translate-x-0.5 transition" />
               </button>
 
-              {/* Or: Scan a bill */}
+              {/* Or: Scan a bill — unless the shop switched it off */}
+              {features?.aiScanner !== false && (
               <button
                 onClick={() => {
                   setPreviousView('dashboard')
@@ -540,6 +541,7 @@ export function Dashboard() {
                 </div>
                 <ArrowRight className="w-3.5 h-3.5 text-white/40 group-hover:text-white/70 transition" />
               </button>
+              )}
             </div>
           </div>
         </div>
@@ -632,7 +634,7 @@ export function Dashboard() {
         onRepeat={handleRepeatLastSale}
         onShare={handleShareSummary}
         onNewSale={() => setView('new-sale')}
-        onScan={() => setView('scanner')}
+        onScan={features?.aiScanner !== false ? () => setView('scanner') : undefined}
         onProof={setProof}
       />
       {home.shown('tiles') && <QuickTiles gstStatus={gstStatus(setting)} />}

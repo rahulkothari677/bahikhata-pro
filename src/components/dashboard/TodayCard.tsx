@@ -82,7 +82,8 @@ export function TodayCard({
   onRepeat: () => void
   onShare: () => void
   onNewSale: () => void
-  onScan: () => void
+  /** Absent when the shop switched "Scan a bill (AI)" off (⚙ on New Sale). */
+  onScan?: () => void
   onProof: (spec: ProofSpec) => void
 }) {
   const { t, language } = useTranslation()
@@ -172,10 +173,12 @@ export function TodayCard({
             <Plus className="w-4 h-4" />
             New Sale
           </Button>
-          <Button onClick={onScan} variant="outline" className={cn('flex-1 sm:flex-none gap-2', onSaffron)}>
-            <ScanLine className="w-4 h-4" />
-            {t('dash.scan_bill')}
-          </Button>
+          {onScan && (
+            <Button onClick={onScan} variant="outline" className={cn('flex-1 sm:flex-none gap-2', onSaffron)}>
+              <ScanLine className="w-4 h-4" />
+              {t('dash.scan_bill')}
+            </Button>
+          )}
         </div>
       </div>
     </motion.div>

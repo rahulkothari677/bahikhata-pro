@@ -49,14 +49,23 @@ import { CustomFieldsCard } from '@/components/settings/CustomFieldsCard'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
 import { istDateString } from '@/lib/timezone'
 import { StateField, GstinField } from '@/components/common/StateField'
+import { BILL_SCREEN_SETTINGS } from '@/lib/bill-screen-settings'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
   {
+    // C12: the same list as ⚙ on New Sale (lib/bill-screen-settings.ts) — one list, two doors.
+    title: 'Bill screen',
+    features: BILL_SCREEN_SETTINGS.map((s) => ({
+      key: s.key,
+      label: s.label,
+      description: s.help,
+      icon: s.key === 'voiceEntry' ? Mic : s.group === 'add' ? ScanLine : Receipt,
+    })),
+  },
+  {
     title: 'AI Features',
     features: [
-      { key: 'aiScanner', label: 'AI Bill Scanner', description: 'Snap bill photos and auto-extract data', icon: ScanLine },
       { key: 'smartInsights', label: 'Smart Insights & Alerts', description: 'AI-powered alerts for stock, dues & profit', icon: Sparkles },
-      { key: 'barcodeScanner', label: 'Barcode Scanner', description: 'Scan product barcodes for fast billing', icon: ScanLine },
     ],
   },
   {

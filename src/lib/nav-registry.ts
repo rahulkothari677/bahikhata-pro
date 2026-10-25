@@ -1197,6 +1197,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     view: 'new-sale',
     actionKind: 'navigate',
     actionParams: { fireTriggerVoiceOpen: true },
+    // C12: switched off from ⚙ on New Sale → gone from the menus too.
+    featureFlag: 'voiceEntry',
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
