@@ -159,11 +159,13 @@ export function placeOfSupplyCode(args: SupplyPlaces): string | null {
  *    delivery state, which is not the buyer's GSTIN state, so the buyer cannot
  *    claim this GST (GSTR-2B shows it as not available).
  */
-export function deliveryCheck(args: SupplyPlaces): { needsShipToChoice: boolean; buyerLosesCredit: boolean } {
+export function deliveryCheck(args: SupplyPlaces): { asksShipTo: boolean; needsShipToChoice: boolean; buyerLosesCredit: boolean } {
   const deliveryCode = resolveStateCode(args.delivery)
   const buyerGstinCode = gstinStateCode(args.party?.gstin)
   const differs = !!deliveryCode && !!buyerGstinCode && deliveryCode !== buyerGstinCode
   return {
+    // The "Who gets the goods" question is on screen (answered or not) — 7g-4b: New Sale and the edit dialog alike.
+    asksShipTo: differs,
     needsShipToChoice: differs && typeof args.billToShipTo !== 'boolean',
     buyerLosesCredit: differs && args.billToShipTo === false,
   }

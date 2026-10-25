@@ -61,19 +61,20 @@ describe('the law report\'s worked examples', () => {
   })
   test('a delivery inside the buyer\'s own state changes nothing', () => {
     expect(supplyKind({ shop: JAIPUR, party: LUCKNOW_RETAILER, delivery: 'UP' })).toMatchObject({ isInterState: true, posCode: '09' })
-    expect(deliveryCheck({ shop: JAIPUR, party: LUCKNOW_RETAILER, delivery: 'UP' })).toEqual({ needsShipToChoice: false, buyerLosesCredit: false })
+    expect(deliveryCheck({ shop: JAIPUR, party: LUCKNOW_RETAILER, delivery: 'UP' })).toEqual({ asksShipTo: false, needsShipToChoice: false, buyerLosesCredit: false })
   })
 })
 
 describe('deliveryCheck() — the question is asked, never assumed', () => {
   const args = { shop: SURAT, party: AHMEDABAD_RETAILER, delivery: 'Maharashtra' }
   test('registered buyer, goods to another state, unanswered → must ask', () => {
-    expect(deliveryCheck(args)).toEqual({ needsShipToChoice: true, buyerLosesCredit: false })
+    expect(deliveryCheck(args)).toEqual({ asksShipTo: true, needsShipToChoice: true, buyerLosesCredit: false })
     expect(deliveryCheck({ ...args, billToShipTo: null }).needsShipToChoice).toBe(true)
   })
   test('answered either way → no question; "the buyer" → they lose the credit', () => {
-    expect(deliveryCheck({ ...args, billToShipTo: true })).toEqual({ needsShipToChoice: false, buyerLosesCredit: false })
-    expect(deliveryCheck({ ...args, billToShipTo: false })).toEqual({ needsShipToChoice: false, buyerLosesCredit: true })
+    // asksShipTo stays true: the answered question stays on screen (7g-4b)
+    expect(deliveryCheck({ ...args, billToShipTo: true })).toEqual({ asksShipTo: true, needsShipToChoice: false, buyerLosesCredit: false })
+    expect(deliveryCheck({ ...args, billToShipTo: false })).toEqual({ asksShipTo: true, needsShipToChoice: false, buyerLosesCredit: true })
   })
   test('an unregistered buyer or no delivery never asks', () => {
     expect(deliveryCheck({ shop: SURAT, party: { state: 'Gujarat' }, delivery: 'Maharashtra' }).needsShipToChoice).toBe(false)

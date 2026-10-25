@@ -34,7 +34,7 @@ import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { checkMixedSupply } from '@/lib/mixed-supply-invoice'
-import { supplyKind, stateCodeOf, stateNameForCode, deliveryCheck, billPlaceOfSupply, compositionInterStateBlocked, rule46eMissing, resolveStateCode, gstinStateCode, type StatePlace } from '@/lib/gst-states'
+import { supplyKind, stateCodeOf, stateNameForCode, deliveryCheck, billPlaceOfSupply, compositionInterStateBlocked, rule46eMissing, resolveStateCode, type StatePlace } from '@/lib/gst-states'
 import { useSetting } from '@/hooks/use-setting'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { track, EVENTS } from '@/lib/analytics'
@@ -44,6 +44,7 @@ import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
 import { freezeWhileBillOpen } from '@/lib/pick-rows'
 import { ItemPicker } from './ItemPicker'
 import { ReturnFromBill } from './ReturnFromBill'
+import { DeliveryFields } from './DeliveryFields'
 import { partyMatchesSearch, partyPrefillFromSearch } from '@/lib/party-search'
 import { PaySheet, SavedSheet, type SavedBill } from '@/components/ledger/PaySheet'
 import { buildUpiLink, invoiceShopFromSetting } from '@/lib/invoice-document'
@@ -700,33 +701,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     : supplyKind(supplyPlaces)
   const shipCheck = deliveryCheck(supplyPlaces)
   const deliveryCode = deliveryInUse ? resolveStateCode(deliveryState) : null
-  const buyerGstinCode = gstinStateCode(selectedParty?.gstin)
-  // Ask only when it matters: a registered buyer, goods to another state than their GSTIN's.
-  const asksShipTo = !!deliveryCode && !!buyerGstinCode && deliveryCode !== buyerGstinCode
+  // Ask only when it matters: a registered buyer, goods to another state than their GSTIN's (one rule: deliveryCheck).
+  const asksShipTo = shipCheck.asksShipTo
   // #227 (6c-2): until "Who gets the goods" is answered the tax split is not known — the badge and the summary both wait.
   const taxSplitPending = asksShipTo && shipCheck.needsShipToChoice
   const compositionElsewhere = isOutwardDocument(actualType) && compositionInterStateBlocked(shopGstStatus, supplyPlaces)
   const partyHasNoState = !!selectedParty && !stateCodeOf({ gstin: selectedParty.gstin, state: selectedParty.state })
   // A changed customer is a new question — never carry the last answer over.
   useEffect(() => { setBillToShipTo(null) }, [partyId])
-  useEffect(() => {
-    if (actualType !== 'credit-note' || !originalTransactionId) { setOriginalSupply(null); return }
-    let alive = true
-    offlineFetch(`/api/transactions/${originalTransactionId}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(data => {
-        const t = data?.transaction
-        if (!alive || !t) return
-        setOriginalSupply({
-          isInterState: !!t.isInterState,
-          placeOfSupply: t.placeOfSupply ?? null,
-          deliveryState: t.deliveryState ?? null,
-          party: t.party ? { gstin: t.party.gstin, state: t.party.state } : null,
-        })
-      })
-      .catch(() => { /* offline: the server still keeps the bill's tax head */ })
-    return () => { alive = false }
-  }, [actualType, originalTransactionId])
+  // A credit note's tax head (originalSupply) is read with the bill's lines — one fetch, below (#190).
 
   /*
    * #91 — a registered buyer cannot take taxable and exempt items on ONE bill.
@@ -1081,8 +1064,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       window.removeEventListener('keydown', onEscape, true)
     }
   }, [isSale])
-  // #190: read the original bill once its id is known (a return opened from the bill, or a restored draft).
+  // #190: read the original bill once its id is known (a return opened from the bill, or a restored draft):
+  // its lines for the From-bill card and, on a credit note, its tax head (Phase 2c: a return keeps the bill's
+  // place of supply). One fetch for both — they were two.
   useEffect(() => {
+    setOriginalSupply(null)
     if (!isNote || !originalTransactionId) { setFromBill(null); setFromBillState('idle'); return }
     let gone = false
     setFromBillState('loading')
@@ -1093,10 +1079,19 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         const bill = data.transaction || {}
         setFromBill({ id: originalTransactionId, billNo: bill.invoiceNo || 'the bill', lines: originalLinesOf(bill.items || []) })
         setFromBillState('idle')
+        if (actualType === 'credit-note') {
+          setOriginalSupply({
+            isInterState: !!bill.isInterState,
+            placeOfSupply: bill.placeOfSupply ?? null,
+            deliveryState: bill.deliveryState ?? null,
+            party: bill.party ? { gstin: bill.party.gstin, state: bill.party.state } : null,
+          })
+        }
       })
+      // offline: the server still keeps the bill's tax head; the card says it could not open the bill
       .catch(() => { if (!gone) setFromBillState('failed') })
     return () => { gone = true }
-  }, [isNote, originalTransactionId])
+  }, [isNote, actualType, originalTransactionId])
   const setFromBillQty = (line: OriginalLine, qty: number) => { markDirty(); setItems((now) => setReturnedQty(now, line, qty)) }
   const returnAllFromBill = () => { if (fromBill) { markDirty(); setItems((now) => returnAll(now, fromBill.lines)) } }
 
@@ -3096,50 +3091,19 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </p>
                 )}
                 {offersShipTo && (
-                  <div className="mt-3 pt-3 border-t border-border">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Label htmlFor="field-ship-elsewhere" className="text-sm">Ship to another address</Label>
-                        <InfoHint
-                          label="Ship to another address"
-                          text="For goods sent by courier or transport. GST follows the state the goods are delivered to, and the bill prints the delivery address."
-                        />
-                      </div>
-                      <Switch id="field-ship-elsewhere" checked={shipElsewhere} onCheckedChange={(v) => { markDirty(); setShipElsewhere(v); setBillToShipTo(null) }} />
-                    </div>
-                    {shipElsewhere && (
-                      <div className="mt-2 space-y-2">
-                        <div>
-                          <Label htmlFor="field-delivery-state" className="text-xs">Delivery state</Label>
-                          <StateField id="field-delivery-state" value={deliveryState} onChange={(v) => { markDirty(); setDeliveryState(v); setBillToShipTo(null) }} />
-                        </div>
-                        <div>
-                          <Label htmlFor="field-delivery-address" className="text-xs">Delivery address</Label>
-                          <Input id="field-delivery-address" value={deliveryAddress} onChange={(e) => { markDirty(); setDeliveryAddress(e.target.value) }} placeholder="Street, city, PIN" maxLength={300} className="mt-1 h-11" />
-                        </div>
-                        {asksShipTo && (
-                          <div id="field-ship-to-choice" role="radiogroup" aria-label="Who gets the goods">
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-xs font-medium">{`Who gets the goods in ${stateNameForCode(deliveryCode)}?`}</p>
-                              <InfoHint
-                                label="Who gets the goods"
-                                text={`If ${selectedParty?.name} asked you to send the goods to their own customer, GST follows ${selectedParty?.name}\u2019s GST state, ${stateNameForCode(buyerGstinCode)} (bill-to-ship-to). If the goods are for ${selectedParty?.name}, GST follows the delivery state.`}
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 mt-1">
-                              <Button type="button" role="radio" aria-checked={billToShipTo === true} variant={billToShipTo === true ? 'default' : 'outline'} className="h-auto min-h-11 py-2 px-2 whitespace-normal leading-tight" onClick={() => { markDirty(); setBillToShipTo(true) }}>Buyer&apos;s customer</Button>
-                              <Button type="button" role="radio" aria-checked={billToShipTo === false} variant={billToShipTo === false ? 'default' : 'outline'} className="h-auto min-h-11 py-2 px-2 whitespace-normal leading-tight" onClick={() => { markDirty(); setBillToShipTo(false) }}>The buyer</Button>
-                            </div>
-                            {shipCheck.buyerLosesCredit && (
-                              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                                {`${selectedParty?.name} can\u2019t claim this GST \u2014 their GSTIN is from ${stateNameForCode(buyerGstinCode)}.`}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  // 7g-4b (#226): one delivery block for New Sale and the edit dialog (components/ledger/DeliveryFields.tsx).
+                  <DeliveryFields
+                    places={supplyPlaces}
+                    partyName={selectedParty?.name}
+                    shipElsewhere={shipElsewhere}
+                    onShipElsewhere={(v) => { markDirty(); setShipElsewhere(v); setBillToShipTo(null) }}
+                    deliveryState={deliveryState}
+                    onDeliveryState={(v) => { markDirty(); setDeliveryState(v); setBillToShipTo(null) }}
+                    deliveryAddress={deliveryAddress}
+                    onDeliveryAddress={(v) => { markDirty(); setDeliveryAddress(v) }}
+                    billToShipTo={billToShipTo}
+                    onBillToShipTo={(v) => { markDirty(); setBillToShipTo(v) }}
+                  />
                 )}
               </div>
               )}

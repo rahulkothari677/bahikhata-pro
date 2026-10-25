@@ -46,13 +46,14 @@ import { useSetting } from '@/hooks/use-setting'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { NumberField } from '@/components/ui/number-field'
-import { supplyKind, savedBillToShipTo } from '@/lib/gst-states'
+import { supplyKind, savedBillToShipTo, deliveryCheck } from '@/lib/gst-states'
 import { GST_RATES } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice, shownLinePrice } from '@/lib/refill-line'
 import { noPartyName, isSupplierSide } from '@/lib/walk-in-party'
 import { estimateStatus } from '@/lib/estimate-status'
-import { gstStatus, documentTitle, billCarriesGstColumns, claimsInputCredit } from '@/lib/shop-tax'
+import { gstStatus, documentTitle, billCarriesGstColumns, claimsInputCredit, chargesGstOnSales } from '@/lib/shop-tax'
+import { DeliveryFields } from './DeliveryFields'
 import { purchaseRateFromCost, isNoCostLine } from '@/lib/unit-profit'
 import { lineTaxable } from '@/lib/line-taxable'
 
@@ -1145,6 +1146,8 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   onSuccess?: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  // #226: the bill's delivery, editable (filled from the saved bill when the dialog opens).
+  const [delivery, setDelivery] = useState<{ on: boolean; state: string; address: string; billToShipTo: boolean | null }>({ on: false, state: '', address: '', billToShipTo: null })
 
   // 🔒 Defensive: if transaction is somehow undefined (e.g. during a React
   // Query refetch that temporarily clears data), don't crash. Hooks must be
@@ -1232,15 +1235,21 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   // GST type shown here cannot disagree with what gets stored.
   const editSelectedParty = parties.find((p: any) => p.id === form.partyId)
   // Phase 2: the same code-based rule as the bill screen and the server.
-  // Phase 2c (#114): the edit keeps the bill's saved delivery, as the server
-  // does; a credit note against a bill keeps that bill's tax head.
+  // Phase 2c (#114): a credit note against a bill keeps that bill's tax head.
+  // #226 (7g-4b): the delivery can now be changed here, with New Sale's own block
+  // (DeliveryFields); the server re-derives the tax head from it on save.
   const editKeepsOriginal = transaction?.type === 'credit-note' && !!transaction?.originalTransactionId
-  const editSupply = supplyKind({
+  const editOffersShipTo = chargesGstOnSales(gstStatus(editSettingData?.setting))
+    && (transaction?.type === 'sale' || transaction?.type === 'estimate' || (transaction?.type === 'credit-note' && !transaction?.originalTransactionId))
+  const editPlaces = {
     shop: { gstin: editSettingData?.setting?.gstin, state: editSettingData?.setting?.state },
     party: editSelectedParty ? { gstin: editSelectedParty.gstin, state: editSelectedParty.state } : null,
-    delivery: transaction?.deliveryState ?? null,
-    billToShipTo: savedBillToShipTo(transaction ?? {}),
-  })
+    delivery: editOffersShipTo ? (delivery.on ? delivery.state : null) : (transaction?.deliveryState ?? null),
+    billToShipTo: editOffersShipTo ? delivery.billToShipTo : savedBillToShipTo(transaction ?? {}),
+  }
+  const editSupply = supplyKind(editPlaces)
+  // Until "Who gets the goods" is answered the tax head is not known — the server refuses it too.
+  const editTaxSplitPending = editOffersShipTo && deliveryCheck(editPlaces).needsShipToChoice
   const editInterState = editKeepsOriginal
     ? { ...editSupply, isInterState: !!transaction?.isInterState, indeterminate: false }
     : editSupply
@@ -1258,6 +1267,12 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
         notes: transaction.notes || '',
         category: transaction.category || '',
         totalAmount: String(transaction.totalAmount || ''),
+      })
+      setDelivery({
+        on: !!transaction.deliveryState,
+        state: transaction.deliveryState || '',
+        address: transaction.deliveryAddress || '',
+        billToShipTo: savedBillToShipTo(transaction),
       })
       /*
        * 📄 Phase 5 — preload the custom values this bill ALREADY carries.
@@ -1389,6 +1404,12 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
           customCols: editItemFields[idx] || undefined,
         })),
         customFields: editBillDefs.length ? editBillFields : undefined,
+        // #226: the delivery as edited (null clears it); left out where the bill cannot carry one, so the server keeps it.
+        ...(editOffersShipTo ? {
+          deliveryState: delivery.on ? (delivery.state || null) : null,
+          deliveryAddress: delivery.on ? (delivery.address.trim() || null) : null,
+          billToShipTo: delivery.on ? delivery.billToShipTo : null,
+        } : {}),
       }
       const r = await offlineFetch(`/api/transactions/${transaction.id}`, {
         method: 'PUT',
@@ -1494,6 +1515,8 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                     onValueChange={(v) => {
                       if (v === PARTY_ADD_NEW) { setAddingParty(true); return }
                       setForm({ ...form, partyId: v === PARTY_WALK_IN ? '' : v })
+                      // A changed customer is a new question — the "Who gets the goods" answer is not carried over.
+                      setDelivery((d) => ({ ...d, billToShipTo: null }))
                     }}
                   >
                     <SelectTrigger><SelectValue placeholder="Select party" /></SelectTrigger>
@@ -1561,11 +1584,28 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                     </p>
                   </div>
                   <Badge variant="outline" className="text-xs font-semibold">
-                    {editInterState.indeterminate
-                      ? (form.isInterState ? 'IGST' : 'CGST + SGST')
-                      : (editInterState.isInterState ? 'IGST' : 'CGST + SGST')}
+                    {editTaxSplitPending
+                      ? '—'
+                      : editInterState.indeterminate
+                        ? (form.isInterState ? 'IGST' : 'CGST + SGST')
+                        : (editInterState.isInterState ? 'IGST' : 'CGST + SGST')}
                   </Badge>
                 </div>
+                {/* #226 (7g-4b): New Sale's own delivery block — a wrong delivery no longer means delete and re-enter. */}
+                {editOffersShipTo && (
+                  <DeliveryFields
+                    places={editPlaces}
+                    partyName={editSelectedParty?.name}
+                    shipElsewhere={delivery.on}
+                    onShipElsewhere={(on) => setDelivery((d) => ({ ...d, on, billToShipTo: null }))}
+                    deliveryState={delivery.state}
+                    onDeliveryState={(state) => setDelivery((d) => ({ ...d, state, billToShipTo: null }))}
+                    deliveryAddress={delivery.address}
+                    onDeliveryAddress={(address) => setDelivery((d) => ({ ...d, address }))}
+                    billToShipTo={delivery.billToShipTo}
+                    onBillToShipTo={(answer) => setDelivery((d) => ({ ...d, billToShipTo: answer }))}
+                  />
+                )}
               </div>
 
               <div>
@@ -1688,8 +1728,8 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving} className="bg-gradient-saffron">
-            {saving ? 'Saving...' : 'Save Changes'}
+          <Button onClick={handleSave} disabled={saving || editTaxSplitPending} className="bg-gradient-saffron">
+            {saving ? 'Saving...' : editTaxSplitPending ? 'Answer “Who gets the goods”' : 'Save Changes'}
           </Button>
         </DialogFooter>
       </DialogContent>
