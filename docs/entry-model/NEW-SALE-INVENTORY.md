@@ -32,3 +32,5 @@ taps, unless the master plan says otherwise. Add to it when the screen gains a j
 | 23 | Purchase: asks for the supplier's bill number before saving | save | ✓ unchanged | ✓ |
 | 24 | Keyboard: F2 search, F3 party, F4 qty, F6 price check, F10 pay/save, Esc clears | window | F4 / F6 follow their switches | ✓ |
 | 25 | ⚙ Bill screen settings (new in step 1). **On a phone the bill header is hidden** (`hidden lg:flex`): the mic, ✨ scan and ⚙ sit in the app's top bar (Header.tsx); on a desktop in the bill header | top bar / bill header | new | ✓ |
+| 26 | Loose good: weight buttons (250 g, 500 g, 1 kg, 2 kg; smaller for ₹400/kg and up), each adding that much; on the bill its amount with ✎ | List row | — | step 2b, switch `billWeightButtons` |
+| 27 | ✎ on every product: the keypad bar (Amount 400 = 400 g, ₹ amount, Price) for a loose good; Packs (any count of a size) and Price (never above MRP) for a packed one; Big number pad option | List row → bar above the total bar | — | step 2b, switches `billPencil`, `billBigPad`, `billGramsRule`, `billCheckAmounts` |

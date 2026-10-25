@@ -26,6 +26,8 @@ import { formatINR, cn } from '@/lib/utils'
 import { isService } from '@/lib/inventory-tracking'
 import { isCountUnit } from '@/lib/units'
 import { parseSize } from '@/lib/product-sizes'
+import { isLooseUnit, weightButtons, looseLabel } from '@/lib/loose-entry'
+import type { KeypadRow } from '@/components/ledger/KeypadBar'
 import type { ItemSearchResult } from '@/lib/item-search'
 import {
   groupPickRows, rankedRows, rankedGroupRows, listGroups, typeTabs, rowName,
@@ -53,6 +55,13 @@ export interface ItemPickerProps {
   sizeStock?: boolean
   sizeMark?: boolean
   sideView?: boolean
+  /** Step 2b: ✎ on a row opens the keypad bar for it (absent when ⚙ switches ✎ off). */
+  onPencil?: (row: KeypadRow) => void
+  /** The row the keypad bar is open for: marked, and kept in view above the bar. */
+  kbRowKey?: string | null
+  /** Weight buttons on a loose good's row (250 g, 500 g, 1 kg…), each adding that much. */
+  weightButtons?: boolean
+  onAddQty?: (p: any, q: number) => void
   onAdd: (p: any) => void
   onDecrement: (id: string) => void
   catalogCutNote?: string | null
@@ -149,6 +158,12 @@ function ListArea(p: ItemPickerProps) {
   }
   const go = (t: string) => { setPicked(t); setSub('All'); top(); park() }
   const goSub = (s: string) => { setSub(s); top() }
+  // The row the keypad bar is open for goes to the top of the window, above the bar.
+  useEffect(() => {
+    if (!p.kbRowKey || !listRef.current) return
+    const rowEl = listRef.current.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(p.kbRowKey)}"]`)
+    if (rowEl) listRef.current.scrollTop += rowEl.getBoundingClientRect().top - listRef.current.getBoundingClientRect().top - 2
+  }, [p.kbRowKey])
 
   // Lines on the bill per group: the dot on its tab.
   const lines = new Map<string, number>()
@@ -192,7 +207,11 @@ function ListArea(p: ItemPickerProps) {
     ? <p className="text-xs font-semibold text-muted-foreground px-1">{p.result.close ? 'No exact match · close spellings' : 'Searching every item'}</p>
     : null
   const windowBox = (cls: string) => (
-    <div ref={listRef} data-list-window style={side ? undefined : sized} className={cn('overflow-y-auto overscroll-contain min-w-0', cls)}>{body}</div>
+    <div ref={listRef} data-list-window style={side ? undefined : sized} className={cn('overflow-y-auto overscroll-contain min-w-0', cls)}>
+      {body}
+      {/* While the keypad bar is open, room at the end lets the last rows scroll up above it. */}
+      {p.kbRowKey && <div aria-hidden data-bar-room className="h-[340px]" />}
+    </div>
   )
 
   if (side) {
@@ -268,18 +287,33 @@ function Rows({ rows, p, wrap }: { rows: PickRowGroup<any>[]; p: ItemPickerProps
 function ListRow({ row, p, wrap }: { row: PickRowGroup<any>; p: ItemPickerProps; wrap: boolean }) {
   const name = rowName(row)
   const it0 = row.items[0]
+  const loose = !row.brand && isLooseUnit(it0.unit)
   const sub = [
     row.brand ? (row.items.length === 1 ? '1 size' : `${row.items.length} sizes`) : isService(it0) ? 'Service' : '',
     p.showsGst ? `GST ${it0.gstRate}%` : '',
   ].filter(Boolean).join(' · ')
+  const editing = p.kbRowKey === row.key
+  const pencil = p.onPencil ? () => p.onPencil!({ key: row.key, title: name, loose: !row.brand, items: row.items }) : null
+  const price = p.priceOf(it0)
+  const onBill = loose ? p.qtyOf(it0.id) : 0
+  const weights = loose && p.weightButtons !== false ? weightButtons(it0.unit, price) : []
   return (
-    <div className="px-2.5 py-1.5 border-b border-border/40 last:border-0">
+    <div data-row-key={row.key} className={cn('px-2.5 py-1.5 border-b border-border/40 last:border-0', editing && 'bg-check/10 ring-2 ring-inset ring-check/60')}>
       <div className="flex items-baseline gap-1.5 min-w-0">
         <p className="text-sm font-semibold leading-tight truncate min-w-0">{name}</p>
         {sub && <span className="text-xs text-muted-foreground shrink-0">{sub}</span>}
       </div>
       <div role="group" aria-label={`${name} sizes`} className={cn('mt-1 flex gap-1.5', wrap ? 'flex-wrap' : 'overflow-x-auto no-scrollbar pr-1')}>
-        {row.items.map((it) => (
+        {loose && weights.length ? (
+          <>
+            {onBill > 0 && (
+              <TwoLine onClick={pencil ?? (() => {})} on label={`${looseLabel(onBill, it0.unit)} ✎`} note={formatINR(onBill * price)} aria={`Change the amount of ${it0.name}`} />
+            )}
+            {weights.map((w) => (
+              <TwoLine key={w} onClick={() => (p.onAddQty ? p.onAddQty(it0, w) : p.onAdd(it0))} label={looseLabel(w, it0.unit)} note={formatINR(w * price)} aria={`Add ${looseLabel(w, it0.unit)} of ${it0.name}`} />
+            ))}
+          </>
+        ) : row.items.map((it) => (
           <SizeButton
             key={it.id}
             product={it}
@@ -291,8 +325,35 @@ function ListRow({ row, p, wrap }: { row: PickRowGroup<any>; p: ItemPickerProps;
             onDecrement={() => p.onDecrement(it.id)}
           />
         ))}
+        {pencil && (
+          <button
+            type="button"
+            onClick={pencil}
+            aria-label={`Any amount, count or price: ${name}`}
+            className="min-h-12 min-w-12 px-2 rounded-lg border border-dashed border-primary text-primary shrink-0 inline-flex flex-col items-center justify-center leading-tight"
+          >
+            <span className="text-sm font-bold">✎</span>
+            <span className="text-xs">{loose ? 'type' : 'more'}</span>
+          </button>
+        )}
       </div>
     </div>
+  )
+}
+
+/** A two-line button for a loose good: the weight, then what it comes to. */
+function TwoLine({ label, note, onClick, on, aria }: { label: string; note: string; onClick: () => void; on?: boolean; aria: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={aria}
+      className={cn('min-h-12 min-w-12 px-2 rounded-lg border shrink-0 inline-flex flex-col items-center justify-center leading-tight tabular-nums transition active:scale-[0.98]',
+        on ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted')}
+    >
+      <span className="text-sm font-bold whitespace-nowrap">{label}</span>
+      <span className={cn('text-xs whitespace-nowrap', on ? 'opacity-90' : 'text-muted-foreground')}>{note}</span>
+    </button>
   )
 }
 

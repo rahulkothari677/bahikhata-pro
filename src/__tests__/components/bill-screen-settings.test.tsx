@@ -26,6 +26,7 @@ const ENTRY = 'src/components/ledger/TransactionEntry.tsx'
 const PICKER = 'src/components/ledger/ItemPicker.tsx'
 const HEADER = 'src/components/layout/Header.tsx'
 const NAV = 'src/lib/nav-registry.ts'
+const KEYPAD = 'src/components/ledger/KeypadBar.tsx'
 
 /** switch → [file, the code in it that obeys the switch]. Comments are stripped before matching. */
 const CONSUMERS: Record<string, [string, RegExp][]> = {
@@ -46,6 +47,27 @@ const CONSUMERS: Record<string, [string, RegExp][]> = {
   billSideView: [
     [ENTRY, /sideView=\{features\?\.billSideView === true\}/],
     [PICKER, /const side = !!p\.sideView/],
+  ],
+  billPencil: [
+    [ENTRY, /const pencilOn = features\?\.billPencil !== false/],
+    [ENTRY, /onPencil=\{pencilOn \? \(row\) => setKb\(row\) : undefined\}/],
+    [PICKER, /const pencil = p\.onPencil \?/],
+  ],
+  billWeightButtons: [
+    [ENTRY, /weightButtons=\{features\?\.billWeightButtons !== false\}/],
+    [PICKER, /p\.weightButtons !== false \? weightButtons\(/],
+  ],
+  billBigPad: [
+    [ENTRY, /big=\{features\?\.billBigPad === true\}/],
+    [KEYPAD, /if \(!big\) return <Pad/],
+  ],
+  billGramsRule: [
+    [ENTRY, /gramsRule=\{features\?\.billGramsRule !== false\}/],
+    [KEYPAD, /typedQuantity\(t, tab === 'packs' \? 'auto' : u, unit, gramsRule\)/],
+  ],
+  billCheckAmounts: [
+    [ENTRY, /checkAmounts=\{features\?\.billCheckAmounts !== false\}/],
+    [KEYPAD, /checkAmounts && q \? unusualAmount\(/],
   ],
   billQtyButton: [
     [ENTRY, /const qtyButtonOn = features\?\.billQtyButton !== false/],
@@ -73,11 +95,11 @@ describe('the list', () => {
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  it('starts every tool ON, and the look as the List (Side view off), so an untouched shop gets everything', () => {
+  it('starts every tool ON, the look as the List and the pad as the bar, so an untouched shop gets everything', () => {
     window.localStorage.clear()
     const f = useAppStore.getState().features
     for (const s of BILL_SCREEN_SETTINGS) expect([s.key, f[s.key]]).toEqual([s.key, startsOn(s)])
-    expect(BILL_SCREEN_SETTINGS.filter((s) => !startsOn(s)).map((s) => s.key)).toEqual(['billSideView'])
+    expect(BILL_SCREEN_SETTINGS.filter((s) => !startsOn(s)).map((s) => s.key)).toEqual(['billSideView', 'billBigPad'])
   })
 
   it('shows price check on a sale only', () => {

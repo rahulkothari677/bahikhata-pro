@@ -62,11 +62,41 @@ describe('the List', () => {
     expect(rows.every((r) => r!.endsWith('Haldi sizes'))).toBe(true)
   })
 
-  test('a loose good shows its rate and sits in its product\'s tab beside the brands', () => {
-    draw()
+  test('a loose good sits in its product\'s tab beside the brands, with weight buttons that add that much', () => {
+    const got: string[] = []
+    draw({ onAddQty: (p, q) => got.push(`${p.name} ${q}`) })
     fireEvent.click(groupTabs().getByRole('button', { name: 'Atta & flour' }))
     fireEvent.click(within(screen.getByRole('group', { name: 'Products' })).getByRole('button', { name: 'Atta' }))
-    expect(within(screen.getByRole('group', { name: 'Chakki Atta sizes' })).getByRole('button').textContent).toBe('1 kg₹40/kg')
+    const row = within(screen.getByRole('group', { name: 'Chakki Atta sizes' }))
+    expect(row.getAllByRole('button').map((b) => b.textContent)).toEqual(['250 g₹10', '500 g₹20', '1 kg₹40', '2 kg₹80'])
+    fireEvent.click(row.getByRole('button', { name: 'Add 500 g of Chakki Atta (loose)' }))
+    expect(got).toEqual(['Chakki Atta (loose) 0.5'])
+  })
+
+  test('with weight buttons off a loose good has one button (its rate); ✎ opens the bar for its row', () => {
+    const opened: string[] = []
+    draw({ weightButtons: false, onPencil: (r) => opened.push(`${r.title} ${r.loose}`) })
+    fireEvent.click(groupTabs().getByRole('button', { name: 'Atta & flour' }))
+    const row = within(screen.getByRole('group', { name: 'Chakki Atta sizes' }))
+    expect(row.getAllByRole('button').map((b) => b.textContent)).toEqual(['1 kg₹40/kg', '✎type'])
+    fireEvent.click(row.getByRole('button', { name: 'Any amount, count or price: Chakki Atta' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Any amount, count or price: Aashirvaad Atta' }))
+    expect(opened).toEqual(['Chakki Atta true', 'Aashirvaad Atta false'])
+  })
+
+  test('while the keypad bar is open the list has room at its end, so the edited row can scroll above the bar', () => {
+    const { view } = draw()
+    expect(document.querySelector('[data-bar-room]')).toBeNull()
+    view.unmount()
+    draw({ kbRowKey: 'f:f:Aashirvaad Atta' })
+    expect(document.querySelector('[data-bar-room]')).not.toBeNull()
+  })
+
+  test('a loose good on the bill shows its amount, with ✎ to change it', () => {
+    const id = products.find((x) => x.name === 'Chakki Atta (loose)')!.id
+    draw({ qtyOf: (x) => (x === id ? 0.4 : 0), billLines: 1, onPencil: () => {} })
+    fireEvent.click(groupTabs().getByRole('button', { name: 'Atta & flour 1' }))
+    expect(screen.getByRole('button', { name: 'Change the amount of Chakki Atta (loose)' }).textContent).toBe('400 g ✎₹16')
   })
 
   test('on the bill: the size shows how many, carries a −, and its group tab a count', () => {

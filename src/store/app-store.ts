@@ -104,6 +104,11 @@ export type FeatureKey =
   // The bill screen's own switches (lib/bill-screen-settings.ts), changed from ⚙ on New Sale.
   | 'voiceEntry'
   | 'billSideView'
+  | 'billPencil'
+  | 'billWeightButtons'
+  | 'billBigPad'
+  | 'billGramsRule'
+  | 'billCheckAmounts'
   | 'billQtyButton'
   | 'billPriceCheck'
   | 'billOftenList'
@@ -142,6 +147,11 @@ const DEFAULT_FEATURES: FeatureFlags = {
   // On by default: a shop that never opens ⚙ gets every tool. Side view starts as the List.
   voiceEntry: true,
   billSideView: false,
+  billPencil: true,
+  billWeightButtons: true,
+  billBigPad: false,
+  billGramsRule: true,
+  billCheckAmounts: true,
   billQtyButton: true,
   billPriceCheck: true,
   billOftenList: true,

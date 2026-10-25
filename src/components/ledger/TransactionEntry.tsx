@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { BillScreenSettings } from '@/components/ledger/BillScreenSettings'
+import { KeypadBar, type KeypadRow } from '@/components/ledger/KeypadBar'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -76,7 +77,7 @@ import { istDateString } from '@/lib/timezone'
 import { refillPrice, resolveLineIncludesGst } from '@/lib/refill-line'
 import { lineTaxable } from '@/lib/line-taxable'
 import { gstStatus, chargesGstOnSales, claimsInputCredit, isOutwardDocument } from '@/lib/shop-tax'
-import { purchaseCostPerUnit, purchaseRateFromCost, isNoCostLine, marginOnCosted, linesAboveMrp } from '@/lib/unit-profit'
+import { purchaseCostPerUnit, purchaseRateFromCost, isNoCostLine, marginOnCosted, linesAboveMrp, lineAboveMrp, customerPaysPerUnit } from '@/lib/unit-profit'
 import { quantityForAmount } from '@/lib/loose-amount'
 import { StateField, GstinField } from '@/components/common/StateField'
 
@@ -826,19 +827,38 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       // Phase 6c: on the Counter the tile's count and the bill line say it; a toast per tap is noise.
       if (!counterMode) sonnerToast.info(`Increased quantity of ${product.name}`)
     } else {
-      setItems([...items, {
-        productId: product.id,
-        productName: product.name,
-        quantity: qty,
-        // #175: a non-claiming shop's saved cost includes GST — take it out
-        // before pre-filling the supplier's rate (purchaseRateFromCost).
-        unitPrice: isSale ? product.salePrice : purchaseRateFromCost(product, { claimsItc: canClaimGst }),
-        gstRate: product.gstRate,
-        gstTreatment: product.gstTreatment ?? null,
-        unit: product.unit,
-      }])
+      setItems([...items, newLineFor(product, qty)])
     }
     setProductSearch('')
+  }
+  /** A product's new bill line — the one shape for a tap, the keypad bar and a weight button. */
+  const newLineFor = (product: any, qty: number): ItemRow => ({
+    productId: product.id,
+    productName: product.name,
+    quantity: qty,
+    // #175: a non-claiming shop's saved cost includes GST — take it out
+    // before pre-filling the supplier's rate (purchaseRateFromCost).
+    unitPrice: isSale ? product.salePrice : purchaseRateFromCost(product, { claimsItc: canClaimGst }),
+    gstRate: product.gstRate,
+    gstTreatment: product.gstTreatment ?? null,
+    unit: product.unit,
+  })
+  /** Step 2b (C11): the keypad bar sets a quantity outright (0 takes the line off). */
+  const setQtyFor = (product: any, q: number) => {
+    setPresetLoaded(false)
+    setItems((now) => {
+      const at = now.findIndex((x) => x.productId === product.id)
+      if (q <= 0) return at < 0 ? now : now.filter((_, k) => k !== at)
+      if (at >= 0) return now.map((x, k) => (k === at ? { ...x, quantity: q } : x))
+      return [...now, newLineFor(product, q)]
+    })
+  }
+  /** Step 2b: a new price for this sale from the keypad bar (the bar refuses above-MRP first). */
+  const setPriceFor = (product: any, price: number) => {
+    setPresetLoaded(false)
+    setItems((now) => (now.some((x) => x.productId === product.id)
+      ? now.map((x) => (x.productId === product.id ? { ...x, unitPrice: price } : x))
+      : [...now, { ...newLineFor(product, 1), unitPrice: price }]))
   }
 
   /**
@@ -942,6 +962,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   useEffect(() => { if (!priceCheckOn) setPriceCheck(false) }, [priceCheckOn])
   useEffect(() => { if (!qtyButtonOn) { setQtyOpen(false); setNextQty('') } }, [qtyButtonOn])
   useEffect(() => { if (!voiceOn) setShowVoiceEntry(false) }, [voiceOn])
+  // Step 2b: the keypad bar for one row (✎, or a loose good's amount); closes when ✎ is switched off.
+  const [kb, setKb] = useState<KeypadRow | null>(null)
+  const pencilOn = features?.billPencil !== false
+  useEffect(() => { if (!pencilOn) setKb(null) }, [pencilOn])
   const [checkedProduct, setCheckedProduct] = useState<any | null>(null)
   const [unknownCode, setUnknownCode] = useState<string | null>(null)
   const [newItemCode, setNewItemCode] = useState<string | null>(null)
@@ -1050,6 +1074,24 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       purchaseRatesIncludeGst,
       productFlag: p?.priceIncludesGst,
     })
+  // Step 2b (C11): the keypad bar works on a product's line by the bill's own rules —
+  // its price, what the customer pays (lineIncludesGst), ₹ → quantity (loose-amount.ts)
+  // and the printed MRP (lineAboveMrp, the same rule Save and the server apply).
+  const lineOf = (product: any): ItemRow => items.find((x) => x.productId === product.id) ?? newLineFor(product, 0)
+  const kbPriceOf = (product: any) => Number(lineOf(product).unitPrice) || 0
+  const kbPaysAt = (product: any, price: number) =>
+    customerPaysPerUnit({ salePrice: price, gstRate: Number(product.gstRate) || 0, priceIncludesGst: lineIncludesGst(lineOf(product), product) }, { chargesGst: shopChargesGst })
+  const kbQtyForRupees = (product: any, rupees: number) => {
+    const line = lineOf(product)
+    return quantityForAmount(rupees, { unitPrice: Number(line.unitPrice) || 0, gstRate: Number(line.gstRate) || 0, priceIncludesGst: lineIncludesGst(line, product), unit: line.unit }, product.unit, { chargesGst: shopChargesGst })
+  }
+  const kbPriceProblem = (product: any, price: number) => {
+    if (actualType !== 'sale') return null
+    const line = lineOf(product)
+    return lineAboveMrp({ unitPrice: price, gstRate: Number(line.gstRate) || 0, priceIncludesGst: lineIncludesGst(line, product) }, product, { chargesGst: shopChargesGst }) !== null
+      ? `Above the printed MRP ${formatINR(Number(product.mrp))} — not allowed`
+      : null
+  }
   const computeInput = items.map(item => {
     const p = item.productId ? productMap.get(item.productId) : null
     return {
@@ -1707,6 +1749,24 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       />
 
       <BillScreenSettings open={billSettingsOpen} onClose={() => setBillSettingsOpen(false)} isSale={isSale} shopGst={shopGstStatus} />
+      {kb && (
+        <KeypadBar
+          key={kb.key}
+          row={kb}
+          qtyOf={(id) => items.find((i) => i.productId === id)?.quantity ?? 0}
+          priceOf={kbPriceOf}
+          paysAt={kbPaysAt}
+          setQty={setQtyFor}
+          setPrice={setPriceFor}
+          qtyForRupees={kbQtyForRupees}
+          priceProblem={kbPriceProblem}
+          allowPrice
+          gramsRule={features?.billGramsRule !== false}
+          checkAmounts={features?.billCheckAmounts !== false}
+          big={features?.billBigPad === true}
+          onClose={() => setKb(null)}
+        />
+      )}
 
       {/* Barcode scanner — scan to find and add product */}
       {barcodeOpen && (
@@ -1990,6 +2050,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 sizeStock={features?.billSizeStock !== false}
                 sizeMark={features?.billSizeMark !== false}
                 sideView={features?.billSideView === true}
+                onPencil={pencilOn ? (row) => setKb(row) : undefined}
+                kbRowKey={kb?.key ?? null}
+                weightButtons={features?.billWeightButtons !== false}
+                onAddQty={(p, q) => { if (priceCheck && isSale) { setCheckedProduct(p); return } handleAddProduct(p, q) }}
                 customerName={selectedParty?.name ?? null}
                 billLines={items.length}
                 qtyOf={(id) => items.find((i) => i.productId === id)?.quantity ?? 0}

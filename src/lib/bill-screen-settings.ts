@@ -9,7 +9,7 @@
  * Features. Both screens draw from this list, so they cannot disagree.
  *
  * The values live in the app store's feature switches (kept on this phone, like
- * the other Features), ON by default (Side view starts as the List): a shop that
+ * the other Features), ON by default (Side view starts as the List, the big pad as the bar): a shop that
  * never opens ⚙ gets every tool. What the law decides — the shop's GST type, the
  * MRP limit — is never a switch here.
  *
@@ -18,7 +18,7 @@
  */
 import type { FeatureKey } from '@/store/app-store'
 
-export type BillSettingGroup = 'add' | 'screen'
+export type BillSettingGroup = 'add' | 'screen' | 'amounts'
 
 export interface BillScreenSetting {
   key: FeatureKey
@@ -37,6 +37,7 @@ export const startsOn = (s: BillScreenSetting) => s.defaultOn !== false
 export const BILL_SETTING_GROUPS: { id: BillSettingGroup; title: string }[] = [
   { id: 'add', title: 'Ways to add items' },
   { id: 'screen', title: 'On the screen' },
+  { id: 'amounts', title: 'Amounts' },
 ]
 
 export const BILL_SCREEN_SETTINGS: readonly BillScreenSetting[] = [
@@ -51,6 +52,12 @@ export const BILL_SCREEN_SETTINGS: readonly BillScreenSetting[] = [
   { key: 'billUsualList', group: 'screen', label: "Customer's usual items", help: 'When a customer is picked' },
   { key: 'billSizeStock', group: 'screen', label: 'Stock on size buttons', help: '"out", "2 left"' },
   { key: 'billSizeMark', group: 'screen', label: 'Mark the most-sold size', help: 'A coloured border' },
+  // Step 2b (C11): loose amounts and ✎ — Rahul, 23–24 Oct.
+  { key: 'billPencil', group: 'amounts', label: '✎ on every product', help: 'Any count, any weight, a price change' },
+  { key: 'billWeightButtons', group: 'amounts', label: 'Weight buttons on loose items', help: '250 g, 500 g, 1 kg…' },
+  { key: 'billBigPad', group: 'amounts', label: 'Big number pad', help: 'A full-screen pad instead of the bar', defaultOn: false },
+  { key: 'billGramsRule', group: 'amounts', label: 'Read 400 as 400 g', help: 'A whole number of 50 or more on a kg item' },
+  { key: 'billCheckAmounts', group: 'amounts', label: 'Ask about unusual amounts', help: '"500 kg?" is asked, never blocked' },
 ]
 
 /** The settings a bill of this kind shows (price check is a sale's only). */
