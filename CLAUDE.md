@@ -274,6 +274,11 @@ save.
   **22 Oct: four helper scripts written with `cat > file <<'EOF'`** in one
   research pass, and one of them hung a shell for two minutes on a stray
   `python -I - <<'EOF'`. Same rule, same fix: the Write tool for every script.
+  **25 Oct (7g-1): one more `python - <<'EOF'`** for a four-replacement
+  class-name edit, minutes after writing the rest of that step's scripts
+  with the Write tool. It worked (no backslashes); found on re-reading my
+  own commands. The slip comes right after a run of correct ones, when the
+  edit looks "too small for a file". Small edits go through the Edit tool.
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck

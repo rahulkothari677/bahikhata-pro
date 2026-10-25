@@ -51,6 +51,7 @@ import { GST_RATES } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice, shownLinePrice } from '@/lib/refill-line'
 import { noPartyName, isSupplierSide } from '@/lib/walk-in-party'
+import { estimateStatus } from '@/lib/estimate-status'
 import { gstStatus, documentTitle, billCarriesGstColumns, claimsInputCredit } from '@/lib/shop-tax'
 import { purchaseRateFromCost, isNoCostLine } from '@/lib/unit-profit'
 import { lineTaxable } from '@/lib/line-taxable'
@@ -519,11 +520,11 @@ export function TransactionDetail() {
             Now: calls POST /api/transactions/[id]/convert which creates the
             sale AND marks the estimate as converted in one $transaction.
             If already converted, shows a "Converted → INV-XXXX" badge instead. */}
-        {txn.type === 'estimate' && txn.convertedToTransactionId ? (
+        {estimateStatus(txn) === 'converted' ? (
           <Badge className="col-span-3 order-first sm:order-none justify-center bg-emerald-600 text-white gap-1">
             <FileCheck className="w-3 h-3" /> Converted to Sale
           </Badge>
-        ) : txn.type === 'estimate' && (
+        ) : estimateStatus(txn) === 'open' && (
           <Button
             variant="default"
             size="touch"

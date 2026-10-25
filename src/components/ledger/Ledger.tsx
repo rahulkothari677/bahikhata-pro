@@ -46,6 +46,8 @@ import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
 import { useSetting } from '@/hooks/use-setting'
 import { chargesGstOnSales, gstStatus } from '@/lib/shop-tax'
+import { estimateStatus } from '@/lib/estimate-status'
+import { EstimateStatusBadge } from './EstimateStatusBadge'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 
@@ -972,6 +974,8 @@ export function Ledger({ type }: { type: LedgerType }) {
                             Estimate
                           </Badge>
                         )}
+                        {/* #185: where the quote stands — open (follow up) or already a sale. */}
+                        {estimateStatus(txn) && <EstimateStatusBadge status={estimateStatus(txn)!} />}
                         {txn.invoiceNo && (
                           <Badge variant="outline" className="text-xs py-0">{txn.invoiceNo}</Badge>
                         )}
@@ -1096,8 +1100,8 @@ export function Ledger({ type }: { type: LedgerType }) {
                   <div className="mt-2 pt-2 border-t border-border flex items-center justify-between gap-1 flex-wrap">
                     <span className={cn('font-bold', accentColor)}>{formatINRCompact(txn.totalAmount)}</span>
                     {/* 🔒 V26 N2 follow-up: quotes have no payment status */}
-                    {txn.type === 'estimate' ? (
-                      <Badge className="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">Estimate</Badge>
+                    {estimateStatus(txn) ? (
+                      <EstimateStatusBadge status={estimateStatus(txn)!} />
                     ) : due > 0 ? (
                       <Badge variant="destructive" className="text-xs">Due {formatINRCompact(due)}</Badge>
                     ) : (
