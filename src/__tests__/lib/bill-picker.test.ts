@@ -1,8 +1,9 @@
 /**
  * Phase 7c (#294, #295, #298) — one bill picker for every bill. Replaces the
  * Counter's tile tests (counter-tiles.test.ts) and keeps what they guarded:
- * the order never moves under a finger (#181, #146), suggestions fold on a long
- * bill (#229), nothing scrolls inside the page (#232), one row component.
+ * the order never moves under a finger (#181, #146), a long bill keeps the bill
+ * in view (#229), the list window never fights the page (#232, rewritten for
+ * C11), one row component.
  */
 import { describe, test, expect } from '@jest/globals'
 import fs from 'fs'
@@ -40,27 +41,37 @@ describe('what the picker shows', () => {
     expect(te).toContain('/api/products/top-sellers?type=${pickType}&partyId=${encodeURIComponent(partyId)}')
     expect(te).toContain('return ranked.length ? ranked : getRecentProductIds()') // a new shop: this phone's recent items
   })
-  test('rows come from lib/pick-rows.ts: search rows say "8 of N"; a long bill folds the suggestions (#229)', () => {
-    expect(picker).toContain('const rows = useMemo(() => groupPickRows(p.result.items), [p.result])')
-    expect(picker).toContain('{SEARCH_ROWS} of {rows.length} shown · keep typing')
-    expect(picker).toContain('const folded = p.billLines > FOLD_AFTER_LINES && !expanded')
-    expect(picker).toContain('{shown} of {rows.length} shown · show more') // a group is never cut
+  test('rows come from lib/pick-rows.ts; search rows say "30 of N"; a long bill shortens the list window (#229)', () => {
+    expect(picker).toContain('const found = useMemo(() => (searching ? groupPickRows(p.result.items) : []), [searching, p.result])')
+    expect(picker).toContain('{SEARCH_ROWS} of {found.length} shown · keep typing')
+    expect(picker).toContain('const folded = p.billLines > FOLD_AFTER_LINES')
+    expect(picker).toContain('setWinH(Math.min(folded ? WINDOW_FOLDED : WINDOW_MAX, Math.max(WINDOW_MIN, room)))')
+    expect(picker).toContain('rankedGroupRows(p.products, tab, p.oftenIds)')
   })
-  test('#232: nothing scrolls inside the page — only the Groups sheet scrolls, as a sheet', () => {
-    const page = picker.slice(0, picker.indexOf('function GroupsSheet'))
-    expect(page).not.toMatch(/overflow-y-auto|max-h-/)
-    expect(picker.split('overflow-y-auto').length - 1).toBe(1)
+  test('#232, rewritten for C11: the list window is the box that scrolls in the page — tall, and a swipe in it never drags the page', () => {
+    // #232 was a 4-row box inside the page that a thumb fought with. The List design
+    // Rahul chose (22–24 Oct) is built on a list window, so the rule now holds what made
+    // #232 bad: the window is at least 300 px tall and keeps its scroll to itself.
+    const boxes = picker.match(/overflow-y-auto[^'"]*/g) ?? []
+    expect(boxes.length).toBe(2) // the window, and Side view's group column
+    for (const box of boxes) expect(box).toContain('overscroll-contain')
+    expect(picker).toContain("'h-[45vh] min-h-[300px] max-h-[440px] lg:h-[440px] lg:max-h-none'")
+    // Measured on a phone: never under 300 px, folded or not.
+    expect(picker).toContain('const WINDOW_MIN = 300')
+    expect(picker).toContain('const WINDOW_FOLDED = 300')
+    // Choosing a group on a phone parks the tabs under the top bar, so no row hides under the total bar.
+    expect(picker).toContain("const go = (t: string) => { setPicked(t); setSub('All'); top(); park() }")
   })
-  test('one row component per kind: PickRow for an item, SizeButton for a size — every add says "Add <name>"', () => {
-    expect(picker.split('aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`}').length - 1).toBe(1)
+  test('one row shape for every product and one size button — every add says "Add <name>"', () => {
     expect(picker.split('aria-label={qty > 0 ? `Add another ${it.name}` : `Add ${it.name}`}').length - 1).toBe(1)
-    expect(te).not.toMatch(/function PickRow|function SizeButton/)
+    expect(te).not.toMatch(/function PickRow|function SizeButton|function ListRow/)
+    expect(picker).not.toMatch(/function PickRow|function BrandRow|function GroupsSheet/)
   })
-  test('sizes show in a 48 px button with their price, the most-sold size marked, out of stock said', () => {
-    const size = picker.slice(picker.indexOf('function SizeButton'), picker.indexOf('export function PickRow'))
-    expect(size).toContain("'min-h-12 rounded-lg border px-3")
+  test('sizes show in a 48 px button with their price, the most-sold size marked, stock said', () => {
+    const size = picker.slice(picker.indexOf('function SizeButton'))
+    expect(size).toContain("'min-h-12 min-w-12 px-2 rounded-lg border")
     expect(size).toContain("top ? 'border-primary/60 bg-primary/5")
-    expect(size).toContain('{out && qty === 0 && <span className="text-xs font-medium text-bad">out</span>}')
+    expect(size).toContain("out ? 'out' : low ? `${stock} left`")
   })
 })
 

@@ -2,7 +2,7 @@
  * Phase 7c (#294, #295) — the bill picker's rows: one per brand, sizes as buttons.
  */
 import { describe, test, expect } from '@jest/globals'
-import { groupPickRows, rankedRows, groupRows, pickGroups, freezeWhileBillOpen, type PickProduct } from '@/lib/pick-rows'
+import { groupPickRows, rankedRows, groupRows, freezeWhileBillOpen, type PickProduct } from '@/lib/pick-rows'
 import { sizeRank } from '@/lib/product-sizes'
 
 const it = (id: string, name: string, extra: Partial<PickProduct> = {}): PickProduct => ({ id, name, category: 'Biscuits', ...extra })
@@ -44,13 +44,6 @@ describe('groups: the whole list, never cut', () => {
   test('a group lists every row A–Z, brands as one row', () => {
     expect(groupRows(P, 'Biscuits').map((r) => r.brand?.name ?? r.items[0].name)).toEqual(['Oreo ₹30', 'Parle-G'])
     expect(groupRows(P, 'Uncategorized').map((r) => r.items[0].name)).toEqual(['Sugar (loose)'])
-  })
-  test('each group says how many rows and how many items it holds', () => {
-    expect(pickGroups(P)).toEqual([
-      { name: 'Atta', items: 3, rows: 1 },
-      { name: 'Biscuits', items: 5, rows: 2 },
-      { name: 'Uncategorized', items: 1, rows: 1 },
-    ])
   })
 })
 

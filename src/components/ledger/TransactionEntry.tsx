@@ -1989,6 +1989,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 usualIds={features?.billUsualList !== false ? usualIds : []}
                 sizeStock={features?.billSizeStock !== false}
                 sizeMark={features?.billSizeMark !== false}
+                sideView={features?.billSideView === true}
                 customerName={selectedParty?.name ?? null}
                 billLines={items.length}
                 qtyOf={(id) => items.find((i) => i.productId === id)?.quantity ?? 0}

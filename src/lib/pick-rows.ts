@@ -9,7 +9,7 @@
  *
  * Pure, so it is tested; the screen only draws what these return.
  */
-import { bySize } from './product-sizes'
+import { bySize, parseSize } from './product-sizes'
 
 export interface PickProduct {
   id: string
@@ -30,15 +30,13 @@ export interface PickRowGroup<P extends PickProduct> {
   topId?: string | null
 }
 
-/** How many rows a search shows before it says "8 of N, keep typing". */
-export const SEARCH_ROWS = 8
-/** Rows under "Often sold". */
-export const OFTEN_ROWS = 8
-/** Rows under "<customer> usually buys". */
-export const USUAL_ROWS = 5
-/** A group's list grows 60 rows at a time; never cut without a "show more". */
-export const GROUP_PAGE = 60
-/** After this many bill lines, "Often sold" folds to one line so the bill shows (#229). */
+/** How many rows a search shows in the list window before it says "30 of N, keep typing". */
+export const SEARCH_ROWS = 30
+/** Rows under ★ Often: the shop's best sellers (a ranking, so a top list by definition). */
+export const OFTEN_ROWS = 24
+/** Rows under "<customer> usually buys", at the top of ★ Often. */
+export const USUAL_ROWS = 12
+/** After this many bill lines the list window gets shorter, so the bill shows (#229). */
 export const FOLD_AFTER_LINES = 6
 
 /**
@@ -103,18 +101,131 @@ export function groupRows<P extends PickProduct>(products: readonly P[], categor
   return rows.sort((a, b) => (label(a) < label(b) ? -1 : label(a) > label(b) ? 1 : 0))
 }
 
-/** The groups (categories) with how many ROWS each shows, A–Z. */
-export function pickGroups<P extends PickProduct>(products: readonly P[], noCategory = 'Uncategorized'): { name: string; rows: number; items: number }[] {
-  const items = new Map<string, number>()
-  const brands = new Map<string, Set<string>>()
+
+/**
+ * Phase 7c, change C11 — the List design (Rahul, 24 Oct): groups as tabs, a
+ * group's rows in a list window, product tabs inside a big group.
+ */
+
+/** What a row is called: its brand, or the item's name without its size and "(loose)". */
+export function rowName<P extends PickProduct>(r: PickRowGroup<P>): string {
+  if (r.brand) return r.brand.name
+  const n = r.items[0].name
+  return (parseSize(n)?.base ?? n).replace(/\s*\(loose\)\s*$/i, '').trim() || n
+}
+
+const rankMap = (rankIds: readonly string[]) => new Map(rankIds.map((id, i) => [id, i]))
+const bestRank = (items: readonly { id: string }[], rank: Map<string, number>) =>
+  items.reduce((b, it) => Math.min(b, rank.get(it.id) ?? Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER)
+
+/**
+ * The group tabs, in the order a shop reaches for them: groups holding its best
+ * sellers first (by their best seller), then A–Z; "no group" last.
+ */
+export function listGroups<P extends PickProduct>(products: readonly P[], rankIds: readonly string[], noCategory = 'Uncategorized'): string[] {
+  const rank = rankMap(rankIds)
+  const best = new Map<string, number>()
   for (const p of products) {
     const c = p.category || noCategory
-    items.set(c, (items.get(c) ?? 0) + 1)
-    if (!brands.has(c)) brands.set(c, new Set())
-    brands.get(c)!.add(p.familyId ? `f:${p.familyId}` : p.id)
+    best.set(c, Math.min(best.get(c) ?? Number.MAX_SAFE_INTEGER, rank.get(p.id) ?? Number.MAX_SAFE_INTEGER))
   }
-  return [...items].map(([name, n]) => ({ name, items: n, rows: brands.get(name)!.size }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  return [...best.keys()].sort((a, b) =>
+    Number(a === noCategory) - Number(b === noCategory) || best.get(a)! - best.get(b)! || a.localeCompare(b))
+}
+
+/** A group's rows, best sellers first, then A–Z. */
+export function rankedGroupRows<P extends PickProduct>(products: readonly P[], category: string, rankIds: readonly string[], noCategory = 'Uncategorized'): PickRowGroup<P>[] {
+  const rank = rankMap(rankIds)
+  const rows = groupRows(products, category, noCategory)
+  const at = new Map(rows.map((r, i) => [r.key, i]))
+  return rows.map((r) => ({ ...r, topId: r.brand ? topIdOf(r.items, rank) : null }))
+    .sort((a, b) => bestRank(a.items, rank) - bestRank(b.items, rank) || at.get(a.key)! - at.get(b.key)!)
+}
+
+/** The brand's most-sold size, when the ranking knows one. */
+function topIdOf(items: readonly { id: string }[], rank: Map<string, number>): string | null {
+  let top: string | null = null
+  let best = Number.MAX_SAFE_INTEGER
+  for (const it of items) { const r = rank.get(it.id); if (r !== undefined && r < best) { best = r; top = it.id } }
+  return top
+}
+
+/** A group with more rows than this gets product tabs ("Atta", "Besan", "Maida" inside "Atta & flour"). */
+export const TYPE_TABS_FROM = 13
+/** A product tab needs at least this many rows; smaller ones stay in "Other". */
+export const TYPE_MIN_ROWS = 3
+
+export interface TypeTabs {
+  /** Tab names, biggest first, "Other" last. */
+  tabs: string[]
+  /** Row key → its tab. */
+  typeOf: Map<string, string>
+}
+
+/**
+ * Product tabs read from the row names — the app stores a group, not a product
+ * type, and shops name items "<brand> <product>": Aashirvaad Atta, MDH Haldi,
+ * Everest Garam Masala, Clinic Plus Shampoo.
+ *
+ *  1. A row's tab is the LONGEST ending of its name shared by ≥ TYPE_MIN_ROWS
+ *     rows ("Garam Masala", not "Masala", which every masala shares).
+ *  2. A name with no shared ending goes by its first word, when that is shared
+ *     ("Lays", "Kurkure", "Haldiram's" in Snacks).
+ *  3. A row still without a tab joins a tab whose name it contains ("Tata
+ *     Salt Lite" → "Salt"); the rest are "Other".
+ *  4. A small tab whose name ends in a bigger tab's name joins it ("Toor Dal"
+ *     → "Dal") unless it is large enough to stand alone.
+ *
+ * Only navigation hangs on this — a row in an odd tab costs a tap, never a
+ * wrong bill — and "All" is always the first tab. No tabs when the group is
+ * small, when fewer than two tabs come out, or when "Other" would be most of it.
+ */
+export function typeTabs<P extends PickProduct>(rows: readonly PickRowGroup<P>[]): TypeTabs | null {
+  if (rows.length < TYPE_TABS_FROM) return null
+  // "Parle-G" is "Parle" + "G", so it joins the Parle tab.
+  const words = rows.map((r) => rowName(r).split(/[\s-]+/).filter(Boolean))
+  const key = (ws: string[]) => ws.join(' ').toLowerCase()
+  const shown = new Map<string, string>()
+  const count = new Map<string, number>()
+  const bump = (k: string, label: string) => { count.set(k, (count.get(k) ?? 0) + 1); if (!shown.has(k)) shown.set(k, label) }
+  const FIRST = '\u0000first:'
+  for (const ws of words) {
+    const seen = new Set<string>()
+    for (let i = 0; i < ws.length; i++) { const k = key(ws.slice(i)); if (!seen.has(k)) { seen.add(k); bump(k, ws.slice(i).join(' ')) } }
+    if (ws.length > 1) bump(FIRST + ws[0].toLowerCase(), ws[0])
+  }
+  const typeOf = new Map<string, string>()
+  rows.forEach((r, n) => {
+    const ws = words[n]
+    for (let i = 0; i < ws.length; i++) { const k = key(ws.slice(i)); if ((count.get(k) ?? 0) >= TYPE_MIN_ROWS) { typeOf.set(r.key, k); return } }
+    const f = FIRST + (ws[0] ?? '').toLowerCase()
+    if (ws.length > 1 && (count.get(f) ?? 0) >= TYPE_MIN_ROWS) typeOf.set(r.key, f)
+  })
+  const chosen = () => [...new Set(typeOf.values())]
+  rows.forEach((r, n) => {
+    if (typeOf.has(r.key)) return
+    const name = ` ${key(words[n])} `
+    const hit = chosen().filter((k) => !k.startsWith(FIRST) && name.includes(` ${k} `)).sort((a, b) => b.length - a.length)[0]
+    if (hit) typeOf.set(r.key, hit)
+  })
+  const size = (k: string) => [...typeOf.values()].filter((v) => v === k).length
+  for (const k of chosen()) {
+    if (k.startsWith(FIRST) || size(k) >= 2 * TYPE_MIN_ROWS) continue
+    const parent = chosen().filter((p) => p !== k && !p.startsWith(FIRST) && k.endsWith(` ${p}`)).sort((a, b) => b.length - a.length)[0]
+    if (parent) for (const [rk, v] of typeOf) if (v === k) typeOf.set(rk, parent)
+  }
+  const OTHER = 'Other'
+  const out = new Map<string, string>()
+  for (const r of rows) {
+    const k = typeOf.get(r.key)
+    out.set(r.key, k ? shown.get(k)! : OTHER)
+  }
+  const sizes = new Map<string, number>()
+  for (const v of out.values()) sizes.set(v, (sizes.get(v) ?? 0) + 1)
+  const others = sizes.get(OTHER) ?? 0
+  const tabs = [...sizes.keys()].filter((t) => t !== OTHER).sort((a, b) => sizes.get(b)! - sizes.get(a)! || a.localeCompare(b))
+  if (tabs.length < 2 || others * 2 > rows.length) return null
+  return { tabs: others ? [...tabs, OTHER] : tabs, typeOf: out }
 }
 
 /**

@@ -1,30 +1,35 @@
 'use client'
 
 /**
- * Phase 7c (#294, #295, #298) — the ONE item picker, for every bill: sale,
- * purchase, estimate and return.
+ * Phase 7c — the ONE item picker, for every bill: sale, purchase, estimate and
+ * return. Change C11 (Rahul, 22–24 Oct, from the designs he chose): the List.
  *
- * Rahul, 7 Aug: on a phone the list must show product names properly and adding
- * must be easy; 13 Oct: no bigger cards; 22 Oct: hundreds of products in sizes
- * and brands, smoothly. So: one search box, then ROWS — one per brand with its
- * sizes as buttons (lib/pick-rows.ts), the same row for search results, "Often
- * sold", a customer's usual items and a group's full list. Nothing is cut
- * without saying so ("8 of 31, keep typing"; a group grows 60 at a time).
+ *   search · ★ Often | group tabs · product tabs inside a big group ·
+ *   a list window of rows, one row per product with its sizes as buttons.
  *
- * It replaces the Counter's tile grid (one tile per size, 24 per group, the
- * rest unreachable) and the old picker's category drop-down + scroll box.
+ * "In the earlier version there were a list box and on top there were to
+ * choose category and product, then the list in the windows shows those
+ * products" (22 Oct); "the different quantities in the same line, not a
+ * separate line for each size" (24 Oct). Side view (⚙ on New Sale) puts the
+ * groups in a column on the left. Search shows its rows in the same window.
+ *
+ * The window is the only box that scrolls inside the page, on purpose (#232
+ * was a 4-row box a thumb fought with): it is tall, and a swipe inside it
+ * never drags the page (overscroll-contain). A long bill shortens it so the
+ * bill shows (#229). Nothing is cut without saying so ("30 of 52 · keep typing").
  * State (the query, the bill) lives in TransactionEntry; this only draws.
  */
-import { useState, useMemo, type ReactNode } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect, useLayoutEffect, type ReactNode } from 'react'
 import { Input } from '@/components/ui/input'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { Search, X, Plus, Minus, Trash2, ChevronRight, ChevronLeft, LayoutGrid } from 'lucide-react'
+import { Search, X, Minus, Trash2 } from 'lucide-react'
 import { formatINR, cn } from '@/lib/utils'
 import { isService } from '@/lib/inventory-tracking'
+import { isCountUnit } from '@/lib/units'
+import { parseSize } from '@/lib/product-sizes'
 import type { ItemSearchResult } from '@/lib/item-search'
 import {
-  groupPickRows, rankedRows, groupRows, pickGroups,
-  SEARCH_ROWS, OFTEN_ROWS, USUAL_ROWS, GROUP_PAGE, FOLD_AFTER_LINES, type PickRowGroup,
+  groupPickRows, rankedRows, rankedGroupRows, listGroups, typeTabs, rowName,
+  SEARCH_ROWS, OFTEN_ROWS, USUAL_ROWS, FOLD_AFTER_LINES, type PickRowGroup,
 } from '@/lib/pick-rows'
 
 export interface ItemPickerProps {
@@ -44,9 +49,10 @@ export interface ItemPickerProps {
   qtyOf: (id: string) => number
   priceOf: (p: any) => number
   showsGst: boolean
-  /** C12 switches (⚙ on the bill screen): "out" on a size with no stock; the most-sold size marked. */
+  /** C12 switches (⚙ on the bill screen): stock on a size; the most-sold size marked; groups on the left. */
   sizeStock?: boolean
   sizeMark?: boolean
+  sideView?: boolean
   onAdd: (p: any) => void
   onDecrement: (id: string) => void
   catalogCutNote?: string | null
@@ -56,9 +62,20 @@ export interface ItemPickerProps {
   empty: ReactNode
 }
 
+const OFTEN = '__often'
+const NO_GROUP = 'Uncategorized'
+/** The phone's total bar (Pay / Save) and its gap: the window stops above it. */
+const BOTTOM_BAR_PX = 84
+const WINDOW_MIN = 300
+const WINDOW_MAX = 560
+/** A long bill (#229): the window stays this short so the bill shows — still never a small box (#232). */
+const WINDOW_FOLDED = 300
+
+// useLayoutEffect warns on the server; the window is only measured in a browser.
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
+
 export function ItemPicker(props: ItemPickerProps) {
-  const { products, query, onQuery, onEnter, result, catalogCutNote, scanButton, belowSearch, empty } = props
-  const [groupsOpen, setGroupsOpen] = useState(false)
+  const { products, query, onQuery, onEnter, catalogCutNote, scanButton, belowSearch, empty } = props
   return (
     <div className="space-y-2">
       <div className="relative">
@@ -84,214 +101,254 @@ export function ItemPicker(props: ItemPickerProps) {
       </div>
       {catalogCutNote && <p className="text-xs font-semibold text-check">{catalogCutNote}</p>}
       {belowSearch}
-      {products.length === 0 ? empty : query.trim() ? (
-        <SearchRows {...props} />
-      ) : (
-        <OftenRows {...props} onGroups={() => setGroupsOpen(true)} />
-      )}
-      <GroupsSheet {...props} open={groupsOpen} onClose={() => setGroupsOpen(false)} />
+      {products.length === 0 ? empty : <ListArea {...props} />}
     </div>
   )
 }
 
-function Rows({ rows, p }: { rows: PickRowGroup<any>[]; p: ItemPickerProps }) {
-  return (
-    <div className="rounded-lg border border-border bg-background">
-      {rows.map((r) => r.brand
-        ? <BrandRow key={r.key} row={r} p={p} />
-        : <PickRow key={r.key} product={r.items[0]} qty={p.qtyOf(r.items[0].id)} price={p.priceOf(r.items[0])} showsGst={p.showsGst} onAdd={() => p.onAdd(r.items[0])} onDecrement={() => p.onDecrement(r.items[0].id)} />)}
-    </div>
-  )
-}
-
-function SearchRows(p: ItemPickerProps) {
-  const rows = useMemo(() => groupPickRows(p.result.items), [p.result])
-  if (!rows.length) return <p className="text-sm text-muted-foreground py-4 text-center">No item matches &quot;{p.query}&quot;</p>
-  return (
-    <>
-      {p.result.close && <p className="text-xs font-semibold text-check">No exact match · close spellings</p>}
-      <Rows rows={rows.slice(0, SEARCH_ROWS)} p={p} />
-      {rows.length > SEARCH_ROWS && <p className="text-center text-xs text-muted-foreground py-1">{SEARCH_ROWS} of {rows.length} shown · keep typing</p>}
-    </>
-  )
-}
-
-function OftenRows(p: ItemPickerProps & { onGroups: () => void }) {
-  const [expanded, setExpanded] = useState(false)
+/** The tabs and the list window (List), or the group column and the window (Side). */
+function ListArea(p: ItemPickerProps) {
+  const side = !!p.sideView
+  const searching = p.query.trim() !== ''
   const usual = useMemo(() => rankedRows(p.products, p.usualIds, USUAL_ROWS), [p.products, p.usualIds])
   const often = useMemo(() => rankedRows(p.products, p.oftenIds, OFTEN_ROWS, new Set(usual.map((r) => r.key))), [p.products, p.oftenIds, usual])
-  const folded = p.billLines > FOLD_AFTER_LINES && !expanded
-  const groupsButton = (
-    <button type="button" onClick={p.onGroups} className="min-h-12 px-3 inline-flex items-center gap-1.5 rounded-lg text-sm font-semibold text-primary hover:bg-muted">
-      <LayoutGrid className="w-4 h-4" aria-hidden /> Groups <ChevronRight className="w-4 h-4" aria-hidden />
-    </button>
+  const groups = useMemo(() => listGroups(p.products, p.oftenIds), [p.products, p.oftenIds])
+  const hasOften = usual.length + often.length > 0
+  const [picked, setPicked] = useState<string | null>(null)
+  const tab = picked && (picked === OFTEN ? hasOften : groups.includes(picked)) ? picked : hasOften ? OFTEN : groups[0]
+  const inGroup = useMemo(() => (tab && tab !== OFTEN ? rankedGroupRows(p.products, tab, p.oftenIds) : []), [p.products, tab, p.oftenIds])
+  const types = useMemo(() => typeTabs(inGroup), [inGroup])
+  const [sub, setSub] = useState('All')
+  const subNow = types && types.tabs.includes(sub) ? sub : 'All'
+  const found = useMemo(() => (searching ? groupPickRows(p.result.items) : []), [searching, p.result])
+  const listRef = useRef<HTMLDivElement>(null)
+  const areaRef = useRef<HTMLDivElement>(null)
+  const top = () => { if (listRef.current) listRef.current.scrollTop = 0 }
+  // On a phone, choosing a group parks the tabs under the app's top bar, so the whole
+  // window sits above the total bar (#232: no row hiding under it). Scrolling up brings
+  // the customer back.
+  const folded = p.billLines > FOLD_AFTER_LINES
+  // On a phone the window fills the room down to the total bar — measured, because the
+  // rows above it (customer, search, Qty, tabs) differ by shop and by switch.
+  const [winH, setWinH] = useState<number | null>(null)
+  const fit = useCallback(() => {
+    const box = side ? areaRef.current : listRef.current
+    if (typeof window === 'undefined' || window.innerWidth >= 1024 || !box) { setWinH(null); return }
+    const room = Math.round(window.innerHeight - box.getBoundingClientRect().top - BOTTOM_BAR_PX)
+    setWinH(Math.min(folded ? WINDOW_FOLDED : WINDOW_MAX, Math.max(WINDOW_MIN, room)))
+  }, [side, folded])
+  useIsoLayoutEffect(() => { fit() }, [fit, tab, subNow, searching, types])
+  useEffect(() => { window.addEventListener('resize', fit); return () => window.removeEventListener('resize', fit) }, [fit])
+  const park = () => {
+    if (typeof window === 'undefined' || window.innerWidth >= 1024 || !areaRef.current) return
+    const head = document.querySelector('header')?.getBoundingClientRect().bottom ?? 0
+    const want = areaRef.current.getBoundingClientRect().top - head - 4
+    // Instant, not the page's smooth scroll: the window measures where it lands.
+    if (want > 4) window.scrollBy({ top: want, behavior: 'instant' as ScrollBehavior })
+    requestAnimationFrame(fit)
+  }
+  const go = (t: string) => { setPicked(t); setSub('All'); top(); park() }
+  const goSub = (s: string) => { setSub(s); top() }
+
+  // Lines on the bill per group: the dot on its tab.
+  const lines = new Map<string, number>()
+  for (const x of p.products) if (p.qtyOf(x.id) > 0) { const g = x.category || NO_GROUP; lines.set(g, (lines.get(g) ?? 0) + 1) }
+  const oftenLines = [...usual, ...often].reduce((n, r) => n + r.items.filter((it) => p.qtyOf(it.id) > 0).length, 0)
+  const groupName = (g: string) => (g === NO_GROUP ? 'Other' : g)
+
+  const tabList: { id: string; label: string; n: number }[] = [
+    ...(hasOften ? [{ id: OFTEN, label: '★ Often', n: oftenLines }] : []),
+    ...groups.map((g) => ({ id: g, label: groupName(g), n: lines.get(g) ?? 0 })),
+  ]
+  // Before it is measured (and on a desktop): fixed heights.
+  const height = winH ? '' : folded
+    ? 'h-[300px]'
+    : 'h-[45vh] min-h-[300px] max-h-[440px] lg:h-[440px] lg:max-h-none'
+  const sized = winH ? { height: winH } : undefined
+
+  let body: ReactNode
+  if (searching) {
+    body = found.length
+      ? <>
+          <Rows rows={found.slice(0, SEARCH_ROWS)} p={p} wrap={side} />
+          {found.length > SEARCH_ROWS && <p className="text-center text-xs text-muted-foreground py-2">{SEARCH_ROWS} of {found.length} shown · keep typing</p>}
+        </>
+      : <p className="text-sm text-muted-foreground py-6 text-center">No item matches &quot;{p.query}&quot;</p>
+  } else if (tab === OFTEN) {
+    body = <>
+      {usual.length > 0 && <ListHeading>{p.customerName ? `${p.customerName} usually buys` : 'Usually buys'}</ListHeading>}
+      <Rows rows={usual} p={p} wrap={side} />
+      {usual.length > 0 && often.length > 0 && <ListHeading>{p.oftenLabel}</ListHeading>}
+      <Rows rows={often} p={p} wrap={side} />
+    </>
+  } else {
+    body = <Rows rows={subNow === 'All' || !types ? inGroup : inGroup.filter((r) => types.typeOf.get(r.key) === subNow)} p={p} wrap={side} />
+  }
+
+  const subTabs = !searching && types ? (
+    <TabRow label="Products" small items={['All', ...types.tabs].map((t) => ({ id: t, label: t, n: 0 }))} current={subNow} onPick={goSub} />
+  ) : null
+  const searchNote = searching
+    ? <p className="text-xs font-semibold text-muted-foreground px-1">{p.result.close ? 'No exact match · close spellings' : 'Searching every item'}</p>
+    : null
+  const windowBox = (cls: string) => (
+    <div ref={listRef} data-list-window style={side ? undefined : sized} className={cn('overflow-y-auto overscroll-contain min-w-0', cls)}>{body}</div>
   )
-  // A long bill: the suggestions fold to one line so the bill stays in view (#229).
-  if (folded || (!usual.length && !often.length)) {
+
+  if (side) {
     return (
-      <div className="flex items-center justify-between gap-2">
-        {usual.length || often.length
-          ? <button type="button" onClick={() => setExpanded(true)} className="min-h-12 px-3 rounded-lg text-sm font-semibold hover:bg-muted">{p.oftenLabel} ›</button>
-          : <p className="text-xs text-muted-foreground px-1">Type to find an item, or open a group</p>}
-        {groupsButton}
+      <div ref={areaRef} style={sized} className={cn('grid grid-cols-[84px_minmax(0,1fr)] rounded-lg border border-border bg-background overflow-hidden', height)}>
+        <div role="group" aria-label="Groups" className="overflow-y-auto overscroll-contain bg-muted/60 border-r border-border">
+          {tabList.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={!searching && tab === t.id}
+              onClick={() => { if (searching) p.onQuery(''); go(t.id) }}
+              className={cn('block w-full min-h-[52px] px-1.5 py-1.5 text-left text-xs font-semibold leading-tight border-l-[3px]',
+                !searching && tab === t.id ? 'bg-background border-l-primary text-foreground' : 'border-l-transparent text-muted-foreground')}
+            >
+              {t.label}{t.n > 0 && <span className="mt-0.5 block w-fit rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground tabular-nums">{t.n}</span>}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-rows-[auto_minmax(0,1fr)] min-w-0 min-h-0">
+          <div className="min-w-0">{searchNote ? <div className="py-1.5">{searchNote}</div> : subTabs ? <div className="p-1.5 border-b border-border">{subTabs}</div> : null}</div>
+          {windowBox('')}
+        </div>
       </div>
     )
   }
   return (
-    <div className="space-y-2">
-      {usual.length > 0 && (
-        <>
-          <p className="text-xs font-semibold text-muted-foreground px-1">{p.customerName ? `${p.customerName} usually buys` : 'Usually buys'}</p>
-          <Rows rows={usual} p={p} />
-        </>
-      )}
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-muted-foreground px-1">{often.length ? p.oftenLabel : ''}</p>
-        {groupsButton}
-      </div>
-      {often.length > 0 && <Rows rows={often} p={p} />}
+    <div ref={areaRef} className="space-y-1.5">
+      {searchNote ?? <TabRow label="Groups" items={tabList} current={tab} onPick={go} />}
+      {subTabs}
+      {windowBox(cn('rounded-lg border border-border bg-background', height))}
     </div>
   )
 }
 
-/** Every group, then a group's whole list — 60 rows at a time, never cut. */
-function GroupsSheet(p: ItemPickerProps & { open: boolean; onClose: () => void }) {
-  const [group, setGroup] = useState<string | null>(null)
-  const [shown, setShown] = useState(GROUP_PAGE)
-  const groups = useMemo(() => (p.open ? pickGroups(p.products) : []), [p.open, p.products])
-  const rows = useMemo(() => (group ? groupRows(p.products, group) : []), [group, p.products])
-  const close = () => { p.onClose(); setGroup(null); setShown(GROUP_PAGE) }
+function ListHeading({ children }: { children: ReactNode }) {
+  return <p className="px-2.5 pt-2 pb-1 text-xs font-semibold text-muted-foreground border-b border-border/40">{children}</p>
+}
+
+function TabRow({ label, items, current, onPick, small }: {
+  label: string
+  items: { id: string; label: string; n: number }[]
+  current: string
+  onPick: (id: string) => void
+  small?: boolean
+}) {
   return (
-    <Sheet open={p.open} onOpenChange={(o) => { if (!o) close() }}>
-      <SheetContent side="bottom" className="rounded-t-3xl h-[88vh] overflow-y-auto pb-[calc(1rem+var(--safe-bottom))] lg:mx-auto lg:max-w-2xl">
-        <SheetHeader className="pb-2">
-          <SheetTitle className="flex items-center gap-1">
-            {group && (
-              <button type="button" onClick={() => { setGroup(null); setShown(GROUP_PAGE) }} aria-label="All groups" className="w-12 h-12 -ml-3 inline-flex items-center justify-center">
-                <ChevronLeft className="w-5 h-5" aria-hidden />
-              </button>
-            )}
-            {group ?? 'Groups'}
-          </SheetTitle>
-          <SheetDescription className="sr-only">Every item, by group</SheetDescription>
-        </SheetHeader>
-        <div className="px-4 space-y-2">
-          {!group ? (
-            <ul className="rounded-lg border border-border divide-y divide-border">
-              {groups.map((g) => (
-                <li key={g.name}>
-                  <button type="button" onClick={() => setGroup(g.name)} className="w-full min-h-12 px-3 flex items-center justify-between gap-2 text-left hover:bg-muted/40">
-                    <span className="text-sm font-semibold truncate">{g.name === 'Uncategorized' ? 'Other' : g.name}</span>
-                    <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{g.rows === g.items ? `${g.items} items` : `${g.rows} rows · ${g.items} items`} <ChevronRight className="inline w-4 h-4" aria-hidden /></span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <>
-              <Rows rows={rows.slice(0, shown)} p={p} />
-              {rows.length > shown && (
-                <button type="button" onClick={() => setShown((v) => v + GROUP_PAGE)} className="w-full min-h-12 rounded-lg border border-border text-sm font-semibold hover:bg-muted">
-                  {shown} of {rows.length} shown · show more
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
+    <div role="group" aria-label={label} className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+      {items.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          aria-pressed={current === t.id}
+          onClick={() => onPick(t.id)}
+          className={cn('hit-48 shrink-0 inline-flex items-center gap-1 whitespace-nowrap font-semibold',
+            small
+              ? cn('min-h-9 rounded-md px-2.5 text-xs', current === t.id ? 'bg-foreground text-background' : 'bg-muted text-foreground')
+              : cn('min-h-10 rounded-full border px-3 text-sm', current === t.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border'))}
+        >
+          {t.label}
+          {t.n > 0 && <span className={cn('rounded-full px-1.5 text-xs font-bold tabular-nums', current === t.id ? 'bg-primary-foreground/25' : 'bg-primary text-primary-foreground')}>{t.n}</span>}
+        </button>
+      ))}
+    </div>
   )
 }
 
-/** A brand: its name, then its sizes as buttons, smallest first; the most-sold size marked. */
-function BrandRow({ row, p }: { row: PickRowGroup<any>; p: ItemPickerProps }) {
+function Rows({ rows, p, wrap }: { rows: PickRowGroup<any>[]; p: ItemPickerProps; wrap: boolean }) {
+  return <>{rows.map((r) => <ListRow key={r.key} row={r} p={p} wrap={wrap} />)}</>
+}
+
+/** One product: its name, then all its sizes as buttons on ONE line (List) or wrapped (Side). */
+function ListRow({ row, p, wrap }: { row: PickRowGroup<any>; p: ItemPickerProps; wrap: boolean }) {
+  const name = rowName(row)
+  const it0 = row.items[0]
+  const sub = [
+    row.brand ? (row.items.length === 1 ? '1 size' : `${row.items.length} sizes`) : isService(it0) ? 'Service' : '',
+    p.showsGst ? `GST ${it0.gstRate}%` : '',
+  ].filter(Boolean).join(' · ')
   return (
-    <div className="px-3 py-2 border-b border-border/40 last:border-0">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-sm font-semibold truncate">{row.brand!.name}</p>
-        <span className="text-xs text-muted-foreground shrink-0">{row.items.length === 1 ? '1 size' : `${row.items.length} sizes`}</span>
+    <div className="px-2.5 py-1.5 border-b border-border/40 last:border-0">
+      <div className="flex items-baseline gap-1.5 min-w-0">
+        <p className="text-sm font-semibold leading-tight truncate min-w-0">{name}</p>
+        {sub && <span className="text-xs text-muted-foreground shrink-0">{sub}</span>}
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-2" role="group" aria-label={`${row.brand!.name} sizes`}>
+      <div role="group" aria-label={`${name} sizes`} className={cn('mt-1 flex gap-1.5', wrap ? 'flex-wrap' : 'overflow-x-auto no-scrollbar pr-1')}>
         {row.items.map((it) => (
-          <SizeButton key={it.id} product={it} qty={p.qtyOf(it.id)} price={p.priceOf(it)} top={p.sizeMark !== false && row.items.length > 1 && it.id === row.topId} showOut={p.sizeStock !== false} onAdd={() => p.onAdd(it)} />
+          <SizeButton
+            key={it.id}
+            product={it}
+            qty={p.qtyOf(it.id)}
+            price={p.priceOf(it)}
+            top={p.sizeMark !== false && row.items.length > 1 && it.id === row.topId}
+            showOut={p.sizeStock !== false}
+            onAdd={() => p.onAdd(it)}
+            onDecrement={() => p.onDecrement(it.id)}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function SizeButton({ product: it, qty, price, top, showOut, onAdd }: { product: any; qty: number; price: number; top: boolean; showOut: boolean; onAdd: () => void }) {
-  const out = showOut && !isService(it) && Number(it.currentStock) <= 0
-  const label: string = it.sizeLabel || it.name
-  // A price pack ("₹10") already says its price; any other size shows it beside the size.
+/**
+ * A size: what is printed on the packet ("5 kg", "₹10"), then its price — or
+ * "out", "2 left", or how many are on the bill. Once on the bill it carries a −.
+ * An item on its own shows its size from the name, or "1 kg" for a loose good.
+ */
+function SizeButton({ product: it, qty, price, top, showOut, onAdd, onDecrement }: {
+  product: any
+  qty: number
+  price: number
+  top: boolean
+  showOut: boolean
+  onAdd: () => void
+  onDecrement: () => void
+}) {
+  const counted = isCountUnit(it.unit)
+  const tracked = !isService(it)
+  const stock = Number(it.currentStock)
+  const out = showOut && tracked && stock <= 0
+  const low = showOut && tracked && !out && (it.isLowStock === true || stock <= Number(it.lowStockThreshold ?? 3))
+  const label: string = it.sizeLabel || parseSize(it.name)?.label || (counted ? formatINR(price) : `1 ${it.unit}`)
+  // A price pack ("₹10") already says its price.
   const samePrice = /^₹\s?\d/.test(label) && Number(label.replace(/[^\d.]/g, '')) === Number(price)
-  return (
+  const note = qty > 0 ? (counted ? `×${qty}` : `${qty} ${it.unit}`)
+    : out ? 'out' : low ? `${stock} left` : samePrice ? '' : `${formatINR(price)}${counted ? '' : `/${it.unit}`}`
+  const add = (
     <button
       type="button"
       onClick={onAdd}
       aria-label={qty > 0 ? `Add another ${it.name}` : `Add ${it.name}`}
       className={cn(
-        'min-h-12 rounded-lg border px-3 text-sm font-semibold tabular-nums inline-flex items-center gap-1.5 transition active:scale-[0.98]',
-        qty > 0 ? 'bg-primary text-primary-foreground border-primary'
+        'min-h-12 min-w-12 px-2 rounded-lg border shrink-0 inline-flex flex-col items-center justify-center leading-tight tabular-nums transition active:scale-[0.98]',
+        qty > 0 ? 'bg-primary text-primary-foreground border-primary rounded-l-none'
           : top ? 'border-primary/60 bg-primary/5 hover:bg-primary/10'
             : 'border-border bg-background hover:bg-muted',
         out && qty === 0 && 'border-dashed',
       )}
     >
-      <span>{label}</span>
-      {!samePrice && <span className={cn('text-xs font-medium', qty > 0 ? 'opacity-80' : 'text-muted-foreground')}>{formatINR(price)}</span>}
-      {out && qty === 0 && <span className="text-xs font-medium text-bad">out</span>}
-      {qty > 0 && <span className="rounded-full bg-primary-foreground/20 px-1.5 text-xs font-bold">×{qty}</span>}
+      <span className="text-sm font-bold whitespace-nowrap">{label}</span>
+      {note && <span className={cn('text-xs whitespace-nowrap', qty > 0 ? 'opacity-90' : out || low ? 'text-bad font-semibold' : 'text-muted-foreground')}>{note}</span>}
     </button>
   )
-}
-
-/**
- * An item on its own: the name in full, its price and stock, and a stepper once
- * it is on the bill (billing is a counting job). A row, not one big button —
- * a stepper needs buttons of its own, and a button in a button is invalid HTML.
- */
-export function PickRow({ product: p, qty, price, showsGst, onAdd, onDecrement }: {
-  product: any
-  qty: number
-  price: number
-  showsGst: boolean
-  onAdd: () => void
-  onDecrement: () => void
-}) {
-  const stock = isService(p) ? { text: 'Service', cls: 'text-ai' }
-    : p.currentStock <= 0 ? { text: 'out', cls: 'text-bad font-semibold' }
-      : p.isLowStock ? { text: `${p.currentStock} ${p.unit} · low`, cls: 'text-check' }
-        : { text: `${p.currentStock} ${p.unit}`, cls: 'text-good' }
+  if (qty <= 0) return add
   return (
-    <div className="w-full flex items-center gap-2 px-2 sm:px-2.5 py-1.5 border-b border-border/40 last:border-0 hover:bg-muted/50">
-      <button onClick={onAdd} aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`} className="flex-1 min-w-0 min-h-12 flex items-center gap-2 text-left">
-        <span className="flex-1 min-w-0">
-          <span className="block text-sm font-medium leading-snug break-words">{p.name}</span>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
-            <span>{formatINR(price)}/{p.unit}</span>
-            {showsGst && <span>· GST {p.gstRate}%</span>}
-            <span className={stock.cls}>· {stock.text}</span>
-          </span>
-        </span>
+    <span className="inline-flex shrink-0">
+      <button
+        type="button"
+        onClick={onDecrement}
+        aria-label={qty === 1 ? `Remove ${it.name} from this bill` : `One less ${it.name}`}
+        className="hit-48 min-h-12 w-10 rounded-l-lg border border-r-0 border-primary bg-primary/10 text-primary inline-flex items-center justify-center hover:bg-primary/20"
+      >
+        {qty === 1 ? <Trash2 className="w-3.5 h-3.5" aria-hidden /> : <Minus className="w-4 h-4" aria-hidden />}
       </button>
-      <div className="flex-shrink-0">
-        {qty > 0 ? (
-          <div className="flex items-center rounded-lg border border-primary/40 bg-primary/5 overflow-hidden">
-            <button onClick={onDecrement} aria-label={qty === 1 ? `Remove ${p.name} from this sale` : `Reduce ${p.name} to ${qty - 1}`} className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15">
-              {qty === 1 ? <Trash2 className="w-3.5 h-3.5" aria-hidden /> : <Minus className="w-4 h-4" aria-hidden />}
-            </button>
-            <span className="min-w-[26px] text-center text-sm font-bold text-primary tabular-nums">{qty}</span>
-            <button onClick={onAdd} aria-label={`Add another ${p.name}`} className="w-12 h-12 flex items-center justify-center text-primary hover:bg-primary/15">
-              <Plus className="w-4 h-4" aria-hidden />
-            </button>
-          </div>
-        ) : (
-          <button onClick={onAdd} aria-label={`Add ${p.name}`} className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20">
-            <Plus className="w-4 h-4 text-primary" aria-hidden />
-          </button>
-        )}
-      </div>
-    </div>
+      {add}
+    </span>
   )
 }

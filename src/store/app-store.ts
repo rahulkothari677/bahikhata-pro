@@ -103,6 +103,7 @@ export type FeatureKey =
   | 'businessAnalytics'
   // The bill screen's own switches (lib/bill-screen-settings.ts), changed from ⚙ on New Sale.
   | 'voiceEntry'
+  | 'billSideView'
   | 'billQtyButton'
   | 'billPriceCheck'
   | 'billOftenList'
@@ -138,8 +139,9 @@ const DEFAULT_FEATURES: FeatureFlags = {
   repeatLastSale: true,
   quickActions: true,
   businessAnalytics: true,
-  // On by default: a shop that never opens ⚙ sees New Sale exactly as before.
+  // On by default: a shop that never opens ⚙ gets every tool. Side view starts as the List.
   voiceEntry: true,
+  billSideView: false,
   billQtyButton: true,
   billPriceCheck: true,
   billOftenList: true,

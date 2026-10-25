@@ -17,7 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/app-store'
-import { BILL_SETTING_GROUPS, billSettingsFor } from '@/lib/bill-screen-settings'
+import { BILL_SETTING_GROUPS, billSettingsFor, startsOn } from '@/lib/bill-screen-settings'
 import type { GstStatus } from '@/lib/shop-tax'
 
 const GST_WORDS: Record<GstStatus, string> = {
@@ -35,7 +35,7 @@ export function BillScreenSettings({ open, onClose, isSale, shopGst }: {
   const features = useAppStore((s) => s.features)
   const setFeature = useAppStore((s) => s.setFeature)
   const rows = billSettingsFor(isSale)
-  const allOn = rows.every((r) => features[r.key])
+  const atDefaults = rows.every((r) => !!features[r.key] === startsOn(r))
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto pb-[calc(1rem+var(--safe-bottom))] lg:mx-auto lg:max-w-lg">
@@ -90,9 +90,9 @@ export function BillScreenSettings({ open, onClose, isSale, shopGst }: {
               </Button>
             </div>
           </section>
-          {!allOn && (
-            <Button type="button" variant="outline" className="w-full h-12" onClick={() => rows.forEach((r) => setFeature(r.key, true))}>
-              Switch everything back on
+          {!atDefaults && (
+            <Button type="button" variant="outline" className="w-full h-12" onClick={() => rows.forEach((r) => setFeature(r.key, startsOn(r)))}>
+              Back to the defaults
             </Button>
           )}
         </div>

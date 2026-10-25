@@ -20,7 +20,9 @@ describe('every screen searches items with the one rule (#296)', () => {
     // Close matches are labelled, never passed off as matches — by the one picker (Phase 7c).
     expect(te).toContain('result={productSearchResult}')
     const picker = readCode('src/components/ledger/ItemPicker.tsx')
-    expect(picker.split('p.result.close &&').length - 1).toBe(1)
+    // The picker says once when it is showing close spellings, not real matches (C11: in the search note).
+    expect(picker.split('p.result.close ?').length - 1).toBe(1)
+    expect(picker).toContain("'No exact match · close spellings'")
   })
   test('the search box finds items on the phone and asks the server only for customers and bills (#287)', () => {
     const gs = readCode('src/components/common/GlobalSearch.tsx')

@@ -18,7 +18,7 @@
 import React from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { readCode } from '@/test-support/read-source'
-import { BILL_SCREEN_SETTINGS, billSettingsFor } from '@/lib/bill-screen-settings'
+import { BILL_SCREEN_SETTINGS, billSettingsFor, startsOn } from '@/lib/bill-screen-settings'
 import { useAppStore } from '@/store/app-store'
 import { BillScreenSettings } from '@/components/ledger/BillScreenSettings'
 
@@ -43,6 +43,10 @@ const CONSUMERS: Record<string, [string, RegExp][]> = {
     [HEADER, /isFlagEnabled\('ai_scanner'\) && features\?\.aiScanner !== false &&/],
   ],
   barcodeScanner: [[ENTRY, /scanButton=\{features\?\.barcodeScanner \?/]],
+  billSideView: [
+    [ENTRY, /sideView=\{features\?\.billSideView === true\}/],
+    [PICKER, /const side = !!p\.sideView/],
+  ],
   billQtyButton: [
     [ENTRY, /const qtyButtonOn = features\?\.billQtyButton !== false/],
     [ENTRY, /!qtyButtonOn \? null :/],
@@ -69,10 +73,11 @@ describe('the list', () => {
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  it('starts every switch ON, so an untouched shop sees New Sale as it was', () => {
+  it('starts every tool ON, and the look as the List (Side view off), so an untouched shop gets everything', () => {
     window.localStorage.clear()
     const f = useAppStore.getState().features
-    for (const s of BILL_SCREEN_SETTINGS) expect([s.key, f[s.key]]).toEqual([s.key, true])
+    for (const s of BILL_SCREEN_SETTINGS) expect([s.key, f[s.key]]).toEqual([s.key, startsOn(s)])
+    expect(BILL_SCREEN_SETTINGS.filter((s) => !startsOn(s)).map((s) => s.key)).toEqual(['billSideView'])
   })
 
   it('shows price check on a sale only', () => {
@@ -130,12 +135,12 @@ describe('two doors, one list', () => {
 describe('the sheet on New Sale', () => {
   beforeEach(() => { window.localStorage.clear(); useAppStore.getState().resetFeatures() })
 
-  it('changes a switch at once, with no Save, and can put everything back', () => {
+  it('changes a switch at once, with no Save, and goes back to the defaults', () => {
     render(<BillScreenSettings open onClose={() => {}} isSale shopGst="unregistered" />)
     fireEvent.click(screen.getByRole('switch', { name: 'Qty button' }))
     expect(useAppStore.getState().features.billQtyButton).toBe(false)
     expect(window.localStorage.getItem('bahikhata:feature:billQtyButton')).toBe('false')
-    fireEvent.click(screen.getByRole('button', { name: 'Switch everything back on' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the defaults' }))
     expect(useAppStore.getState().features.billQtyButton).toBe(true)
   })
 
