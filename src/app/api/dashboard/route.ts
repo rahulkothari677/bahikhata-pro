@@ -14,6 +14,7 @@ import { apiError } from '@/lib/api-error'
 import { LINE_GROSS_SQL } from '@/lib/line-taxable-sql'
 import { istLocal } from '@/lib/ist-sql'
 import { trendBuckets } from '@/lib/trend-buckets'
+import { billPartyName } from '@/lib/walk-in-party'
 
 // ⚡ PERFORMANCE (V6 SC3): KPIs + charts are now computed via SQL aggregate
 // queries. Was: a single findMany loaded range + previous-range transactions
@@ -617,7 +618,7 @@ export async function GET(req: NextRequest) {
       invoiceNo: t.invoiceNo,
       date: t.date,
       partyId: t.partyId,
-      partyName: t.party?.name || 'Walk-in Customer',
+      partyName: billPartyName(t),  // #202: a purchase with no supplier is a cash purchase, never "Walk-in Customer"
       totalAmount: t.totalAmount,
       paidAmount: t.paidAmount,
       profit: t.grossProfit,

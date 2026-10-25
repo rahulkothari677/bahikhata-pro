@@ -70,7 +70,9 @@ describe('the sale screen with Pay', () => {
   test('#224: on the Counter payment is chosen in one place — Details has no payment fields', () => {
     expect(code).toContain('{!estimateMode && !counterMode && (')
     expect(code).toContain(') : !estimateMode && !counterMode ? (')
-    expect(code).toContain('{!counterMode && ` · ${paymentMode.charAt(0).toUpperCase() + paymentMode.slice(1)}`}')
+    // The folded Details names the payment only off the Counter (7g: the fold is a list joined by " · ").
+    expect(code).toContain('!counterMode && paymentMode.charAt(0).toUpperCase() + paymentMode.slice(1),')
+    expect(code).not.toMatch(/[^!]counterMode && paymentMode\.charAt/)
   })
 
   test('the Counter\'s bars open Pay; the other forms still Save', () => {

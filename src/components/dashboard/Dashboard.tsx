@@ -61,6 +61,7 @@ import { CustomiseHome, useHomeSections } from '@/components/dashboard/Customise
 import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { InsightsView } from '@/components/insights/InsightsView'
 import { useArrivalRequest } from '@/hooks/use-new-entry-request'
+import { noPartyName } from '@/lib/walk-in-party'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -886,7 +887,7 @@ export function Dashboard() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate">
-                          {txn.partyName || 'Walk-in Customer'}
+                          {txn.partyName || noPartyName(txn.type)}
                         </p>
                         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                           <span className="capitalize">{txn.type}</span>

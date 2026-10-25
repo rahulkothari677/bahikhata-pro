@@ -27,6 +27,7 @@ import { isVisible, VISIBILITY_TOGGLES, type InvoiceVisibility } from './invoice
 import { readCustomValues, type CustomFieldValue } from './custom-fields'
 import { gstStatus, documentTitle, type GstStatus } from './shop-tax'
 import { billPlaceOfSupply, resolveStateCode, stateNameForCode } from './gst-states'
+import { isSupplierSide, noPartyName } from './walk-in-party'
 
 export interface InvoiceDocumentItem {
   name: string
@@ -159,6 +160,13 @@ export interface InvoiceDocument {
 
   shop: InvoiceShop
   party: InvoiceParty | null
+  /**
+   * #202: the party box's heading and the name printed when there is no party —
+   * "Bill To" / "Walk-in Customer" on a sale, "Supplier" / "Cash purchase" on a
+   * purchase (lib/walk-in-party.ts). A purchase PDF said "Bill To: Walk-in Customer".
+   */
+  partyHeading: string
+  noPartyName: string
 
   /**
    * What this customer owes across ALL their bills — not this bill's due,
@@ -495,6 +503,8 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
       showReceiverSignature: isVisible('showReceiverSignature', visibility),
     },
     party: src.party ?? null,
+    partyHeading: isSupplierSide(src.type) ? 'Supplier' : 'Bill To',
+    noPartyName: noPartyName(src.type),
 
     customFields: readCustomValues(src.customFields).filter(v => v.show),
     partyCustomFields: readCustomValues(src.partyCustomFields).filter(v => v.show),

@@ -11,7 +11,7 @@ import { computeInvoiceDue, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { shouldHideProfit } from '@/lib/profit-visibility'
 import { buildBalanceActions } from '@/lib/ask-actions'
 import { COUNTER_RETURNS_LABEL, describeOwing } from '@/lib/describe-parties'
-import { isWalkInParty } from '@/lib/walk-in-party'
+import { isWalkInParty, billPartyName } from '@/lib/walk-in-party'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { routeWithAi } from '@/lib/ask-router'
 import { getCapability } from '@/lib/ask-capabilities'
@@ -1792,7 +1792,7 @@ export async function POST(req: NextRequest) {
         return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `Opening ${label}`,
-          detail: `${bill.party?.name || 'Walk-in'} · ${money(bill.totalAmount)}`,
+          detail: `${billPartyName(bill)} · ${money(bill.totalAmount)}`,
           navigate: { kind: 'record' as const, transactionId: bill.id, label },
           sources: [{ kind: 'transaction' as const, id: bill.id, label, amount: bill.totalAmount, date: bill.date }],
         })

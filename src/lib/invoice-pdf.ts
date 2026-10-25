@@ -451,12 +451,12 @@ export async function generateInvoicePDF(
     doc.setFont(THEME.font, 'bold')
     doc.setFontSize(metrics.smallPt)
     doc.setTextColor(accent.r, accent.g, accent.b)
-    doc.text('Bill To:', margin + 3, y + 6)
+    doc.text(`${invoice.partyHeading}:`, margin + 3, y + 6)
 
     doc.setFont(THEME.font, 'bold')
     doc.setFontSize(metrics.bodyPt)
     doc.setTextColor(text.r, text.g, text.b)
-    const who = invoice.party?.name || 'Walk-in Customer'
+    const who = invoice.party?.name || invoice.noPartyName
     doc.text(doc.splitTextToSize(who, taxX - margin - labelW - 8)[0] ?? who, margin + labelW + 3, y + 6)
 
     doc.setFont(THEME.font, 'normal')
@@ -500,13 +500,13 @@ export async function generateInvoicePDF(
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(7)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  doc.text('BILL TO', margin + 3, y + 5)
+  doc.text(invoice.partyHeading.toUpperCase(), margin + 3, y + 5)
 
   // Party name (11pt bold)
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(11)
   doc.setTextColor(text.r, text.g, text.b)
-  const partyName = invoice.party?.name || 'Walk-in Customer'
+  const partyName = invoice.party?.name || invoice.noPartyName
   const nameLines = doc.splitTextToSize(partyName, leftCardW - 6)
   doc.text(nameLines.slice(0, 2), margin + 3, y + 11)
 

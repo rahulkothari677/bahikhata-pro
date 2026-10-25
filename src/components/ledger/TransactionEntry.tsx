@@ -2939,25 +2939,39 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                * auto-assigned and out of the way. That asymmetry is the real
                * difference between the two screens.
                */}
+              {/*
+               * 7g (master plan: "a purchase asks for the supplier's bill number
+               * and date first"): the bill's DATE sits beside its number, both
+               * copied off the supplier's paper — it was folded away in Details.
+               * Side by side on a phone; stacked in the narrow desktop column,
+               * where the "needed to claim GST" tag beside the label wrapped (#189)
+               * and now sits under the field.
+               */}
               {!isSale && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <div className="flex items-center gap-1.5">
-                    <Label htmlFor="field-supplier-bill-no">Supplier&apos;s bill no.</Label>
-                    {canClaimGst && <InfoHint
-                      label="Supplier's bill no."
-                      text="Copy it exactly as printed. GST matches your purchase to the supplier's filing by this number, so a different number will not match."
-                    />}
+                <div className="mt-3 pt-3 border-t border-border grid grid-cols-[minmax(0,1fr)_9.5rem] lg:grid-cols-1 gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 min-h-12 lg:min-h-0">
+                      <Label htmlFor="field-supplier-bill-no">Supplier&apos;s bill no.</Label>
+                      {canClaimGst && <InfoHint
+                        label="Supplier's bill no."
+                        text="Copy it exactly as printed. GST matches your purchase to the supplier's filing by this number, so a different number will not match."
+                      />}
+                    </div>
+                    <Input
+                      id="field-supplier-bill-no"
+                      value={invoiceNo}
+                      onChange={(e) => { markDirty(); setInvoiceNo(e.target.value) }}
+                      placeholder="As printed"
+                      className="mt-1"
+                    />
                     {canClaimGst && !invoiceNo.trim() && (
-                      <span className="text-xs font-normal text-amber-600">needed to claim GST</span>
+                      <p className="text-xs text-amber-600 mt-1">Needed to claim GST</p>
                     )}
                   </div>
-                  <Input
-                    id="field-supplier-bill-no"
-                    value={invoiceNo}
-                    onChange={(e) => { markDirty(); setInvoiceNo(e.target.value) }}
-                    placeholder="As printed on their bill"
-                    className="mt-1"
-                  />
+                  <div className="min-w-0">
+                    <Label htmlFor="field-date" className="flex items-center min-h-12 lg:min-h-0">Bill date</Label>
+                    <Input id="field-date" type="date" value={date} onChange={(e) => { markDirty(); setDate(e.target.value) }} className="mt-1" />
+                  </div>
                 </div>
               )}
 
@@ -3021,36 +3035,38 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 </h3>
                 <span className="flex items-center gap-2 lg:hidden">
                   <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                    {new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                    {/* 6d: on the Counter the Pay sheet holds the payment, so the fold does not name one. */}
-                    {!counterMode && ` · ${paymentMode.charAt(0).toUpperCase() + paymentMode.slice(1)}`}
-                    {/* Phase 2c: a delivery elsewhere changes the tax — visible while folded. */}
-                    {deliveryCode && ` · to ${stateNameForCode(deliveryCode)}`}
+                    {[
+                      // 7g: a purchase's date is on screen beside the supplier's bill no.
+                      isSale && new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+                      // 6d: on the Counter the Pay sheet holds the payment, so the fold does not name one.
+                      !counterMode && paymentMode.charAt(0).toUpperCase() + paymentMode.slice(1),
+                      // Phase 2c: a delivery elsewhere changes the tax — visible while folded.
+                      deliveryCode && `to ${stateNameForCode(deliveryCode)}`,
+                    ].filter(Boolean).join(' · ')}
                   </span>
                   <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', detailsOpen && 'rotate-180')} />
                 </span>
               </button>
               <div className={cn('space-y-3', !detailsOpen && 'hidden lg:block')}>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="field-date">Date</Label>
-                  <Input id="field-date" type="date" value={date} onChange={(e) => { markDirty(); setDate(e.target.value) }} className="mt-1" />
-                </div>
-                {/*
-                 * On a SALE this field stays here and stays optional — the
-                 * invoice number is ours to issue, and the app assigns one.
-                 *
-                 * On a PURCHASE it is the supplier's document number, and it
-                 * has moved out of this collapsed section entirely (see the
-                 * block above the item list). It is rendered there instead.
-                 */}
-                {isSale && (
+              {/*
+               * On a SALE the date and invoice number stay here, optional — the
+               * number is ours to issue, and the app assigns one.
+               *
+               * On a PURCHASE both are copied off the supplier's bill, and they
+               * sit above the item list instead (7g). One date field per screen.
+               */}
+              {isSale && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="field-date">Date</Label>
+                    <Input id="field-date" type="date" value={date} onChange={(e) => { markDirty(); setDate(e.target.value) }} className="mt-1" />
+                  </div>
                   <div>
                     <Label htmlFor="field-invoice-no">Invoice No.</Label>
                     <Input id="field-invoice-no" value={invoiceNo} onChange={(e) => { markDirty(); setInvoiceNo(e.target.value) }} placeholder="Auto" className="mt-1" />
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* 🔒 R10-1: the tax head is DERIVED, not chosen.
                   Editable only while the app genuinely cannot tell.

@@ -22,6 +22,7 @@ import { SIGNED_LINE, SIGNED_PROFIT, SIGNED_COST, NO_COST_LINE } from '@/lib/ins
 import { isNoCostLine, lineCost, marginOnCosted } from '@/lib/unit-profit'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
+import { billPartyName } from '@/lib/walk-in-party'
 
 // ⏱️ Vercel serverless timeout — reports can aggregate thousands of
 // transactions and generate large responses. Set explicit maxDuration.
@@ -930,7 +931,7 @@ export async function GET(req: NextRequest) {
           invoiceNo: t.invoiceNo || `#${t.invoiceSequence || '—'}`,
           date: t.date,
           type: t.type,
-          partyName: t.party?.name || t.payeeName || 'Walk-in customer',
+          partyName: billPartyName(t),
           itemCount: t.items.length,
           revenue: roundMoney(revenue),
           cogs: roundMoney(cogs),

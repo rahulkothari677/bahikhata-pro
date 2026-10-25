@@ -50,6 +50,7 @@ import { supplyKind, savedBillToShipTo } from '@/lib/gst-states'
 import { GST_RATES } from '@/lib/gst-rates'
 import { istDateString } from '@/lib/timezone'
 import { refillPrice, shownLinePrice } from '@/lib/refill-line'
+import { noPartyName, isSupplierSide } from '@/lib/walk-in-party'
 import { gstStatus, documentTitle, billCarriesGstColumns, claimsInputCredit } from '@/lib/shop-tax'
 import { purchaseRateFromCost, isNoCostLine } from '@/lib/unit-profit'
 import { lineTaxable } from '@/lib/line-taxable'
@@ -679,7 +680,8 @@ export function TransactionDetail() {
             <Card className="shadow-card border-border/60 lg:col-span-2">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <User className="w-4 h-4" /> {isSale ? 'Customer' : 'Supplier'}
+                  {/* #322: a credit note's or an estimate's party is a customer, not a supplier. */}
+                  <User className="w-4 h-4" /> {isSupplierSide(txn.type) ? 'Supplier' : 'Customer'}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -720,7 +722,7 @@ export function TransactionDetail() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Walk-in customer (no party linked)</p>
+                  <p className="text-sm text-muted-foreground">{noPartyName(txn.type)}</p>
                 )}
               </CardContent>
             </Card>
@@ -1129,7 +1131,7 @@ export function TransactionDetail() {
       />
 
       {/* Print-only invoice */}
-      {printing && <PrintInvoice txn={txn} setting={setting} hideProfit={hideProfit} />}
+      {printing && <PrintInvoice txn={txn} setting={setting} />}
       {confirmDialogEl}
     </div>
   )
@@ -1150,7 +1152,8 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   // The parent's guard (if isLoading || !txn) should prevent this, but this
   // is a safety net against race conditions.
   const isIncomeOrExpense = transaction?.type === 'income' || transaction?.type === 'expense'
-  const isSale = transaction?.type === 'sale'
+  // #323: an estimate or a credit note sells to a customer — its party, label and item price are the sale side's.
+  const isSale = !!transaction && !isIncomeOrExpense && !isSupplierSide(transaction.type)
 
   const [form, setForm] = useState({
     partyId: '',
@@ -1190,7 +1193,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
     },
   })
   const parties: any[] = (partiesData?.parties || []).filter((p: any) =>
-    isSale ? p.type === 'customer' || p.type === 'both' : transaction?.type === 'purchase' ? p.type === 'supplier' || p.type === 'both' : true
+    isSale ? p.type === 'customer' || p.type === 'both' : isSupplierSide(transaction?.type) ? p.type === 'supplier' || p.type === 'both' : true
   )
 
   /*
@@ -1495,7 +1498,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                     <SelectTrigger><SelectValue placeholder="Select party" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={PARTY_WALK_IN}>
-                        {isSale ? 'Walk-in customer (no party)' : 'No supplier'}
+                        {noPartyName(transaction?.type)}
                       </SelectItem>
                       {parties.map(p => (
                         <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -1693,16 +1696,15 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   )
 }
 
-function PrintInvoice({ txn, setting, hideProfit }: { txn: any; setting: any; hideProfit?: boolean }) {
+function PrintInvoice({ txn, setting }: { txn: any; setting: any }) {
   return (
     <div className="hidden print:block fixed inset-0 bg-white p-6 lg:p-10 z-50 overflow-y-auto">
-      <PrintInvoiceContent txn={txn} setting={setting} hideProfit={hideProfit} />
+      <PrintInvoiceContent txn={txn} setting={setting} />
     </div>
   )
 }
 
-function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: any; hideProfit?: boolean }) {
-  const isSale = txn.type === 'sale'
+function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
   const due = computeInvoiceDue(txn)
   const shopName = setting?.shopName || 'My Shop'
   const shopAddress = setting?.address
@@ -1750,8 +1752,9 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
       {/* Bill To / Supply Details */}
       <div className="grid grid-cols-2 gap-4 mb-5">
         <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-          <p className="text-xs text-gray-500 mb-1.5 font-semibold">Bill To</p>
-          <p className="font-bold text-sm">{txn.party?.name || 'Walk-in Customer'}</p>
+          {/* #202: a purchase's party is the supplier it came FROM; none is a cash purchase. */}
+          <p className="text-xs text-gray-500 mb-1.5 font-semibold">{isSupplierSide(txn.type) ? 'Supplier' : 'Bill To'}</p>
+          <p className="font-bold text-sm">{txn.party?.name || noPartyName(txn.type)}</p>
           {txn.party?.phone && <p className="text-xs text-gray-700 mt-0.5">{txn.party.phone}</p>}
           {txn.party?.gstin && <p className="text-xs text-gray-700 font-mono mt-0.5">GSTIN: {txn.party.gstin}</p>}
           {txn.party?.address && <p className="text-xs text-gray-700 mt-0.5">{txn.party.address}</p>}
@@ -1764,9 +1767,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
             {billShowsGst && <div className="flex justify-between"><span className="text-gray-500">GST Type:</span><span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</span></div>}
             {billShowsGst && supplyLines.placeOfSupply && <div className="flex justify-between gap-2"><span className="text-gray-500">Place of supply:</span><span className="font-medium text-right">{supplyLines.placeOfSupply}</span></div>}
             <div className="flex justify-between"><span className="text-gray-500">Items:</span><span className="font-medium">{txn.items.length}</span></div>
-            {isSale && !hideProfit && txn.grossProfit !== undefined && (
-              <div className="flex justify-between"><span className="text-gray-500">Profit:</span><span className="font-medium text-emerald-700 dark:text-emerald-300">₹{txn.grossProfit.toFixed(2)}</span></div>
-            )}
+            {/* #324: no profit here — a printed bill is handed to the customer. */}
           </div>
         </div>
       </div>

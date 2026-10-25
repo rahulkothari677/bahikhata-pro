@@ -19,6 +19,7 @@ import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { gstStatus } from '@/lib/shop-tax'
 import { useSetting } from '@/hooks/use-setting'
 import { itemSearch, shownOf } from '@/lib/item-search'
+import { billPartyName } from '@/lib/walk-in-party'
 
 /** Items listed in the search box; "5 of 23 items" when more matched. */
 const ITEMS_SHOWN = 5
@@ -146,8 +147,8 @@ export function GlobalSearch() {
       results.push({
         type: 'transaction',
         id: t.id,
-        title: t.invoiceNo || `${t.type} - ${t.party?.name || 'Walk-in'}`,
-        subtitle: `${t.party?.name || 'Walk-in'} • ${formatDate(t.date)} • ${t.itemCount ?? 0} items`,
+        title: t.invoiceNo || `${t.type} - ${billPartyName(t)}`,
+        subtitle: `${billPartyName(t)} • ${formatDate(t.date)} • ${t.itemCount ?? 0} items`,
         meta: formatINR(t.totalAmount),
         icon: t.type === 'sale' ? ShoppingCart : t.type === 'purchase' ? Truck : Receipt,
         color: t.type === 'sale' ? 'text-emerald-600 dark:text-emerald-400' : t.type === 'purchase' ? 'text-amber-600 dark:text-amber-400' : 'text-violet-600',

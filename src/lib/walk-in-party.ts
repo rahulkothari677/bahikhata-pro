@@ -81,6 +81,38 @@ export async function findWalkInPartyId(
   return existing?.id ?? null
 }
 
+/**
+ * What a bill with NO party is called (#202, 25 Oct 2026). A sale, estimate or
+ * counter return is the walk-in customer; a purchase or debit note with no
+ * supplier is a cash purchase — "Walk-in Customer" on a purchase named a
+ * customer who does not exist (nor on Home's recent list, an expense). One rule
+ * for every list, page, search and print.
+ */
+export const CASH_PURCHASE_NAME = 'Cash purchase'
+
+/** A bill whose party is a SUPPLIER: a purchase or a debit note (a return to the supplier). */
+export function isSupplierSide(type: string | null | undefined): boolean {
+  return type === 'purchase' || type === 'debit-note'
+}
+
+export function noPartyName(type: string | null | undefined): string {
+  if (isSupplierSide(type)) return CASH_PURCHASE_NAME
+  if (type === 'expense') return 'Expense'
+  if (type === 'income') return 'Income'
+  return WALK_IN_PARTY_NAME
+}
+
+/** The name a bill is listed under: its party, else its payee (or an entry's category), else noPartyName. */
+export function billPartyName(t: {
+  type?: string | null
+  party?: { name?: string | null } | null
+  payeeName?: string | null
+  category?: string | null
+}): string {
+  const entry = t.type === 'income' || t.type === 'expense'
+  return t.party?.name || t.payeeName || (entry && t.category) || noPartyName(t.type)
+}
+
 /** True when this party is the reserved counter customer, not a real person. */
 export function isWalkInParty(party: { name?: string | null } | null | undefined): boolean {
   return (party?.name || '').trim().toLowerCase() === WALK_IN_PARTY_NAME.toLowerCase()
