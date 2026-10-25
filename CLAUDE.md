@@ -614,6 +614,20 @@ cause**, never as a new line at the bottom.
 
 **Cause 6 — Inferring a fact instead of reading it**
 · Settle direction from a balance sign · "1 supplier" from which way money pointed
+· **25 Oct (#310 round 7): pitched voice and a camera button as new parts of
+  the "Smart counter" New Sale design**, and said speech-to-text "costs money
+  per minute". The app has had all of it for months: New Sale's header carries
+  Voice (`components/common/VoiceEntry.tsx` — the phone's own free Web Speech
+  API in 11 languages, then `/api/voice-parse`: local regex first, Gemini
+  flash-lite after, counted against the plan's daily voice limit) and Scan Bill
+  (`components/scanner/BillScanner.tsx`, sale and purchase), plus
+  `BarcodeScanner`, each with a switch in Settings → Features. Rahul: "we
+  already have scan the bill and voice parsing through AI. then what is the
+  purpose of adding it again?" The demo was built from my memory of the app,
+  not from the app. **Rule:** before a design names a way of entering data,
+  grep `src/components` for it (voice, scan, barcode, paste, search) and say
+  in the pitch which parts already exist and which are new; a new design
+  reuses the existing component and only changes where its results land.
 · **20 Oct (5e-3, #261): Home said "₹19,119 from 5 customers" and one of the
   five was a supplier we had overpaid** — counted by the balance's sign. Fixed
   by reading the party's type (`khataSides`). The deeper defect: one name doing
