@@ -18,7 +18,7 @@ import { AccountScreen } from '@/components/layout/AccountScreen'
 // 🔒 AUDIT V25 FIX §4.4: AppShell replaces the triplicated modal stack.
 // Sidebar, Header, MobileBottomNav, Onboarding, ThemePicker,
 // KeyboardShortcuts, GlobalSearch, OfflineIndicator, PWAInstallPrompt,
-// OnboardingTour, ConsentModal, RatePromptModal, PaywallModal are now
+// OnboardingTour, RatePromptModal, PaywallModal are now
 // imported ONCE inside AppShell.tsx — no longer duplicated 3× in page.tsx.
 import { AppShell } from '@/components/layout/AppShell'
 import { Dashboard } from '@/components/dashboard/Dashboard'
@@ -442,7 +442,6 @@ export default function Home() {
     features,
     showThemePicker,
     showOnboarding,
-    tourDone,
     // A shop with products or parties has already started, whatever this
     // browser remembers. Gates the first-run-only guidance (tour) so a second
     // device does not restart onboarding on a live ledger.

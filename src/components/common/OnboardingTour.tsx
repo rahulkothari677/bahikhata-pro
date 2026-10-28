@@ -6,9 +6,9 @@
  * Shows automatically on first login (when 'bahikhata-tour-seen' flag is not
  * in localStorage).
  *
- * IMPORTANT: This modal uses z-[100] which is higher than Radix Dialog's z-50.
- * To avoid focus-trap conflicts, the ConsentModal must NOT be open at the same
- * time. The page.tsx gates ConsentModal on `!showTour` so they never overlap.
+ * IMPORTANT: This modal uses z-[100] which is higher than Radix Dialog's z-50,
+ * so no Radix dialog may open on top of it. (#188: the privacy sheet that used
+ * to follow the tour is gone — the question is on the Onboarding welcome.)
  *
  * Tour steps:
  *   1. New Sale button (top right) — record your first sale
@@ -104,7 +104,7 @@ export function OnboardingTour({ onDone, isFirstRun = true }: { onDone?: () => v
     try {
       localStorage.setItem(STORAGE_KEY, 'true')
     } catch {}
-    // Notify parent so it can show the ConsentModal next
+    // Notify parent (first run counts as complete once the tour is done)
     onDone?.()
   }
 

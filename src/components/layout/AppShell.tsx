@@ -12,7 +12,6 @@
  *   - Onboarding
  *   - PWAInstallPrompt (×2 — see §4.3)
  *   - OnboardingTour
- *   - ConsentModal
  *   - RatePromptModal
  *   - PaywallModal
  *
@@ -47,7 +46,6 @@ import { GlobalSearch } from '@/components/common/GlobalSearch'
 import { ThemePicker } from '@/components/common/ThemePicker'
 import { Onboarding } from '@/components/layout/Onboarding'
 import { OnboardingTour } from '@/components/common/OnboardingTour'
-import { ConsentModal } from '@/components/common/ConsentModal'
 import { RatePromptModal } from '@/components/common/RatePromptModal'
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 import { PaywallModal } from '@/components/common/PaywallModal'
@@ -80,7 +78,6 @@ interface AppShellProps {
   /** Onboarding state (passed in by parent). */
   showThemePicker: boolean
   showOnboarding: boolean
-  tourDone: boolean
   /** Account has genuinely just started — gates first-run-only guidance. */
   isFirstRun?: boolean
   firstRunComplete: boolean
@@ -128,7 +125,6 @@ export function AppShell({
   features,
   showThemePicker,
   showOnboarding,
-  tourDone,
   isFirstRun = true,
   firstRunComplete,
   onThemePickerDone,
@@ -202,12 +198,10 @@ export function AppShell({
       {/* First-run wizard stack — always present, gates itself on internal state */}
       <ThemePicker open={showThemePicker} onDone={onThemePickerDone} />
       <Onboarding open={showOnboarding} onDone={onOnboardingDone} />
-      {/* Only show tour + consent AFTER onboarding is dismissed.
-          Tour shows first, then ConsentModal shows after tour is done.
-          This prevents focus-trap conflicts between Radix Dialog (ConsentModal)
-          and the tour's plain div overlay (z-[100]). */}
+      {/* The tour shows only AFTER onboarding is dismissed. #188 (7h): the privacy
+          question is a switch on the Onboarding welcome — asked once at sign-up —
+          no longer a sheet that opened over Home after the tour. */}
       {!showOnboarding && <OnboardingTour onDone={onTourDone} isFirstRun={isFirstRun} />}
-      {!showOnboarding && tourDone && <ConsentModal />}
       {/* 🔒 V9 4.2: RatePrompt waits until first-run is complete */}
       {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
       <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />

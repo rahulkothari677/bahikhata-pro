@@ -279,6 +279,10 @@ save.
   with the Write tool. It worked (no backslashes); found on re-reading my
   own commands. The slip comes right after a run of correct ones, when the
   edit looks "too small for a file". Small edits go through the Edit tool.
+  **And the same evening (7g-4b):** a command began with a leftover
+  `python -I - 2>/dev/null;` before a `sed` — python sat reading stdin and
+  the shell hung five minutes; nothing ran. Read the whole command line
+  before sending it; an import change is an Edit, not a `sed`.
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck

@@ -1,14 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { InfoHint } from '@/components/common/InfoHint'
 import { toast as sonnerToast } from 'sonner'
 import { BookOpenText, ScanLine, ShoppingCart, Package, Wallet, FileBarChart, Sparkles, Loader2, ArrowRight, Plus, Store, User, Phone } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { setAnalyticsConsent, initAnalytics, hasAnalyticsConsent, track, EVENTS } from '@/lib/analytics'
+
+/**
+ * #188 (Phase 7h): the privacy question is asked HERE, once, at sign-up — a switch on
+ * the welcome screen, off unless the shopkeeper turns it on. It used to be a sheet
+ * that opened two seconds after any screen loaded, so it landed over Home in the
+ * middle of work. Whichever way this screen is left, the switch's value is the
+ * answer (never on unless turned on: silence is not agreement). Later changes:
+ * Settings → Data & Privacy.
+ */
+export const USAGE_CONSENT_INFO =
+  'Helps us improve EkBook. We would see which features you use, app speed and crashes, and your state (not GPS). Never your customers’ details, your amounts, contacts or location. Change it any time in Settings → Data & Privacy.'
 
 /**
  * Onboarding — first-run welcome dialog.
@@ -26,10 +40,24 @@ import { offlineFetch } from '@/lib/offline-fetch'
  * The progressive disclosure part (guiding the user through first product →
  * first sale) is handled by the Dashboard's welcome card (see Fix 6).
  */
-export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void }) {
+export function Onboarding({ open, onDone: leave }: { open: boolean; onDone: () => void }) {
   const { triggerRefresh, setView } = useAppStore()
   const [seeding, setSeeding] = useState(false)
   const [skipping, setSkipping] = useState(false)
+  // #188: the privacy answer, recorded once on the way out (setup, demo, explore or close).
+  // Starts from any answer already given, so a welcome screen seen again never turns a yes into a no.
+  const [shareUsage, setShareUsage] = useState(false)
+  const answered = useRef(false)
+  useEffect(() => { if (open) { setShareUsage(hasAnalyticsConsent()); answered.current = false } }, [open])
+  const onDone = () => {
+    if (!answered.current) {
+      answered.current = true
+      setAnalyticsConsent(shareUsage)
+      if (shareUsage) initAnalytics()
+      track(EVENTS.ONBOARDING_COMPLETED, { consent: shareUsage })
+    }
+    leave()
+  }
 
   // 🐛 Fix 2: Setup mode state
   const [setupMode, setSetupMode] = useState(false)
@@ -99,7 +127,8 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleSkip()}>
-      <DialogContent className="max-w-2xl">
+      {/* 7h (#188): it ran past a 375 × 812 phone at both ends (890 px tall, centred, no scroll). */}
+      <DialogContent className="max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-saffron mx-auto mb-2 shadow-lg">
             <BookOpenText className="w-8 h-8 text-white" />
@@ -113,7 +142,7 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
         {!setupMode ? (
           /* Welcome screen — feature overview + 3 CTAs */
           <div className="space-y-4 py-2">
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="hidden sm:block text-center text-sm text-muted-foreground">
               Let&apos;s get you started! Here&apos;s what you can do:
             </p>
 
@@ -265,6 +294,15 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
             </div>
           </div>
         )}
+
+        {/* #188: asked once, here — not over Home later. Off unless turned on. */}
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <span className="flex items-center gap-1.5 min-w-0 text-sm">
+            <Label htmlFor="field-share-usage" className="text-sm font-normal">Share anonymous usage data</Label>
+            <InfoHint label="sharing usage" text={USAGE_CONSENT_INFO} />
+          </span>
+          <Switch id="field-share-usage" checked={shareUsage} onCheckedChange={setShareUsage} />
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -277,7 +315,8 @@ function FeatureBox({ icon: Icon, title, desc, color }: { icon: any; title: stri
         <Icon className="w-4 h-4" />
       </div>
       <p className="text-sm font-semibold">{title}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+      {/* The title says it on a phone; the line under it from 640 px up. */}
+      <p className="hidden sm:block text-xs text-muted-foreground mt-0.5">{desc}</p>
     </div>
   )
 }
