@@ -19,6 +19,7 @@
 
 import { useEffect } from 'react'
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
+import { isChunkLoadError, reloadOnceForNewVersion } from '@/lib/crash-tracker'
 
 export default function Error({
   error,
@@ -27,15 +28,15 @@ export default function Error({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  const isChunkError = isChunkLoadError(error)
+
   useEffect(() => {
     // Log to console for debugging (Sentry captures via the crash-tracker).
     console.error('[route-error-boundary]', error)
-  }, [error])
-
-  const isChunkError =
-    error?.name === 'ChunkLoadError' ||
-    error?.message?.includes('Loading chunk') ||
-    error?.message?.includes('Loading CSS chunk')
+    // #305 (7h): a screen's code missing after a release reloads once by itself; this page
+    // shows only if that reload fails too (it was shown every time, mid-bill).
+    if (isChunkError) reloadOnceForNewVersion()
+  }, [error, isChunkError])
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">

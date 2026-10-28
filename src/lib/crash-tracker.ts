@@ -120,34 +120,7 @@ export function registerChunkLoadErrorHandler(): void {
 
     if (!isChunkError) return
 
-    // Check the guard — only auto-reload once per session.
-    let alreadyReloaded = false
-    try {
-      alreadyReloaded = sessionStorage.getItem(CHUNK_RELOAD_FLAG) === 'pending'
-    } catch {
-      // sessionStorage not available — don't auto-reload (can't guard against loops)
-      return
-    }
-
-    if (alreadyReloaded) {
-      // We already reloaded once and still got a chunk error → let the error
-      // boundary show the manual "Reload" button. Don't loop.
-      console.warn('[chunk-load] Auto-reload already attempted this session — showing manual recovery.')
-      return
-    }
-
-    // Set the flag BEFORE reloading so we can detect if the reload also fails.
-    try {
-      sessionStorage.setItem(CHUNK_RELOAD_FLAG, 'pending')
-    } catch {
-      return
-    }
-
-    console.warn('[chunk-load] ChunkLoadError detected — auto-reloading once to fetch new deploy.')
-    // Small delay so the console.warn lands before the reload.
-    setTimeout(() => {
-      window.location.reload()
-    }, 100)
+    reloadOnceForNewVersion()
   })
 
   // Also listen for unhandledrejection — dynamic imports reject as promises.
@@ -159,29 +132,34 @@ export function registerChunkLoadErrorHandler(): void {
       err?.message?.includes('Loading CSS chunk')
 
     if (!isChunkError) return
-
-    let alreadyReloaded = false
-    try {
-      alreadyReloaded = sessionStorage.getItem(CHUNK_RELOAD_FLAG) === 'pending'
-    } catch {
-      return
-    }
-
-    if (alreadyReloaded) {
-      console.warn('[chunk-load] Auto-reload already attempted this session — showing manual recovery.')
-      return
-    }
-
-    try {
-      sessionStorage.setItem(CHUNK_RELOAD_FLAG, 'pending')
-    } catch {
-      return
-    }
-
-    console.warn('[chunk-load] ChunkLoadError (unhandledrejection) — auto-reloading once.')
-    event.preventDefault()  // suppress the console error
-    setTimeout(() => {
-      window.location.reload()
-    }, 100)
+    if (reloadOnceForNewVersion()) event.preventDefault()  // suppress the console error
   })
+}
+
+/** A screen's code that could not be fetched — after a release the old version's files are gone. */
+export function isChunkLoadError(err: { name?: string; message?: string } | null | undefined): boolean {
+  return err?.name === 'ChunkLoadError' || !!err?.message?.includes('Loading chunk') || !!err?.message?.includes('Loading CSS chunk')
+}
+
+/**
+ * Reload once to fetch the new version; true when a reload was started. Guarded by a
+ * sessionStorage flag so a second failure shows the manual "Reload" page instead of
+ * looping. #305 (7h): the error page calls this too — React catches a failed screen
+ * import itself, so neither window listener above ever sees it. A bill in progress is
+ * kept by its autosave (a held bill), so the reload loses nothing.
+ */
+export function reloadOnceForNewVersion(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    if (sessionStorage.getItem(CHUNK_RELOAD_FLAG) === 'pending') {
+      console.warn('[chunk-load] Auto-reload already attempted this session — showing manual recovery.')
+      return false
+    }
+    sessionStorage.setItem(CHUNK_RELOAD_FLAG, 'pending')
+  } catch {
+    return false  // no sessionStorage: cannot guard against a loop, so never auto-reload
+  }
+  console.warn('[chunk-load] Screen code missing (new release) — reloading once.')
+  setTimeout(() => window.location.reload(), 100)
+  return true
 }

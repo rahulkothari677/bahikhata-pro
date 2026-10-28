@@ -30,11 +30,16 @@ import { Dashboard } from '@/components/dashboard/Dashboard'
 // (only the bill screen had a fallback). A customer's page shows its own shape.
 const screenLoading = () => <ScreenSkeleton />
 const partyLoading = () => <PartyPageSkeleton />
-const Inventory = dynamic(() => import('@/components/inventory/Inventory').then(m => ({ default: m.Inventory })), { ssr: false, loading: screenLoading })
-const Ledger = dynamic(() => import('@/components/ledger/Ledger').then(m => ({ default: m.Ledger })), { ssr: false, loading: screenLoading })
-const LedgerSplitView = dynamic(() => import('@/components/ledger/LedgerSplitView').then(m => ({ default: m.LedgerSplitView })), { ssr: false, loading: screenLoading })
-const IncomeExpense = dynamic(() => import('@/components/income/IncomeExpense').then(m => ({ default: m.IncomeExpense })), { ssr: false, loading: screenLoading })
-const Parties = dynamic(() => import('@/components/parties/Parties').then(m => ({ default: m.Parties })), { ssr: false, loading: screenLoading })
+const loadInventory = () => import('@/components/inventory/Inventory').then(m => ({ default: m.Inventory }))
+const Inventory = dynamic(loadInventory, { ssr: false, loading: screenLoading })
+const loadLedger = () => import('@/components/ledger/Ledger').then(m => ({ default: m.Ledger }))
+const Ledger = dynamic(loadLedger, { ssr: false, loading: screenLoading })
+const loadLedgerSplitView = () => import('@/components/ledger/LedgerSplitView').then(m => ({ default: m.LedgerSplitView }))
+const LedgerSplitView = dynamic(loadLedgerSplitView, { ssr: false, loading: screenLoading })
+const loadIncomeExpense = () => import('@/components/income/IncomeExpense').then(m => ({ default: m.IncomeExpense }))
+const IncomeExpense = dynamic(loadIncomeExpense, { ssr: false, loading: screenLoading })
+const loadParties = () => import('@/components/parties/Parties').then(m => ({ default: m.Parties }))
+const Parties = dynamic(loadParties, { ssr: false, loading: screenLoading })
 import { SplashScreen } from '@/components/common/SplashScreen'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
@@ -50,7 +55,8 @@ import { trackSessionStart, registerChunkLoadErrorHandler } from '@/lib/crash-tr
 // it's ready before the user clicks a recent transaction. ssr: false keeps
 // it out of the initial bundle; prefetch: 'visible' loads it in the
 // background after first paint (not blocking).
-const TransactionDetail = dynamic(() => import('@/components/ledger/TransactionDetail').then(m => ({ default: m.TransactionDetail })), {
+const loadTransactionDetail = () => import('@/components/ledger/TransactionDetail').then(m => ({ default: m.TransactionDetail }))
+const TransactionDetail = dynamic(loadTransactionDetail, {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center py-20">
@@ -58,24 +64,46 @@ const TransactionDetail = dynamic(() => import('@/components/ledger/TransactionD
     </div>
   ),
 })
-const TransactionEntry = dynamic(() => import('@/components/ledger/TransactionEntry').then(m => ({ default: m.TransactionEntry })), { ssr: false, loading: screenLoading })
-const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').then(m => ({ default: m.PartyProfile })), { ssr: false, loading: partyLoading })
+const loadTransactionEntry = () => import('@/components/ledger/TransactionEntry').then(m => ({ default: m.TransactionEntry }))
+const TransactionEntry = dynamic(loadTransactionEntry, { ssr: false, loading: screenLoading })
+const loadPartyProfile = () => import('@/components/parties/PartyProfile').then(m => ({ default: m.PartyProfile }))
+const PartyProfile = dynamic(loadPartyProfile, { ssr: false, loading: partyLoading })
 // 🔒 AUDIT C5: the party's bills on their own page — moved out of PartyProfile
 // so a customer with many bills does not bury the statement and charts below.
-const PartyBills = dynamic(() => import('@/components/parties/PartyBills').then(m => ({ default: m.PartyBills })), { ssr: false, loading: screenLoading })
+const loadPartyBills = () => import('@/components/parties/PartyBills').then(m => ({ default: m.PartyBills }))
+const PartyBills = dynamic(loadPartyBills, { ssr: false, loading: screenLoading })
 // 🔒 AUDIT C5: Settle is a PAGE, not a dialog — with many open bills the dialog
 // pushed its own save button off-screen.
-const PartySettle = dynamic(() => import('@/components/parties/PartySettle').then(m => ({ default: m.PartySettle })), { ssr: false, loading: screenLoading })
-const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false, loading: screenLoading })
-const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false, loading: screenLoading })
-const AskChat = dynamic(() => import('@/components/ask/AskChat').then(m => ({ default: m.AskChat })), { ssr: false, loading: screenLoading })
-const ToolsHub = dynamic(() => import('@/components/layout/ToolsHub').then(m => ({ default: m.ToolsHub })), { ssr: false, loading: screenLoading })
-const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false, loading: screenLoading })
-const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false, loading: screenLoading })
-const AIComparison = dynamic(() => import('@/components/settings/AIComparison').then(m => ({ default: m.AIComparison })), { ssr: false, loading: screenLoading })
-const AIUsage = dynamic(() => import('@/components/settings/AIUsage').then(m => ({ default: m.AIUsage })), { ssr: false, loading: screenLoading })
+const loadPartySettle = () => import('@/components/parties/PartySettle').then(m => ({ default: m.PartySettle }))
+const PartySettle = dynamic(loadPartySettle, { ssr: false, loading: screenLoading })
+const loadBillScanner = () => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner }))
+const BillScanner = dynamic(loadBillScanner, { ssr: false, loading: screenLoading })
+const loadReports = () => import('@/components/reports/Reports').then(m => ({ default: m.Reports }))
+const Reports = dynamic(loadReports, { ssr: false, loading: screenLoading })
+const loadAskChat = () => import('@/components/ask/AskChat').then(m => ({ default: m.AskChat }))
+const AskChat = dynamic(loadAskChat, { ssr: false, loading: screenLoading })
+const loadToolsHub = () => import('@/components/layout/ToolsHub').then(m => ({ default: m.ToolsHub }))
+const ToolsHub = dynamic(loadToolsHub, { ssr: false, loading: screenLoading })
+const loadSettings = () => import('@/components/settings/Settings').then(m => ({ default: m.Settings }))
+const Settings = dynamic(loadSettings, { ssr: false, loading: screenLoading })
+const loadPricingPlans = () => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans }))
+const PricingPlans = dynamic(loadPricingPlans, { ssr: false, loading: screenLoading })
+const loadAIComparison = () => import('@/components/settings/AIComparison').then(m => ({ default: m.AIComparison }))
+const AIComparison = dynamic(loadAIComparison, { ssr: false, loading: screenLoading })
+const loadAIUsage = () => import('@/components/settings/AIUsage').then(m => ({ default: m.AIUsage }))
+const AIUsage = dynamic(loadAIUsage, { ssr: false, loading: screenLoading })
 // 🔒 V22-14 (Batch D, Phase 7g): Document Vault
-const DocumentVault = dynamic(() => import('@/components/documents/DocumentVault').then(m => ({ default: m.DocumentVault })), { ssr: false, loading: screenLoading })
+const loadDocumentVault = () => import('@/components/documents/DocumentVault').then(m => ({ default: m.DocumentVault }))
+const DocumentVault = dynamic(loadDocumentVault, { ssr: false, loading: screenLoading })
+/**
+ * #305 (Phase 7h): after a release the old version's screen code is gone, so the first
+ * tap on a screen not yet opened failed ("App update available") — mid-bill on a counter.
+ * Every screen's code is fetched once the app is idle, so an open session already holds
+ * all of it. Skipped when the phone asks to save data. One loader per screen, used by
+ * dynamic() and by this list alike.
+ */
+const SCREEN_LOADERS = [loadInventory, loadLedger, loadLedgerSplitView, loadIncomeExpense, loadParties, loadTransactionDetail, loadTransactionEntry, loadPartyProfile, loadPartyBills, loadPartySettle, loadBillScanner, loadReports, loadAskChat, loadToolsHub, loadSettings, loadPricingPlans, loadAIComparison, loadAIUsage, loadDocumentVault]
+
 
 export default function Home() {
   const { session, status, isOfflineSession } = useOfflineSession()
@@ -309,6 +337,15 @@ export default function Home() {
     initAnalytics()
     trackSessionStart()
     registerChunkLoadErrorHandler()
+  }, [])
+
+  // #305 (7h): fetch every screen's code once the app is idle (SCREEN_LOADERS above), unless the phone saves data.
+  useEffect(() => {
+    if ((navigator as any).connection?.saveData) return
+    const go = () => { for (const load of SCREEN_LOADERS) load().catch(() => { /* offline: fetched on open instead */ }) }
+    const w = window as any
+    const handle = w.requestIdleCallback ? w.requestIdleCallback(go, { timeout: 8000 }) : window.setTimeout(go, 4000)
+    return () => { if (w.cancelIdleCallback && w.requestIdleCallback) w.cancelIdleCallback(handle); else window.clearTimeout(handle) }
   }, [])
 
   useEffect(() => {
