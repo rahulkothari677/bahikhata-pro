@@ -13,6 +13,7 @@ import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { ChipRow } from '@/components/common/ChipRow'
 import { FocusChip } from '@/components/common/FocusChip'
 import { KHATA_SORTS, type KhataChip, type KhataSort } from '@/lib/khata-list'
+import { billDayKey, billDayLabel } from '@/lib/bill-days'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
@@ -259,113 +260,15 @@ export function Parties() {
           </CardContent>
         </Card>
       ) : (isMobile ? 'grid' : partiesViewMode) === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        /* #284 (7h): one compact row per party, as on Items (#200) — the 330 px card showed two a screen. */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {filtered.map((p) => (
-            <Card
+            <PartyRow
               key={p.id}
-              className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition cursor-pointer group"
-              onClick={() => handleViewParty(p.id)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Avatar className={cn(
-                    'w-11 h-11 flex-shrink-0',
-                  )}>
-                    <AvatarFallback className={cn(
-                      'text-white font-semibold text-sm',
-                      p.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
-                      p.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
-                      'bg-gradient-to-br from-violet-500 to-purple-600'
-                    )}>
-                      {getInitials(p.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-sm truncate group-hover:text-primary transition">{p.name}</h3>
-                        <Badge variant="secondary" className="text-xs py-0 capitalize mt-0.5">{p.type}</Badge>
-                      </div>
-                      {/*
-                        🔒 #31: the SAME edit control as the table row.
-
-                        Added after browser verification: the fix went into the
-                        table only, and the card layout is what the app actually
-                        shows by default — so the button was invisible where it
-                        mattered, and the test passed because it read the table
-                        markup. This repo has had that exact bug before, in
-                        "Selection worked in one layout and was a dead end in
-                        the other".
-                      */}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 flex-shrink-0 -mt-1"
-                        aria-label={`Edit ${p.name}`}
-                        onClick={(e) => { e.stopPropagation(); setEditingParty(p); setDialogOpen(true) }}
-                      >
-                        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                      </Button>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
-                    </div>
-
-                    <div className="mt-2 space-y-1">
-                      {p.phone && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Phone className="w-3 h-3" />
-                          <span>{p.phone}</span>
-                        </div>
-                      )}
-                      {p.gstin && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Building2 className="w-3 h-3" />
-                          <span className="font-mono">{p.gstin}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                      <div>
-                        {/* 🔒 V26 Phase 8: Bumped from text-xs to text-xs — user reported
-                            these labels were too small and hardly visible. */}
-                        <p className="text-xs text-muted-foreground">Balance</p>
-                        <p className={cn(
-                          'text-sm font-bold',
-                          p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'
-                        )}>
-                          {p.balance > 0 ? `+${formatINR(p.balance)}` : p.balance < 0 ? `-${formatINR(Math.abs(p.balance))}` : 'Settled'}
-                        </p>
-                        {/* 🔒 V26 Phase 6 §6.2: Hindi-first gloss under the amount.
-                            "lene hain" (will receive) / "dene hain" (will give).
-                            Trust-language matters more than color alone (Khatabook pattern). */}
-                        {p.balance !== 0 && (
-                          <p className={cn(
-                            'text-xs font-medium mt-0.5',
-                            p.balance > 0 ? 'text-emerald-600/80 dark:text-emerald-400/80' : 'text-rose-600/80'
-                          )}>
-                            {p.balance > 0 ? t('stat.lene_hain') : t('stat.dene_hain')}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Txns</p>
-                        <p className="text-sm font-medium">{p.transactionCount}</p>
-                      </div>
-                    </div>
-
-                    {p.balance !== 0 && (
-                      <div className={cn(
-                        'mt-2 text-xs px-2 py-1 rounded-md',
-                        p.balance > 0 ? 'bg-emerald-50 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 text-rose-700'
-                      )}>
-                        {p.balance > 0 ? 'They owe you' : 'You owe them'}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              party={p}
+              onOpen={() => handleViewParty(p.id)}
+              onEdit={(e) => { e.stopPropagation(); setEditingParty(p); setDialogOpen(true) }}
+            />
           ))}
         </div>
       ) : (
@@ -497,6 +400,58 @@ export function Parties() {
         onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditingParty(null) }}
         onSuccess={() => triggerRefresh()}
       />
+    </div>
+  )
+}
+
+/**
+ * One party, one compact row (#284, Phase 7h): name and balance on top; the balance
+ * in words and the last bill or payment below (lastAt from /api/parties/list, the day
+ * by the bills' own IST rule, lib/bill-days.ts). The tall card it replaces showed two
+ * parties a phone screen and said the balance twice ("lene hain" and "They owe you").
+ * Edit stays its own 48 px button (#31), never nested inside the row's button.
+ */
+export function PartyRow({ party: p, onOpen, onEdit }: { party: any; onOpen: () => void; onEdit: (e: React.MouseEvent) => void }) {
+  const { t } = useTranslation()
+  const last = p.lastAt
+    ? t('khata.last').replace('{d}', billDayLabel(billDayKey(p.lastAt), new Date(), { today: t('bills.today'), yesterday: t('bills.yesterday') }))
+    : t('khata.no_bills')
+  return (
+    <div className="flex items-stretch rounded-xl bg-card border border-border/60 shadow-card">
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 min-h-16 pl-3 pr-1 py-2.5 flex items-center gap-3 text-left rounded-l-xl hover:bg-muted/40 transition-colors">
+        <Avatar className="w-10 h-10 shrink-0">
+          <AvatarFallback className={cn(
+            'text-white font-semibold text-sm',
+            p.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
+            p.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+            'bg-gradient-to-br from-violet-500 to-purple-600'
+          )}>
+            {getInitials(p.name)}
+          </AvatarFallback>
+        </Avatar>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="font-semibold text-sm truncate">{p.name}</span>
+            <span className={cn('text-sm font-bold tabular-nums shrink-0', p.balance > 0 ? 'text-good' : p.balance < 0 ? 'text-bad' : 'text-muted-foreground')}>
+              {p.balance === 0 ? t('khata.settled') : formatINR(Math.abs(p.balance))}
+            </span>
+          </span>
+          <span className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground mt-0.5">
+            <span className="truncate">{last}</span>
+            {p.balance !== 0 && <span className="shrink-0">{p.balance > 0 ? t('stat.lene_hain') : t('stat.dene_hain')}</span>}
+          </span>
+        </span>
+      </button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="iconTouch"
+        className="shrink-0 self-center mr-1"
+        aria-label={`Edit ${p.name}`}
+        onClick={onEdit}
+      >
+        <Pencil className="w-4 h-4 text-muted-foreground" />
+      </Button>
     </div>
   )
 }
