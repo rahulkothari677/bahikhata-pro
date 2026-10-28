@@ -6,7 +6,7 @@ import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
+import { PartyPageSkeleton } from '@/components/common/Skeletons'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -274,14 +274,9 @@ export function PartyProfile() {
     [statementTransactions, statementPayments, stats],
   )
 
-  if (isLoading || !data) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-40 w-full rounded-xl" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </div>
-    )
-  }
+  // #285: the page in outline while it loads (components/common/Skeletons.tsx).
+  if (isLoading || !data) return <PartyPageSkeleton />
+
 
   // 🔒 FIX React #310: party, stats, etc. are now extracted before the early return (line 79-84)
   // to satisfy React's Rules of Hooks. No re-declaration here.

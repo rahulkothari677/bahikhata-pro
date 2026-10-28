@@ -16,6 +16,42 @@
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
+/**
+ * #285 (Phase 7h): a customer's page in outline — the top card (avatar, name, the
+ * balance) and the bahi rows below — while its code and its data load. It was blank:
+ * header only, while live's first load took 11.8 s.
+ */
+export function PartyPageSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true" aria-label="Loading">
+      <div className="rounded-2xl border border-border/40 bg-card p-4 space-y-4">
+        <div className="flex items-center gap-3">
+          <Skeleton className="w-14 h-14 rounded-full flex-shrink-0" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-3 w-1/3" />
+          </div>
+        </div>
+        <Skeleton className="h-8 w-2/5" />
+        <div className="grid grid-cols-3 gap-2">
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+        </div>
+      </div>
+      <ListItemSkeleton count={5} />
+    </div>
+  )
+}
+
+/** Any screen while its code loads (#285's class): a title line and a few rows, never a blank page. */
+export function ScreenSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true" aria-label="Loading">
+      <Skeleton className="h-6 w-2/5" />
+      <ListItemSkeleton count={4} />
+    </div>
+  )
+}
+
 // Avatar + 2 text lines — matches the party/inventory list item layout
 export function ListItemSkeleton({ count = 5 }: { count?: number }) {
   return (

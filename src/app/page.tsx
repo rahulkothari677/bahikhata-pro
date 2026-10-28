@@ -21,15 +21,20 @@ import { AccountScreen } from '@/components/layout/AccountScreen'
 // OnboardingTour, RatePromptModal, PaywallModal are now
 // imported ONCE inside AppShell.tsx — no longer duplicated 3× in page.tsx.
 import { AppShell } from '@/components/layout/AppShell'
+import { ScreenSkeleton, PartyPageSkeleton } from '@/components/common/Skeletons'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 // 🔒 V20-008: Lazy-load non-default views to reduce initial bundle.
 // Dashboard is the default view, so it stays static. All other views
 // load on demand when the user navigates to them.
-const Inventory = dynamic(() => import('@/components/inventory/Inventory').then(m => ({ default: m.Inventory })), { ssr: false })
-const Ledger = dynamic(() => import('@/components/ledger/Ledger').then(m => ({ default: m.Ledger })), { ssr: false })
-const LedgerSplitView = dynamic(() => import('@/components/ledger/LedgerSplitView').then(m => ({ default: m.LedgerSplitView })), { ssr: false })
-const IncomeExpense = dynamic(() => import('@/components/income/IncomeExpense').then(m => ({ default: m.IncomeExpense })), { ssr: false })
-const Parties = dynamic(() => import('@/components/parties/Parties').then(m => ({ default: m.Parties })), { ssr: false })
+// #285 (Phase 7h): every screen shows an outline while its code loads — it was a blank page
+// (only the bill screen had a fallback). A customer's page shows its own shape.
+const screenLoading = () => <ScreenSkeleton />
+const partyLoading = () => <PartyPageSkeleton />
+const Inventory = dynamic(() => import('@/components/inventory/Inventory').then(m => ({ default: m.Inventory })), { ssr: false, loading: screenLoading })
+const Ledger = dynamic(() => import('@/components/ledger/Ledger').then(m => ({ default: m.Ledger })), { ssr: false, loading: screenLoading })
+const LedgerSplitView = dynamic(() => import('@/components/ledger/LedgerSplitView').then(m => ({ default: m.LedgerSplitView })), { ssr: false, loading: screenLoading })
+const IncomeExpense = dynamic(() => import('@/components/income/IncomeExpense').then(m => ({ default: m.IncomeExpense })), { ssr: false, loading: screenLoading })
+const Parties = dynamic(() => import('@/components/parties/Parties').then(m => ({ default: m.Parties })), { ssr: false, loading: screenLoading })
 import { SplashScreen } from '@/components/common/SplashScreen'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
@@ -53,24 +58,24 @@ const TransactionDetail = dynamic(() => import('@/components/ledger/TransactionD
     </div>
   ),
 })
-const TransactionEntry = dynamic(() => import('@/components/ledger/TransactionEntry').then(m => ({ default: m.TransactionEntry })), { ssr: false })
-const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').then(m => ({ default: m.PartyProfile })), { ssr: false })
+const TransactionEntry = dynamic(() => import('@/components/ledger/TransactionEntry').then(m => ({ default: m.TransactionEntry })), { ssr: false, loading: screenLoading })
+const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').then(m => ({ default: m.PartyProfile })), { ssr: false, loading: partyLoading })
 // 🔒 AUDIT C5: the party's bills on their own page — moved out of PartyProfile
 // so a customer with many bills does not bury the statement and charts below.
-const PartyBills = dynamic(() => import('@/components/parties/PartyBills').then(m => ({ default: m.PartyBills })), { ssr: false })
+const PartyBills = dynamic(() => import('@/components/parties/PartyBills').then(m => ({ default: m.PartyBills })), { ssr: false, loading: screenLoading })
 // 🔒 AUDIT C5: Settle is a PAGE, not a dialog — with many open bills the dialog
 // pushed its own save button off-screen.
-const PartySettle = dynamic(() => import('@/components/parties/PartySettle').then(m => ({ default: m.PartySettle })), { ssr: false })
-const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false })
-const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false })
-const AskChat = dynamic(() => import('@/components/ask/AskChat').then(m => ({ default: m.AskChat })), { ssr: false })
-const ToolsHub = dynamic(() => import('@/components/layout/ToolsHub').then(m => ({ default: m.ToolsHub })), { ssr: false })
-const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false })
-const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false })
-const AIComparison = dynamic(() => import('@/components/settings/AIComparison').then(m => ({ default: m.AIComparison })), { ssr: false })
-const AIUsage = dynamic(() => import('@/components/settings/AIUsage').then(m => ({ default: m.AIUsage })), { ssr: false })
+const PartySettle = dynamic(() => import('@/components/parties/PartySettle').then(m => ({ default: m.PartySettle })), { ssr: false, loading: screenLoading })
+const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false, loading: screenLoading })
+const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false, loading: screenLoading })
+const AskChat = dynamic(() => import('@/components/ask/AskChat').then(m => ({ default: m.AskChat })), { ssr: false, loading: screenLoading })
+const ToolsHub = dynamic(() => import('@/components/layout/ToolsHub').then(m => ({ default: m.ToolsHub })), { ssr: false, loading: screenLoading })
+const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false, loading: screenLoading })
+const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false, loading: screenLoading })
+const AIComparison = dynamic(() => import('@/components/settings/AIComparison').then(m => ({ default: m.AIComparison })), { ssr: false, loading: screenLoading })
+const AIUsage = dynamic(() => import('@/components/settings/AIUsage').then(m => ({ default: m.AIUsage })), { ssr: false, loading: screenLoading })
 // 🔒 V22-14 (Batch D, Phase 7g): Document Vault
-const DocumentVault = dynamic(() => import('@/components/documents/DocumentVault').then(m => ({ default: m.DocumentVault })), { ssr: false })
+const DocumentVault = dynamic(() => import('@/components/documents/DocumentVault').then(m => ({ default: m.DocumentVault })), { ssr: false, loading: screenLoading })
 
 export default function Home() {
   const { session, status, isOfflineSession } = useOfflineSession()
