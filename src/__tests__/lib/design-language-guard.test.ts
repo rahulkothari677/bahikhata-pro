@@ -40,7 +40,7 @@ const SRC = path.resolve(process.cwd(), 'src')
 const CSS = fs.readFileSync(path.join(SRC, 'app/globals.css'), 'utf8')
 
 /** Ceiling for raw meaning-colour shades in src/. Lower it; never raise it. */
-const RAW_COLOUR_CEILING = 2375  // 7c: one bill picker on the roles; the tiles, the old picker and ProductPicker gone (was 2449)
+const RAW_COLOUR_CEILING = 2303  // 7h: the profit reports' coloured stat cards became one TotalsStrip, #280 (was 2375; 2449 before 7c)
 
 function sourceFiles(): { rel: string; code: string }[] {
   const out: { rel: string; code: string }[] = []

@@ -14,6 +14,7 @@ import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn, formatDate } from '@/lib/utils'
 import { ReportRows } from '@/components/reports/ReportRows'
+import { TotalsStrip } from '@/components/insights/InsightsKit'
 import { NoCostNote, UnmatchedNote, marginText } from '@/components/reports/NoCostNote'
 import { TrendingUp, TrendingDown, FileText, AlertTriangle } from 'lucide-react'
 
@@ -47,13 +48,12 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
         </div>
       )}
 
-      {/* Summary stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Total Bills" value={String(summary.totalBills)} color="text-blue-600 dark:text-blue-400" bg="bg-blue-100 dark:bg-blue-950" />
-        <StatCard label="Revenue (excl. GST)" value={formatINR(summary.totalRevenue)} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100 dark:bg-amber-950" />
-        <StatCard label="Total cost" value={formatINR(summary.totalCogs)} color="text-rose-600 dark:text-rose-400" bg="bg-rose-100 dark:bg-rose-950" />
-        <StatCard label="Total Profit" value={formatINR(summary.totalProfit)} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100 dark:bg-emerald-950" />
-      </div>
+      {/* #280 (7h): the totals in one strip (Insights’ TotalsStrip) — the four icon cards filled a phone’s first screen. */}
+      <TotalsStrip cells={[
+        { label: 'Revenue (excl. GST)', value: formatINR(summary.totalRevenue), sub: `${summary.totalBills} bills` },
+        { label: 'Cost', value: formatINR(summary.totalCogs) },
+        { label: 'Profit', value: formatINR(summary.totalProfit), tone: summary.totalProfit < 0 ? 'bad' : 'good' },
+      ]} />
 
       {/* Bills table */}
       <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
@@ -81,7 +81,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
               tone: bill.profit < 0 ? 'bad' : undefined,
               details: [
                 { label: 'Items', value: String(bill.itemCount ?? 0) },
-                { label: 'Revenue', value: formatINR(bill.revenue) },
+                { label: 'Revenue (excl. GST)', value: formatINR(bill.revenue) },
                 { label: 'Cost', value: formatINR(bill.cogs) },
                 ...(bill.noCost ? [{ label: 'No cost price', value: formatINR(bill.noCost) }] : []),
                 ...(bill.unmatched ? [{ label: 'Not matched to items', value: formatINR(bill.unmatched) }] : []),
@@ -176,18 +176,6 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
           </div>
         </CardContent>
       </Card>
-    </div>
-  )
-}
-
-function StatCard({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) {
-  return (
-    <div className="rounded-2xl bg-card border border-border/60 shadow-card p-4">
-      <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center mb-2', bg)}>
-        <FileText className={cn('w-4 h-4', color)} />
-      </div>
-      <p className="text-xs text-muted-foreground font-semibold">{label}</p>
-      <p className={cn('text-lg font-bold tabular-nums mt-0.5', color)}>{value}</p>
     </div>
   )
 }

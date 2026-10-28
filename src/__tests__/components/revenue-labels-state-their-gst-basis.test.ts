@@ -37,6 +37,10 @@ const slash = (p: string) => p.split(path.sep).join('/')
 /** This file quotes the broken label in order to explain it. */
 const ALLOWED = new Set<string>([
   'src/__tests__/components/revenue-labels-state-their-gst-basis.test.ts',
+  // Sample rows for the ReportRows component's own test — no screen shows them.
+  'src/__tests__/components/report-rows.test.tsx',
+  // "Revenue Growth" is a weighted percentage in the health score, not a rupee figure (7h, #280 widened this scan).
+  'src/components/dashboard/BusinessHealthScore.tsx',
 ])
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
@@ -52,8 +56,8 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out
 }
 
-/** `label="...revenue..."` on a stat card, in any casing. */
-const REVENUE_LABEL = /label=("|')([^"']*\brevenue\b[^"']*)\1/gi
+/** `label="...revenue..."` on a stat card, or `label: '...revenue...'` in a totals strip's cells (7h, #280), in any casing. */
+const REVENUE_LABEL = /label(?:=|:\s*)("|')([^"']*\brevenue\b[^"']*)\1/gi
 
 /** Anything that answers "is GST in this number?" counts. */
 const STATES_BASIS = /excl|incl|net of|before tax|after tax|without gst|with gst/i

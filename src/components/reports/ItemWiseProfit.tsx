@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { formatINR, cn } from '@/lib/utils'
 import { ReportRows } from '@/components/reports/ReportRows'
+import { TotalsStrip } from '@/components/insights/InsightsKit'
 import { NoCostNote, UnmatchedNote, marginText } from '@/components/reports/NoCostNote'
 import { TrendingUp, TrendingDown, Package } from 'lucide-react'
 
@@ -34,13 +35,12 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
 
   return (
     <div className="space-y-4">
-      {/* Summary stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Products Sold" value={String(summary.totalProducts)} color="text-blue-600 dark:text-blue-400" bg="bg-blue-100 dark:bg-blue-950" />
-        <StatCard label="Revenue (excl. GST)" value={formatINR(summary.totalRevenue)} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100 dark:bg-amber-950" />
-        <StatCard label="Total cost" value={formatINR(summary.totalCogs)} color="text-rose-600 dark:text-rose-400" bg="bg-rose-100 dark:bg-rose-950" />
-        <StatCard label="Total Profit" value={formatINR(summary.totalProfit)} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100 dark:bg-emerald-950" />
-      </div>
+      {/* #280 (7h): the totals in one strip (Insights’ TotalsStrip) — the four icon cards filled a phone’s first screen. */}
+      <TotalsStrip cells={[
+        { label: 'Revenue (excl. GST)', value: formatINR(summary.totalRevenue), sub: `${summary.totalProducts} products` },
+        { label: 'Cost', value: formatINR(summary.totalCogs) },
+        { label: 'Profit', value: formatINR(summary.totalProfit), tone: summary.totalProfit < 0 ? 'bad' : 'good' },
+      ]} />
 
       {/* Items table */}
       <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
@@ -68,7 +68,7 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
               value: item.margin === null ? 'No cost price' : formatINR(item.profit),
               tone: item.profit < 0 ? 'bad' : undefined,
               details: [
-                { label: 'Revenue', value: formatINR(item.revenue) },
+                { label: 'Revenue (excl. GST)', value: formatINR(item.revenue) },
                 { label: 'Cost', value: formatINR(item.cogs) },
                 ...(item.noCost ? [{ label: 'No cost price', value: formatINR(item.noCost) }] : []),
                 { label: 'Margin', value: marginText(item.margin) },
@@ -167,18 +167,6 @@ export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
           </div>
         </CardContent>
       </Card>
-    </div>
-  )
-}
-
-function StatCard({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) {
-  return (
-    <div className="rounded-2xl bg-card border border-border/60 shadow-card p-4">
-      <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center mb-2', bg)}>
-        <Package className={cn('w-4 h-4', color)} />
-      </div>
-      <p className="text-xs text-muted-foreground font-semibold">{label}</p>
-      <p className={cn('text-lg font-bold tabular-nums mt-0.5', color)}>{value}</p>
     </div>
   )
 }
