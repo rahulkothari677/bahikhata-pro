@@ -32,14 +32,19 @@ export function InsightsView({ range, preset, onChange, onPresetChange, hideProf
   const period = preset === 'custom' ? `${formatDate(range.from)} – ${formatDate(range.to)}` : presetName(preset, t)
   return (
     <div className="space-y-3">
-      <ChipRow
-        ariaLabel={t('ins.sections')}
-        chips={sections.map((s) => ({ value: s, label: t(`ins.sec.${s}`) }))}
-        value={section}
-        onChange={(s) => setSection(s)}
-      />
-      <div className="flex justify-end">
-        <DateRangePicker value={range} onChange={onChange} preset={preset} onPresetChange={onPresetChange} />
+      {/* #260 (7h): the period sits at the end of the section chips — it took a row of its own (~56 px of a phone's first screen). */}
+      <div className="flex items-center gap-2" data-insights-head>
+        <div className="min-w-0 flex-1">
+          <ChipRow
+            ariaLabel={t('ins.sections')}
+            chips={sections.map((s) => ({ value: s, label: t(`ins.sec.${s}`) }))}
+            value={section}
+            onChange={(s) => setSection(s)}
+          />
+        </div>
+        <div className="shrink-0">
+          <DateRangePicker value={range} onChange={onChange} preset={preset} onPresetChange={onPresetChange} />
+        </div>
       </div>
       {section === 'sales' && <SalesSection range={range} t={t} />}
       {section === 'items' && <ItemsSection range={range} period={period} hideProfit={hideProfit} t={t} />}
