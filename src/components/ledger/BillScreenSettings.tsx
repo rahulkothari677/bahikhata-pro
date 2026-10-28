@@ -42,7 +42,9 @@ export function BillScreenSettings({ open, onClose, isSale, shopGst }: {
   const learned = Object.values(learnedPicks).filter((e) => e.n >= 2).length
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose() }}>
-      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto pb-[calc(1rem+var(--safe-bottom))] lg:mx-auto lg:max-w-lg">
+      {/* #312 (7h): 55% of the phone and a light dim, so a switch's change shows on the bill above
+          while the panel is still open (it covered 85% and dimmed it all). */}
+      <SheetContent side="bottom" overlayClassName="bg-black/15" className="rounded-t-3xl max-h-[55dvh] overflow-y-auto pb-[calc(1rem+var(--safe-bottom))] lg:mx-auto lg:max-w-lg">
         <SheetHeader className="pb-1">
           <SheetTitle>Bill screen</SheetTitle>
           <SheetDescription>Changes apply at once and stay on this device.</SheetDescription>
