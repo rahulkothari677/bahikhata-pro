@@ -103,7 +103,7 @@ export function ReportShell({
 
       {/* Period selector + export toolbar */}
       {showDateRange && dateRange && onDateChange && (
-        <Card className="shadow-card border-border/60 no-print">
+        <Card className="shadow-card border-border/60 no-print py-0">
           <CardContent className="p-3 lg:p-4">
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
               <div className="flex items-center gap-2">

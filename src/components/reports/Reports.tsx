@@ -418,7 +418,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
           🔒 V22-9 (Phase 7): bill-profit, hsn, cashflow, trial-balance DO use the
           date range toolbar (unlike gstr-1/3b/2b/bank-recon/consolidated). */}
       {isSingleReport && reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-9' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated' && (
-      <Card className="shadow-card border-border/60 no-print">
+      <Card className="shadow-card border-border/60 no-print py-0">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
             {/* #199: a snapshot report (stock, ageing) is as of today — no period to pick. */}

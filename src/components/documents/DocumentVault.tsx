@@ -242,7 +242,7 @@ export function DocumentVault() {
       </div>
 
       {/* Search + Filter */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 py-0">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <div className="relative flex-1 w-full">
@@ -284,7 +284,7 @@ export function DocumentVault() {
           {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
         </div>
       ) : documents.length === 0 ? (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 py-0">
           <CardContent className="p-0">
             <EmptyState
               icon={FolderOpen}
@@ -303,7 +303,7 @@ export function DocumentVault() {
             const Icon = getFileIcon(doc.fileType, doc.category)
             const catMeta = CATEGORIES.find(c => c.value === doc.category) || CATEGORIES[CATEGORIES.length - 1]
             return (
-              <Card key={doc.id} className="card-hover shadow-card border-border/60 overflow-hidden group">
+              <Card key={doc.id} className="card-hover shadow-card border-border/60 overflow-hidden group py-0">
                 <CardContent className="p-3">
                   {/* File preview / icon */}
                   <div className={cn(

@@ -1998,7 +1998,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
        * fix is to pick by what the form already holds, not to merge them.
        */}
       {voiceOn && showVoiceEntry && items.length === 0 && (
-        <Card className="shadow-card border-border/60 border-primary/30">
+        <Card className="shadow-card border-border/60 border-primary/30 py-0">
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-start justify-between gap-2 mb-3">
               <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -2326,7 +2326,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
               {/* Inline voice entry for adding more items */}
               {voiceOn && showVoiceEntry && items.length > 0 && (
-                <Card className="shadow-card border-border/60 border-primary/30 mb-3">
+                <Card className="shadow-card border-border/60 border-primary/30 mb-3 py-0">
                   <CardContent className="p-3 sm:p-4">
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -3344,7 +3344,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
            * case is that the price genuinely moved.
            */}
           {costChanges.length > 0 && (
-            <Card className="shadow-card border-border/60 border-primary/30 order-3 lg:order-none">
+            <Card className="shadow-card border-border/60 border-primary/30 order-3 lg:order-none py-0">
               <div className="p-3 sm:p-4">
                 {/* Not a <label>: the ⓘ inside must not also flip the switch. */}
                 <div className="flex items-center justify-between gap-3">

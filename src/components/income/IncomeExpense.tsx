@@ -233,7 +233,7 @@ export function IncomeExpense() {
 
       {/* Budget tracking — shows progress bars for expense categories with budgets */}
       {features?.reorderAlerts && topExpenses.length > 0 && (
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 py-0">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -312,7 +312,7 @@ export function IncomeExpense() {
 
       {/* Recurring entries — auto-create monthly rent, salary, etc. */}
       {features?.recurringEntries && (
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 py-0">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -378,7 +378,7 @@ export function IncomeExpense() {
       )}
 
       {/* Toolbar - removed duplicate Add Income/Expense buttons (header has "Add Entry") */}
-      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 py-0">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3">
             <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
@@ -479,7 +479,7 @@ export function IncomeExpense() {
           )}
         </div>
 
-        <Card className="shadow-card border-border/60 h-fit lg:sticky lg:top-20">
+        <Card className="shadow-card border-border/60 h-fit lg:sticky lg:top-20 py-0">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <Receipt className="w-4 h-4 text-rose-600" />

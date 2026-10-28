@@ -121,14 +121,14 @@ export function PartyBills() {
         so both are shown rather than one being presented as the truth.
       */}
       <div className="grid grid-cols-2 gap-3">
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 py-0">
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground">Open bills</p>
             <p className="text-lg font-bold text-rose-600">{formatINR(totalDue)}</p>
             <p className="text-xs text-muted-foreground">{openBills.length} of {bills.length} bills</p>
           </CardContent>
         </Card>
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 py-0">
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground">Party balance</p>
             <p className={cn('text-lg font-bold', balance > 0 ? 'text-emerald-600' : balance < 0 ? 'text-rose-600' : '')}>
@@ -174,7 +174,7 @@ export function PartyBills() {
       ) : (
         <div className="space-y-2">
           {visible.map((b: any) => (
-            <Card key={b.id} className="shadow-card border-border/60">
+            <Card key={b.id} className="shadow-card border-border/60 py-0">
               <CardContent className="p-3 flex items-center justify-between gap-3">
                 <button
                   className="flex-1 min-w-0 text-left"

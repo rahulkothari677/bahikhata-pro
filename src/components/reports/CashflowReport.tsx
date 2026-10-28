@@ -31,7 +31,7 @@ export function CashflowReport({ data }: CashflowReportProps) {
     <div className="space-y-4">
       {/* Net cashflow banner */}
       <Card className={cn(
-        'shadow-card border-2 overflow-hidden',
+        'shadow-card border-2 overflow-hidden py-0',
         netPositive ? 'border-emerald-200 dark:border-emerald-800' : 'border-rose-200 dark:border-rose-800',
       )}>
         <CardContent className="p-5">

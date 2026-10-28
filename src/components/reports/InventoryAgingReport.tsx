@@ -60,7 +60,7 @@ export function InventoryAgingReport({ data }: { data: any }) {
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
         {bucketConfig.map(bucket => (
-          <Card key={bucket.key} className={cn('shadow-card border-border/60 overflow-hidden', bucket.lightBg)}>
+          <Card key={bucket.key} className={cn('shadow-card border-border/60 overflow-hidden py-0', bucket.lightBg)}>
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <div className={cn('w-2.5 h-2.5 rounded-full', bucket.bg)} />

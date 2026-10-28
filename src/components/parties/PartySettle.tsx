@@ -436,7 +436,7 @@ export function PartySettle() {
           bills. So lead with the outstanding figure, and mention the bills
           total only on the occasions it actually differs.
         */}
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 py-0">
           <CardContent className="p-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold tabular-nums">{formatINR(Math.abs(balance))}</span>
@@ -451,7 +451,7 @@ export function PartySettle() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 py-0">
           <CardContent className="p-3 space-y-3">
             {/* Type, Mode, Amount and Notes on ONE row once there is width for
                 it — four short fields stacked down a 1920px screen is what made
@@ -626,7 +626,7 @@ export function PartySettle() {
           alike the date is how a customer refers to one.
         */}
         {openBills.length > 0 && (
-          <Card className="shadow-card border-border/60">
+          <Card className="shadow-card border-border/60 py-0">
             <CardContent className="p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold">Apply to bills</p>

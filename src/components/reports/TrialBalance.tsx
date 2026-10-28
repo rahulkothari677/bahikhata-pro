@@ -40,7 +40,7 @@ export function TrialBalance({ data }: TrialBalanceProps) {
           Reframed as "Account Summary" — still shows debit/credit columns
           but no false "your books are broken" claim. A proper double-entry
           TB will be built in a future round. */}
-      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 overflow-hidden">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 overflow-hidden py-0">
         <CardContent className="p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">

@@ -1321,7 +1321,7 @@ function ProgressCard({
       )}
       style={{ minHeight: '90px' }}
     >
-      <Card className={cn('shadow-card border-border/60 h-full', isClickable && 'hover:border-primary/30')}>
+      <Card className={cn('shadow-card border-border/60 h-full py-0', isClickable && 'hover:border-primary/30')}>
         <CardContent className="p-3 sm:p-4 flex flex-col h-full">
           <div className="flex items-center justify-between mb-2">
             <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', color)}>

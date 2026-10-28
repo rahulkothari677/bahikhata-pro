@@ -511,7 +511,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
 
       {/* Parsed result */}
       {parsed && (
-        <Card className="border-primary/30">
+        <Card className="border-primary/30 py-0">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="font-semibold text-sm flex items-center gap-1.5">

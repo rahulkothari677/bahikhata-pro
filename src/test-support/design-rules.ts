@@ -66,6 +66,25 @@ export function adHocWarningBoxCount(code: string): number {
 }
 
 /**
+ * #290 (Phase 7h): a `<Card>` that keeps its own vertical padding (py-4 from
+ * components/ui/card.tsx) around a first child that pads itself (`p-3`, `p-4`…)
+ * doubles the space above the first line — 28 px on a phone, the customer card
+ * 166 px for one search box. Card padding OR inner padding, never both.
+ * Returns each offending Card's opening tag.
+ */
+export function doubledCardPadding(code: string): string[] {
+  const re = /<Card(\s[^>]*)?>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)*<(?:CardContent|div)\s+className="([^"]*)"/g
+  const out: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(code))) {
+    const attrs = m[1] || ''
+    if (/\bpy-0\b|\bp-0\b/.test(attrs)) continue
+    if (/(^|\s)p-\d/.test(m[2])) out.push(`<Card${attrs}>`)
+  }
+  return out
+}
+
+/**
  * Every `<button …>` opening tag, in full (moved here from the Ask guard in
  * Phase 4c so one reader serves both checks).
  *

@@ -8,6 +8,7 @@ import { ArrowLeft, RefreshCw, TrendingUp, Clock, Coins, Zap, AlertCircle, Dolla
 import { useAppStore } from '@/store/app-store'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { formatCostInr } from '@/lib/ai-pricing'
+import { cn } from '@/lib/utils'
 
 interface PeriodStats {
   calls: number
@@ -351,7 +352,7 @@ function PeriodCard({ label, stats, highlight }: { label: string; stats: PeriodS
   const fmtCost = (inr: number) => formatCostInr(inr)
 
   return (
-    <Card className={highlight ? 'border-primary/30 bg-primary/5' : ''}>
+    <Card className={cn('py-0', highlight && 'border-primary/30 bg-primary/5')}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold text-muted-foreground">{label}</span>

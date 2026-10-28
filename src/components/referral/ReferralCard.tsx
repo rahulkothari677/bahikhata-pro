@@ -34,7 +34,7 @@ export function ReferralCard() {
 
   if (codeLoading || !codeData) {
     return (
-      <Card>
+      <Card className="py-0">
         <CardContent className="p-6 flex items-center justify-center">
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
         </CardContent>
@@ -73,7 +73,7 @@ export function ReferralCard() {
   const rewardEarned = statusData?.rewardEarned || false
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden py-0">
       <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-5 text-white">
         <div className="flex items-center gap-3 mb-2">
           <Gift className="w-6 h-6" />

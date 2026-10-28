@@ -503,7 +503,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       />
 
       {/* Toolbar */}
-      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 py-0">
         <CardContent className="p-3 lg:p-4">
           {/* ONE row: find, and everything-else.
            *
@@ -730,7 +730,7 @@ export function Ledger({ type }: { type: LedgerType }) {
 
       {/* Transactions list */}
       {!isOnline() && !!error && !data ? (
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 py-0">
           <CardContent className="p-0">
             <OfflineNoData
               title={`No cached ${isSale ? 'sales' : 'purchases'}`}
@@ -822,7 +822,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           {t(`bills.none.${chip}`)}
         </p>
       ) : filtered.length === 0 ? (
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 py-0">
           <CardContent className="p-0">
             <EmptyState
               icon={isSale ? ShoppingCart : Truck}

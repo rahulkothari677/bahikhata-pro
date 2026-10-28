@@ -294,7 +294,7 @@ export function Inventory() {
 
       {/* Products - Grid or List */}
       {!isOnline() && !!error && !data ? (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 py-0">
           <CardContent className="p-0">
             <OfflineNoData
               title="No cached inventory"
@@ -322,7 +322,7 @@ export function Inventory() {
           </CardContent>
         </Card>
       ) : filtered.length === 0 ? (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 py-0">
           <CardContent className="p-0">
             {itemCount === 0 && !debouncedSearch && !inventoryCategory && !focus ? (
               <EmptyState

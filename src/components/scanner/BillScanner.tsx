@@ -639,7 +639,7 @@ export function BillScanner() {
   return (
     <div className="space-y-4">
       {/* Bill type selector */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 py-0">
         <CardContent className="p-4">
           <Label className="text-xs text-muted-foreground" htmlFor="field-i-am-scanning-a">I am scanning a...</Label>
           <div className="grid grid-cols-2 gap-3 mt-2">
@@ -1103,7 +1103,7 @@ export function BillScanner() {
           </Card>
 
           {/* Action buttons — compact */}
-          <Card className="shadow-card border-border/60">
+          <Card className="shadow-card border-border/60 py-0">
             <CardContent className="p-3">
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1 gap-1.5 h-9" onClick={handleReset}>

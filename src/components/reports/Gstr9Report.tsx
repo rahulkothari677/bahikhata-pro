@@ -147,7 +147,7 @@ export function Gstr9Report() {
       )}
 
       {/* ── Is it even required? ─────────────────────────────────────── */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 py-0">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <CalendarDays className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />

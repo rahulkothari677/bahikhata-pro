@@ -225,7 +225,7 @@ export function Parties() {
 
       {/* Parties list */}
       {!isOnline() && !!error && !data ? (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 py-0">
           <CardContent className="p-0">
             <OfflineNoData
               title="No cached parties"
@@ -238,7 +238,7 @@ export function Parties() {
         // 🔒 V22-14 (Batch D, Phase 8c): Premium skeleton with avatar + text lines
         <ListItemSkeleton count={5} />
       ) : filtered.length === 0 ? (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 py-0">
           <CardContent className="p-0">
             {totals && totals.parties === 0 && !debouncedSearch && !focus ? (
               <EmptyState
