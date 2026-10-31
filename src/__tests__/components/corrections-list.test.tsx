@@ -66,6 +66,20 @@ test('one the app cannot write shows the reason, and no switch', () => {
   expect(screen.queryByRole('switch')).toBeNull()
 })
 
+test('#100: a changed GSTIN shows the short fix on the row, the full advice behind ⓘ, and no switch', () => {
+  show([{
+    ...ROW, canInclude: false,
+    changes: ['Customer GSTIN changed from 08AAACT4321K1ZE to 08AAACT9876K1ZK'],
+    problem: 'Fix with a credit note and a fresh bill to the right GSTIN',
+    problemInfo: 'Customer GSTIN changed: raise a credit note on this bill and a fresh bill to the right GSTIN — the route the portal always accepts. A Table 9A change of GSTIN is disputed between sources; ask your CA before trying it.',
+  }])
+  const row = screen.getByTestId('correction-row')
+  expect(row).toHaveTextContent('Fix with a credit note and a fresh bill to the right GSTIN')
+  expect(row.textContent).not.toMatch(/disputed between sources/) // the long part is behind ⓘ
+  expect(screen.getByRole('button', { name: 'About how to correct INV-0003' })).toBeInTheDocument()
+  expect(screen.queryByRole('switch')).toBeNull()
+})
+
 test('this month already filed: the switch cannot be turned on', () => {
   show([ROW], true)
   expect(screen.getByRole('switch')).toBeDisabled()

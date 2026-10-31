@@ -302,6 +302,9 @@ export function lineChanges(filedRow: Record<string, any>, nowRow: Record<string
 export const GSTIN_CORRECTION_ROUTE =
   'Customer GSTIN changed: raise a credit note on this bill and a fresh bill to the right GSTIN — the route the portal always accepts. A Table 9A change of GSTIN is disputed between sources; ask your CA before trying it.'
 
+/** The same advice in the few words a row has room for; the sentence above goes behind ⓘ. */
+export const GSTIN_CORRECTION_SHORT = 'Fix with a credit note and a fresh bill to the right GSTIN'
+
 /** The portal's four amendment tables, from the corrections that are going in. */
 export interface AmendmentTables {
   /** Table 9A — amended B2B invoices, grouped by the GSTIN they were filed under. */

@@ -41,6 +41,8 @@ export interface CorrectionRow {
   lapsed: boolean
   canInclude: boolean
   problem: string | null
+  /** The full advice behind the short problem, for ⓘ (a changed GSTIN, #100). */
+  problemInfo?: string | null
   deadline: string
   /** "30 Nov 2027" — the row shows this; the sentence above sits behind ⓘ (#344). */
   deadlineDate: string
@@ -130,7 +132,10 @@ export function CorrectionsList({ month, monthName, rows, filed }: {
                   <p key={c} className="text-xs text-muted-foreground mt-0.5">{c}</p>
                 ))}
                 {r.problem ? (
-                  <p className="text-xs text-check font-medium mt-1">{r.problem}</p>
+                  <p className="text-xs text-check font-medium mt-1 flex items-center gap-1">
+                    <span>{r.problem}</span>
+                    {r.problemInfo && <InfoHint text={r.problemInfo} label={`how to correct ${r.number}`} className="ml-1" />}
+                  </p>
                 ) : (
                   <>
                     {r.lapsed && !r.included && (
