@@ -2,19 +2,84 @@
  * Phase 8b (#129): HSN and rate from the item's name — suggestions only, every
  * pairing proven against the notification's own row.
  */
-import { HSN_BY_SHOP_WORD, hsnChoices, suggestHsnForName, choiceFits, checkHsnFormat, hsnDigitsFor } from '@/lib/hsn-by-name'
+import { HSN_BY_SHOP_WORD, hsnChoices, suggestHsnForName, choiceFits, checkHsnFormat, hsnDigitsFor, rowNames } from '@/lib/hsn-by-name'
 import { SHOP_WORD_GROUPS } from '@/lib/shop-words'
 
 const NOV1 = new Date('2026-11-01T06:30:00Z') // noon IST, 1 Nov 2026
 const OCT31 = new Date('2026-10-31T06:30:00Z')
-const squash = (s: string) => s.toLowerCase().replace(/\s+/g, '')
+
+/*
+ * EVERY WORD'S EXACT BUTTONS, read against the statute by hand on 31 Oct 2026.
+ * Pinned because "the word appears in the row" was not enough: "sugar" matched
+ * "Khandsari Sugar" in the exempt row and offered refined cheeni "No GST · Sold
+ * loose" — found on the live check, not by a test. A change to a pairing, the
+ * parser or either lookup that moves one button fails here, and someone reads
+ * the statute again.
+ */
+const EXPECTED: Record<string, [string, 'exempt' | 'taxable', number][]> = {
+  sugar: [['Taxable', 'taxable', 5]],
+  jaggery: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  salt: [['No GST', 'exempt', 0]],
+  atta: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  rice: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  dal: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  toor: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  moong: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  chana: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  urad: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  masoor: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  besan: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  suji: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  poha: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  murmura: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  mustard: [['Taxable', 'taxable', 5]],
+  ghee: [['Taxable', 'taxable', 5]],
+  milk: [['No GST', 'exempt', 0]],
+  curd: [['Sold loose', 'exempt', 0], ['Pre-packaged & labelled', 'taxable', 5]],
+  butter: [['Taxable', 'taxable', 5]],
+  egg: [['No GST', 'exempt', 0]],
+  bread: [['No GST', 'exempt', 0]],
+  potato: [['Fresh or chilled', 'exempt', 0]],
+  onion: [['Fresh or chilled', 'exempt', 0]],
+  tomato: [['Fresh or chilled', 'exempt', 0]],
+  garlic: [['Fresh or chilled', 'exempt', 0]],
+  lemon: [['No GST', 'exempt', 0]],
+  chilli: [['Taxable', 'taxable', 5]],
+  coriander: [['Seed for sowing', 'exempt', 0], ['Sold as food', 'taxable', 5]],
+  cumin: [['Seed for sowing', 'exempt', 0], ['Sold as food', 'taxable', 5]],
+  fennel: [['Seed for sowing', 'exempt', 0], ['Sold as food', 'taxable', 5]],
+  cardamom: [['Taxable', 'taxable', 5]],
+  cinnamon: [['Taxable', 'taxable', 5]],
+  clove: [['Taxable', 'taxable', 5]],
+  tea: [['Taxable', 'taxable', 5]],
+  coffee: [['Taxable', 'taxable', 5]],
+  biscuit: [['Taxable', 'taxable', 5]],
+  almond: [['Taxable', 'taxable', 5]],
+  cashew: [['Taxable', 'taxable', 5]],
+  raisin: [['Taxable', 'taxable', 5]],
+  walnut: [['Taxable', 'taxable', 5]],
+  peanut: [['Taxable', 'taxable', 5]],
+  isabgol: [['No GST', 'exempt', 0]],
+  soap: [['Toilet Soap', 'taxable', 5], ['Soap', 'taxable', 18]],
+  toothpaste: [['Taxable', 'taxable', 5]],
+  matchbox: [['Taxable', 'taxable', 5]],
+  incense: [['Taxable', 'taxable', 5]],
+  candle: [['Taxable', 'taxable', 5]],
+  polythene: [['Taxable', 'taxable', 18]],
+  battery: [['Taxable', 'taxable', 18]],
+  bulb: [['Taxable', 'taxable', 18]],
+}
 
 describe('every pairing is the statute, not memory', () => {
-  test.each(HSN_BY_SHOP_WORD.map((p) => [p.word, p.hsn, p.statute]))('%s → %s: its row says "%s"', (word, hsn, statute) => {
+  test('every pairing has its buttons pinned, and nothing else is pinned', () => {
+    expect(Object.keys(EXPECTED).sort()).toEqual(HSN_BY_SHOP_WORD.map((p) => p.word).sort())
+  })
+
+  test.each(HSN_BY_SHOP_WORD.map((p) => [p.word, p.hsn, p.statute]))('%s → %s ("%s"): exactly its pinned buttons', (word, hsn, statute) => {
     const rows = hsnChoices(hsn, NOV1, statute)
-    expect(rows.length).toBeGreaterThan(0)
-    // Every row kept names the thing (the filter falls back to all rows only when none do — that is the failure).
-    expect(rows.every((c) => squash(c.description).includes(squash(statute)))).toBe(true)
+    expect(rows.map((c) => [c.label, c.treatment, c.gstRate])).toEqual(EXPECTED[word])
+    // Every row offered NAMES the thing, outside any "[other than …]" (the filter falls back to all rows only when none do).
+    expect(rows.every((c) => rowNames(c.description, statute))).toBe(true)
     // …and the word is a shop word search already knows, so search and HSN read names alike.
     expect(SHOP_WORD_GROUPS.some((g) => g[0] === word)).toBe(true)
   })
@@ -22,6 +87,23 @@ describe('every pairing is the statute, not memory', () => {
   test('each shop word is paired once', () => {
     const words = HSN_BY_SHOP_WORD.map((p) => p.word)
     expect(new Set(words).size).toBe(words.length)
+  })
+})
+
+describe('the live-check bug, as cases', () => {
+  test('cheeni is 5% whether loose or packed — never offered the khandsari exemption', () => {
+    const s = suggestHsnForName('Claude test cheeni 1kg', NOV1)!
+    expect(s.hsn).toBe('1701')
+    expect(s.choices.map((c) => [c.treatment, c.gstRate])).toEqual([['taxable', 5]])
+  })
+  test('a word inside "[other than …]" does not name the row', () => {
+    expect(rowNames('sugar cubes [other than jaggery of all types, khandsari sugar, rab]', 'jaggery')).toBe(false)
+    expect(rowNames('corn flakes (other than puffed rice, flattened rice)', 'flattened')).toBe(false)
+    expect(rowNames('Jaggery of all types, pre packaged and labelled', 'jaggery')).toBe(true)
+  })
+  test('packed jaggery has its 5% row (the source prints "1701 or1702"; the parser lost it)', () => {
+    const s = suggestHsnForName('Gud 1kg', NOV1)!
+    expect(s.choices.map((c) => [c.label, c.gstRate])).toEqual([['Sold loose', 0], ['Pre-packaged & labelled', 5]])
   })
 })
 

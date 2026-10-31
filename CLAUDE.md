@@ -738,6 +738,15 @@ proves it.**
   find one row I know I wrote** (the known-good input), and SQL windows on
   these columns use `now() AT TIME ZONE 'UTC'` — or a time passed from the app.
 
+· **31 Oct (8b), caught on the live check, not by a test:** HSN-by-name's
+  "every pairing is proven against its statute row" test only checked that the
+  word APPEARED in a row — "sugar" appeared in "Khandsari Sugar" (exempt) and
+  in "[other than … khandsari sugar]", so refined cheeni was offered "No GST ·
+  sold loose" on the live app. Same shape: nearby text, not the structure.
+  **A table that answers a money or tax question pins its exact answers
+  (every key → every output, read by hand once), not a property of them**;
+  exclusions ("[other than …]") never count as naming a thing.
+
 · 20 Oct (5f-3), caught before commit: a guard sliced the source from a
   COMMENT, which `readCode` strips — `indexOf` gave −1, the slice was empty,
   and `not.toMatch` passed on nothing. **A slice-based check asserts its

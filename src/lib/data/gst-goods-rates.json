@@ -9,7 +9,7 @@
   "caveat": "Reference data, not a determination. Many rows apply only under a condition carried in the description."
  },
  "generatedFrom": "scripts/gst-reference/parse-goods-rates.mjs",
- "ruleCount": 1133,
+ "ruleCount": 1134,
  "codeCount": 1016,
  "codes": {
   "12": [
@@ -887,9 +887,25 @@
     "conditions": [
      "has-exclusion"
     ]
+   },
+   {
+    "gstRate": 5,
+    "description": "Jaggery of all types including Cane Jaggery (gur), Palmyra Jaggery, Kh andsari Sugar, Rab, pre packaged and labelled",
+    "schedule": "I",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ]
    }
   ],
   "1702": [
+   {
+    "gstRate": 5,
+    "description": "Jaggery of all types including Cane Jaggery (gur), Palmyra Jaggery, Kh andsari Sugar, Rab, pre packaged and labelled",
+    "schedule": "I",
+    "conditions": [
+     "pre-packaged-and-labelled"
+    ]
+   },
    {
     "gstRate": 5,
     "description": "Palmyra sugar, mishri, batasha, bura, sakar, khadi sakar, harda, sakariya, gatta, kuliya, elaichidana, lukumdana, 2.5% chikkis like puffed rice chikki, peanut chikki, sesame chikki, til chikki, t il patti, til revdi, sugar makhana, groundnut sweets, gajak, khaja, khajuli, anarsa 1702 Other sugars, including chemically pure lactose, maltose, glucose and fructose, in solid form; sugar syrups not containing added flavouring or colouring matter; caramel",

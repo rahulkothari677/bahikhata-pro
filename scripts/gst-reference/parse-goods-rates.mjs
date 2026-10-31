@@ -86,7 +86,10 @@ function splitCodesAndExclusions(text) {
   // codes OUTSIDE any bracket
   const outside = head.replace(/[[(][^\])]*[\])]/g, ' ')
   const codes = []
-  for (const part of outside.split(/,|\bor\b|\band\b/i)) {
+  // No \b around "or": the source prints "1701 or1702" (packed jaggery), and a word
+  // boundary between "r" and "1" does not exist — the whole row was silently skipped
+  // (found in 8b). The head holds only digits, spaces and separators, so plain "or" is safe.
+  for (const part of outside.split(/,|or|and/i)) {
     const d = part.replace(/\s+/g, '')
     if (/^\d{2,8}$/.test(d)) codes.push(d)
   }
@@ -272,7 +275,7 @@ if (mismatches.length) {
   for (const m of mismatches.slice(0, 8)) console.error('  ', JSON.stringify(m))
 }
 console.log(`rate cells skipped: ${skipped.length}`)
-for (const k of skipped.slice(0, 10)) console.log('   skip:', JSON.stringify(k))
+for (const k of skipped.slice(0, 40)) console.log('   skip:', JSON.stringify(k))
 const rates = [...new Set(rows.map(r => r.gstRate))].sort((a, b) => a - b)
 console.log(`chapter-like fragments dropped (#120): ${droppedFragments}`)
 console.log(`rules parsed : ${rows.length}`)

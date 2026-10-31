@@ -26,7 +26,14 @@
  * codes would offer only "exempt" to a shop selling haldi powder at 5%. And
  * namkeen: 210690 also holds pan masala (21069020), whose 1 Feb 2026 change
  * makes the lookup refuse the whole sub-heading. A one-sided suggestion is a
- * wrong one.
+ * wrong one. Water and broom: their rows (loose water vs sealed; twig brooms vs
+ * broomsticks vs brushes) cannot be told apart by labels a shopkeeper reads.
+ *
+ * THE LIVE CHECK (31 Oct) found the first statute words too loose: "sugar"
+ * matched "Khandsari Sugar" in the exempt row and offered refined cheeni "No GST
+ * sold loose"; "tea" offered the green-leaf exemption. So each phrase now pins
+ * the row a shop sells, bracketed exclusions never count (rowNames), and the
+ * test pins every word's exact buttons.
  */
 import { shopWordsIn } from './item-search'
 import { lookupHsn, normaliseHsn } from './hsn-rate-lookup'
@@ -42,7 +49,7 @@ export interface ShopWordHsn {
 
 export const HSN_BY_SHOP_WORD: readonly ShopWordHsn[] = [
   // staples
-  { word: 'sugar', hsn: '1701', statute: 'sugar' },
+  { word: 'sugar', hsn: '1701', statute: 'refined sugar' }, // not the exempt khandsari row
   { word: 'jaggery', hsn: '1701', statute: 'jaggery' },
   { word: 'salt', hsn: '2501', statute: 'salt' },
   { word: 'atta', hsn: '1101', statute: 'wheat' },
@@ -54,7 +61,7 @@ export const HSN_BY_SHOP_WORD: readonly ShopWordHsn[] = [
   { word: 'urad', hsn: '0713', statute: 'leguminous' },
   { word: 'masoor', hsn: '0713', statute: 'leguminous' },
   { word: 'besan', hsn: '1106', statute: 'pulses' },
-  { word: 'suji', hsn: '1103', statute: 'suji' },
+  { word: 'suji', hsn: '1103', statute: 'cereal groats' }, // both rows; only the packed one says "suji"
   { word: 'poha', hsn: '1904', statute: 'flattened' },
   { word: 'murmura', hsn: '1904', statute: 'puffed rice' },
   { word: 'mustard', hsn: '1514', statute: 'mustard oil' },
@@ -79,14 +86,13 @@ export const HSN_BY_SHOP_WORD: readonly ShopWordHsn[] = [
   { word: 'cinnamon', hsn: '0906', statute: 'cinnamon' },
   { word: 'clove', hsn: '0907', statute: 'cloves' },
   // drinks and snacks
-  { word: 'tea', hsn: '0902', statute: 'tea' },
-  { word: 'coffee', hsn: '0901', statute: 'coffee' },
-  { word: 'water', hsn: '2201', statute: 'water' },
+  { word: 'tea', hsn: '0902', statute: 'whether or not flavoured' }, // made tea; green leaves are not a shop item
+  { word: 'coffee', hsn: '0901', statute: 'coffee roasted' },
   { word: 'biscuit', hsn: '1905', statute: 'biscuits' },
-  { word: 'almond', hsn: '0802', statute: 'almonds' },
+  { word: 'almond', hsn: '0802', statute: 'nuts, dried' }, // dry fruit; fresh nuts are another row
   { word: 'cashew', hsn: '0801', statute: 'cashew' },
   { word: 'raisin', hsn: '0806', statute: 'raisins' },
-  { word: 'walnut', hsn: '0802', statute: 'walnuts' },
+  { word: 'walnut', hsn: '0802', statute: 'nuts, dried' },
   { word: 'peanut', hsn: '1202', statute: 'ground nuts' },
   { word: 'isabgol', hsn: '12119013', statute: 'psyllium' },
   // household
@@ -95,7 +101,6 @@ export const HSN_BY_SHOP_WORD: readonly ShopWordHsn[] = [
   { word: 'matchbox', hsn: '3605', statute: 'all goods' }, // heading 3605 is Matches; its row reads "All goods"
   { word: 'incense', hsn: '33074100', statute: 'agarbatti' },
   { word: 'candle', hsn: '3406', statute: 'candles' },
-  { word: 'broom', hsn: '9603', statute: 'broom' },
   { word: 'polythene', hsn: '3923', statute: 'plastics' },
   { word: 'battery', hsn: '8506', statute: 'batteries' },
   { word: 'bulb', hsn: '8539', statute: 'lamps' },
@@ -125,60 +130,76 @@ function shortName(description: string): string {
 }
 
 /**
+ * Does this row NAME the thing? Words inside a bracketed exclusion do not count:
+ * the sugar row says "[other than jaggery …, khandsari sugar]" and the corn-flakes
+ * row "(other than puffed rice … flattened rice)" — matching there offered jaggery
+ * the sugar row's rate and poha a corn-flakes button (found on the live check, 8b).
+ */
+export function rowNames(description: string, statute: string): boolean {
+  const own = description.replace(/[[(]\s*other than[^\])]*[\])]/gi, ' ')
+  return squash(own).includes(squash(statute))
+}
+
+/** A statute row before it becomes a button: its rate, treatment and the questions it turns on. */
+interface Row { gstRate: number; treatment: 'taxable' | 'exempt'; asked: string[]; description: string; source: string }
+
+/**
  * Every choice the two tables allow for this code on this date, most specific
  * rows only — a chapter-wide row (#120, #334) is a question the form asks on
  * its own, never a button here. `statute`, when given, keeps the rows that name
  * the thing (bread, not biscuits, under 1905); if none do, all rows stay.
+ * Rows are chosen FIRST and labelled after, so a label describes what is offered.
  */
 export function hsnChoices(input: string, asOn: Date = new Date(), statute?: string): HsnChoice[] {
   const hsn = normaliseHsn(input)
   if (hsn.length < 4) return []
-  const out: HsnChoice[] = []
+  const rows: Row[] = []
 
   const ex = lookupExemption(hsn, asOn)
   if (ex.outcome !== 'not-listed' && (ex.matchedOn?.length ?? 0) > 2) {
     const added = exemptAdditionFor(hsn, asOn)
-    const exSource = added
+    const source = added
       ? `${added.notification} · from ${onDate(added.effectiveFrom)}`
       : `${EXEMPT_TABLE_INFO.notification} · from ${onDate('2025-09-22')}`
     for (const rule of ex.rules) {
-      const asked = rule.conditions.filter((c) => CONDITION_QUESTION[c])
-      out.push({
-        // Several exempt rows (1905: pappad; bread) are told apart by their own names.
-        label: asked.length ? asked.map((c) => CONDITION_QUESTION[c].exemptLabel).join(' · ') : ex.rules.length > 1 ? shortName(rule.description) : 'No GST',
-        gstRate: 0,
-        treatment: 'exempt',
-        answers: Object.fromEntries(asked.map((c) => [c, 'exempt' as const])),
-        description: rule.description,
-        source: exSource,
-      })
+      rows.push({ gstRate: 0, treatment: 'exempt', asked: rule.conditions.filter((c) => CONDITION_QUESTION[c]), description: rule.description, source })
     }
   }
-
   const rate = lookupHsn(hsn, asOn)
   if (rate.rules.length && (rate.matchedOn?.length ?? 0) > 2 && rate.outcome !== 'unknown') {
-    const rateSource = `${rate.source.notification} · from ${onDate(rate.source.ratesAsOn)}`
-    const several = new Set(rate.rules.map((r) => r.gstRate)).size > 1
-    // The packed side of a loose-or-packed pair is named by the same question's other answer.
-    const packedTwin = out.some((c) => c.answers['pre-packaged-and-labelled'])
-    for (const rule of rate.rules) {
-      // Read from the words, not only the flag: the source wraps "labell ed" (1101) and the parser's flag misses it.
-      const packed = packedTwin && (rule.conditions.includes('pre-packaged-and-labelled') || squash(rule.description).includes('prepackagedandlabel'))
-      out.push({
-        label: packed ? CONDITION_QUESTION['pre-packaged-and-labelled'].taxableLabel : several ? shortName(rule.description) : 'Taxable',
-        gstRate: rule.gstRate,
-        treatment: 'taxable',
-        answers: {},
-        description: rule.description,
-        source: rateSource,
-      })
-    }
+    const source = `${rate.source.notification} · from ${onDate(rate.source.ratesAsOn)}`
+    for (const rule of rate.rules) rows.push({ gstRate: rule.gstRate, treatment: 'taxable', asked: [], description: rule.description, source })
   }
 
-  const named = statute ? out.filter((c) => squash(c.description).includes(squash(statute))) : out
-  const kept = named.length ? named : out
+  const named = statute ? rows.filter((r) => rowNames(r.description, statute)) : rows
+  const kept = named.length ? named : rows
+
+  const exempt = kept.filter((r) => r.treatment === 'exempt')
+  const taxable = kept.filter((r) => r.treatment === 'taxable')
+  // The question a loose/packed (or seed/food) pair turns on. "Has an exclusion" is
+  // asked and answered, but it names nothing a shopkeeper would tap for.
+  const shown = (r: Row) => r.asked.filter((c) => c !== 'has-exclusion')
+  const pairQuestion = exempt.length === 1 && taxable.length === 1 && shown(exempt[0]).length === 1 ? shown(exempt[0])[0] : null
+
+  const label = (r: Row): string => {
+    if (r.treatment === 'exempt') {
+      if (shown(r).length) return shown(r).map((c) => CONDITION_QUESTION[c].exemptLabel).join(' · ')
+      return exempt.length > 1 ? shortName(r.description) : 'No GST'
+    }
+    if (pairQuestion) return CONDITION_QUESTION[pairQuestion].taxableLabel
+    return new Set(taxable.map((t) => t.gstRate)).size > 1 || taxable.length > 1 ? shortName(r.description) : 'Taxable'
+  }
+
+  const out: HsnChoice[] = kept.map((r) => ({
+    label: label(r),
+    gstRate: r.gstRate,
+    treatment: r.treatment,
+    answers: Object.fromEntries(r.asked.map((c) => [c, 'exempt' as const])),
+    description: r.description,
+    source: r.source,
+  }))
   // One button per distinct outcome: two rows at the same rate and label are one choice.
-  return kept.filter((c, i) => kept.findIndex((d) => d.gstRate === c.gstRate && d.treatment === c.treatment && d.label === c.label) === i)
+  return out.filter((c, i) => out.findIndex((d) => d.gstRate === c.gstRate && d.treatment === c.treatment && d.label === c.label) === i)
 }
 
 export interface HsnSuggestion {
