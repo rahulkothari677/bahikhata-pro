@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PartyPageSkeleton } from '@/components/common/Skeletons'
+import { PartyHistory } from '@/components/parties/PartyHistory'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -47,8 +48,6 @@ export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features, setSelectedTransactionId, pendingSettle, setPendingSettle } = useAppStore()
   const queryClient = useQueryClient()
   const { t } = useTranslation()
-  // 5e-6: the bahi shows 60 lines, then "Show 60 more" — the lists' rule (a khata can hold 500 lines).
-  const [bahiShown, setBahiShown] = useState(60)
   const [sendingReminder, setSendingReminder] = useState(false)
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   // 🔒 FIX H3: Payment dialog state
@@ -776,6 +775,13 @@ export function PartyProfile() {
     : balancePaise > 0 ? t(party.type === 'supplier' ? 'bahi.owe_back' : 'stat.they_owe')
     : t(party.type === 'customer' ? 'bahi.advance' : 'stat.you_owe')
   const balanceTone = balanceZero ? 'text-muted-foreground' : balancePaise > 0 ? 'text-good' : party.type === 'customer' ? 'text-check' : 'text-bad'
+  // #327: the figures strip — the four cards' values and their show rules (V26 PB-7), in one place.
+  const figures: { label: string; value: string; sub?: string }[] = [
+    ...((party.type !== 'supplier' || stats.salesCount > 0) ? [{ label: 'Total Sales', value: formatINR(stats.totalSales), sub: `${stats.salesCount} sales` }] : []),
+    ...((party.type !== 'customer' || stats.purchasesCount > 0) ? [{ label: 'Total Purchases', value: formatINR(stats.totalPurchases), sub: `${stats.purchasesCount} purchases` }] : []),
+    ...((party.type !== 'supplier' || stats.salesCount > 0 || stats.paymentsReceived > 0) ? [{ label: 'Received', value: formatINR(stats.totalReceived + stats.paymentsReceived), sub: stats.paymentsReceived > 0 ? `${formatINR(stats.paymentsReceived)} via Settle` : undefined }] : []),
+    ...((party.type !== 'customer' || stats.purchasesCount > 0 || stats.paymentsPaid > 0) ? [{ label: 'Paid', value: formatINR(stats.totalPaid + stats.paymentsPaid), sub: stats.paymentsPaid > 0 ? `${formatINR(stats.paymentsPaid)} via Settle` : undefined }] : []),
+  ]
   const balWords = (b: number) => {
     const pz = Math.round((b ?? 0) * 100)
     return pz === 0 ? t('khata.chip.customer.settled') : t(pz > 0 ? 'bahi.bal_they' : 'bahi.bal_you').replace('{v}', formatINR(Math.abs(b)))
@@ -846,75 +852,28 @@ export function PartyProfile() {
         </div>
       </section>
 
-      {/* The bahi: newest first, a day at a time, one ruled line per bill or payment, the balance after it. */}
-      <section aria-labelledby="bahi-title" className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
-        <div className="flex items-center justify-between px-4 pt-4 pb-1">
-          <h3 id="bahi-title" className="text-base font-semibold">{t('bahi.title')}</h3>
-          <span className="text-xs text-muted-foreground">{t('bahi.entries').replace('{n}', String(statement.length))}</span>
-        </div>
-        {/* 🔒 V15 M-2 / V16 M3: the statement holds the latest {cap} bills and payments; the balance after each
-            line covers only the lines shown. Said plainly, the reason behind ⓘ. */}
-        {statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap) && (
-          <Notice level="note" className="mx-4 my-2" title={t('bahi.truncated').replace('{n}', String(statementTotals.cap))} info={t('bahi.truncated_info')} />
-        )}
-        {statement.length === 0 ? (
-          <p className="px-4 pt-2 pb-5 text-sm text-muted-foreground">{t('bahi.empty')}</p>
-        ) : (
-          <ol className="pb-1">
-            {statement.slice(0, bahiShown).map((entry: any, index: number) => {
-              const prev = statement[index - 1]
-              const newDay = !prev || new Date(prev.date).toDateString() !== new Date(entry.date).toDateString()
-              const kind = entry.isPayment
-                ? (entry.type === 'payment-received' ? 'got' : 'gave')
-                : ({ sale: 'sale', purchase: 'purchase', 'credit-note': 'return_in', 'debit-note': 'return_out' } as Record<string, string>)[entry.type] ?? null
-              // Money that came IN to the shop reads green; everything else is plain — the words say what it was.
-              const moneyIn = kind === 'got' || kind === 'return_out'
-              // The payment mode in the words Insights uses for it (one vocabulary); a mode it has no word for stays as stored.
-              const mode = entry.paymentMode && ['cash', 'upi', 'card', 'bank', 'other'].includes(entry.paymentMode) ? t(`ins.mode.${entry.paymentMode}`) : entry.paymentMode
-              const sub = entry.isPayment
-                ? [mode, entry.notes].filter(Boolean).join(' · ')
-                // "paid" says why a bill left the balance where it was; "₹X due" is what it added.
-                // #288: one item is "1 item" (the singular Items uses), not "1 items".
-                : [entry.invoiceNo, (entry.itemCount === 1 ? t('items.count_1') : t('bahi.items_n')).replace('{n}', String(entry.itemCount ?? 0)), entry.due > 0 ? t('bahi.due').replace('{v}', formatINR(entry.due)) : t('bahi.paid')].filter(Boolean).join(' · ')
-              const body = (
-                <>
-                  <span className="min-w-0 flex-1 text-left">
-                    <span className="block text-sm font-semibold">{kind ? t(`bahi.${kind}`) : entry.type}</span>
-                    {sub && <span className="block text-xs text-muted-foreground truncate">{sub}</span>}
-                  </span>
-                  <span className="text-right shrink-0">
-                    <span className={cn('block text-sm font-bold tabular-nums', moneyIn && 'text-good')}>{formatINR(entry.amount)}</span>
-                    <span className="block text-xs text-muted-foreground tabular-nums">{balWords(entry.runningBalance)}</span>
-                  </span>
-                </>
-              )
-              return (
-                <Fragment key={`${entry.isPayment ? 'pay' : 'txn'}-${entry.id}`}>
-                  {newDay && <li className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground">{formatDate(entry.date)}</li>}
-                  <li className="border-t border-border/60">
-                    {entry.isPayment ? (
-                      <div className="flex items-center gap-3 px-4 py-2.5">{body}</div>
-                    ) : (
-                      <button type="button" onClick={() => handleViewTransaction(entry.id)} className="w-full min-h-12 flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40">{body}</button>
-                    )}
-                  </li>
-                </Fragment>
-              )
-            })}
-          </ol>
-        )}
-        {statement.length > bahiShown && (
-          <div className="px-4 pb-4">
-            <button
-              type="button"
-              onClick={() => setBahiShown((n) => n + 60)}
-              className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted"
-            >
-              {t('khata.more').replace('{n}', String(Math.min(60, statement.length - bahiShown))).replace('{m}', String(statement.length))}
-            </button>
+      {/* #327 (31 Oct): the figures in one strip, then the history — before, up to 60 entry lines came first
+          and the figures were four tall cards at the bottom. Same cards, same rule for which show (PB-7). */}
+      <div className={cn('grid rounded-2xl bg-card border border-border/60 shadow-card divide-x divide-border/60', figures.length >= 4 ? 'grid-cols-2 sm:grid-cols-4' : figures.length === 3 ? 'grid-cols-3' : 'grid-cols-2')} data-party-figures>
+        {figures.map((f) => (
+          <div key={f.label} className="p-3 min-w-0">
+            <span className="block text-xs text-muted-foreground">{f.label}</span>
+            <span className="block text-base font-bold tabular-nums break-words">{f.value}</span>
+            {f.sub && <span className="block text-xs text-muted-foreground">{f.sub}</span>}
           </div>
-        )}
-      </section>
+        ))}
+      </div>
+
+      {/* #328: the history in his June chat view (or the ledger lines), 30 at a time, with search and filters. */}
+      <PartyHistory
+        entries={statement as any}
+        t={t}
+        balWords={balWords}
+        onOpenBill={handleViewTransaction}
+        notice={statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap)
+          ? <Notice level="note" title={t('bahi.truncated').replace('{n}', String(statementTotals.cap))} info={t('bahi.truncated_info')} />
+          : null}
+      />
 
       {/* The smaller things, one row: bills, payment link, print and share the statement. */}
       <div className="flex flex-wrap gap-2">
@@ -1017,60 +976,6 @@ export function PartyProfile() {
             <MessageCircle className="w-4 h-4" />
             Send PDF
           </Button>
-      </div>
-
-      {/* Stats grid — 🔒 V26 Phase 8 PB-7: Hide irrelevant cards by party type.
-          Was: all 4 cards always rendered → a customer showing "Total Purchases ₹0 / Paid ₹0"
-          reads as broken. Now: show sales-side cards for customers, purchase-side for
-          suppliers, all for 'both'. Also show if there's actual data regardless of type. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Sales-side cards: show for customers, 'both', or if sales data exists */}
-        {(party.type !== 'supplier' || stats.salesCount > 0) && (
-        <StatCard
-          label="Total Sales"
-          value={formatINR(stats.totalSales)}
-          icon={ShoppingCart}
-          color="text-emerald-600 dark:text-emerald-400"
-          bg="bg-emerald-100"
-          sub={`${stats.salesCount} sales`}
-        />
-        )}
-        {/* Purchase-side cards: show for suppliers, 'both', or if purchase data exists */}
-        {(party.type !== 'customer' || stats.purchasesCount > 0) && (
-        <StatCard
-          label="Total Purchases"
-          value={formatINR(stats.totalPurchases)}
-          icon={Truck}
-          color="text-amber-600 dark:text-amber-400"
-          bg="bg-amber-100"
-          sub={`${stats.purchasesCount} purchases`}
-        />
-        )}
-        {/* Received card: show when there are sales or received payments */}
-        {(party.type !== 'supplier' || stats.salesCount > 0 || stats.paymentsReceived > 0) && (
-        <StatCard
-          label="Received"
-          // 🔒 V26 Phase 8 PB-2: Include standalone settle payments (was: only invoice paidAmount).
-          // The "Received" card was understating real money by omitting all settle payments.
-          value={formatINR(stats.totalReceived + stats.paymentsReceived)}
-          icon={ArrowDownRight}
-          color="text-violet-600"
-          bg="bg-violet-100"
-          sub={stats.paymentsReceived > 0 ? `${formatINR(stats.paymentsReceived)} via Settle` : undefined}
-        />
-        )}
-        {/* Paid card: show when there are purchases or paid payments */}
-        {(party.type !== 'customer' || stats.purchasesCount > 0 || stats.paymentsPaid > 0) && (
-        <StatCard
-          label="Paid"
-          // 🔒 V26 Phase 8 PB-2: Same fix — include standalone settle payments.
-          value={formatINR(stats.totalPaid + stats.paymentsPaid)}
-          icon={ArrowUpRight}
-          color="text-rose-600"
-          bg="bg-rose-100"
-          sub={stats.paymentsPaid > 0 ? `${formatINR(stats.paymentsPaid)} via Settle` : undefined}
-        />
-        )}
       </div>
 
       {/* 🔒 C2c: what this shop calls them. Only rendered when the app has

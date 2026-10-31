@@ -39,27 +39,33 @@ describe('Khata', () => {
     expect(screen).toMatch(/data\?\.counter && \(/)
     expect(screen).toMatch(/handleViewParty\(data\.counter\.id\)/)
   })
-  test('5e-6: a customer\'s page is a bahi page — the balance in words, the main actions, then the bahi as ruled rows', () => {
+  test('5e-6 → #327/#328 (31 Oct): balance in words, the main actions, the figures, then the history — chat or ledger, 30 at a time, findable', () => {
     const page = readCode('src/components/parties/PartyProfile.tsx')
+    const history = readCode('src/components/parties/PartyHistory.tsx')
     const at = (s: string) => { const i = page.indexOf(s); expect({ s, found: i >= 0 }).toEqual({ s, found: true }); return i }
-    // The order: balance → actions → the bahi → the smaller things → figures and chart → leave / delete.
+    // The order: balance → actions → figures → history → the smaller things → leave / delete.
     expect(at('{balanceWords}')).toBeLessThan(at('{settleLabel}'))
-    expect(at('{settleLabel}')).toBeLessThan(at('id="bahi-title"'))
-    expect(at('id="bahi-title"')).toBeLessThan(at('<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">'))
-    expect(at("onClick={() => setView('parties')}")).toBeGreaterThan(at('id="bahi-title"'))
-    // No chat bubbles, no box that scrolls inside the page, no bare + / − on a balance.
-    expect(page).not.toMatch(/max-h-\[500px\] overflow-y-auto/)
-    expect(page).not.toMatch(/rounded-br-md|rounded-bl-md/)
-    expect(page).not.toMatch(/Bal: \{entry\.runningBalance >= 0 \? '\+' : ''\}/)
-    expect(page).toMatch(/\{balWords\(entry\.runningBalance\)\}/)
-    // 60 lines, then "Show 60 more" — the lists' rule, not a page 500 lines long.
-    expect(page).toMatch(/statement\.slice\(0, bahiShown\)\.map/)
-    expect(page).toMatch(/setBahiShown\(\(n\) => n \+ 60\)/)
+    expect(at('{settleLabel}')).toBeLessThan(at('data-party-figures'))
+    expect(at('data-party-figures')).toBeLessThan(at('<PartyHistory'))
+    expect(at("onClick={() => setView('parties')}")).toBeGreaterThan(at('<PartyHistory'))
+    // The four tall figure cards are one strip now.
+    expect(page).not.toMatch(/<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">/)
+    // Rahul's June chat view is back (5e-6 removed it without asking), beside the ledger lines.
+    expect(history).toMatch(/data-history-view="chat"/)
+    expect(history).toMatch(/data-history-view="ledger"/)
+    // No box that scrolls inside the page; no bare + / − on a balance — the balance after each entry in words.
+    expect(history).not.toMatch(/max-h-\[500px\] overflow-y-auto/)
+    expect(history).not.toMatch(/Bal: \{/)
+    expect(history).toMatch(/balWords\(e\.runningBalance\)/)
+    // 30 at a time, then "Show older" — never hundreds of lines before anything else; a search and filters.
+    expect(history).toMatch(/rows\.slice\(0, shown\)/)
+    expect(history).toMatch(/setShown\(\(n\) => n \+ HISTORY_PAGE\)/)
+    expect(history).toMatch(/id="field-history-search"/)
     // Who owes whom from the party's type (#261), in words.
     expect(page).toMatch(/t\(party\.type === 'supplier' \? 'bahi\.owe_back' : 'stat\.they_owe'\)/)
     expect(page).toMatch(/t\(party\.type === 'customer' \? 'bahi\.advance' : 'stat\.you_owe'\)/)
     // The cap warning is a Notice with the reason behind ⓘ, not a hand-drawn amber box.
-    expect(page).toMatch(/<Notice level="note"[^>]*title=\{t\('bahi\.truncated'\)/)
+    expect(page).toMatch(/<Notice level="note" title=\{t\('bahi\.truncated'\)/)
     expect(page).not.toMatch(/border-amber-300 bg-amber-50/)
   })
   test('#269: the toolbar has one padding, and a phone gets the cards with no toggle row (as Items)', () => {

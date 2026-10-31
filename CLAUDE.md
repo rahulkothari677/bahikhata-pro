@@ -283,6 +283,10 @@ save.
   `python -I - 2>/dev/null;` before a `sed` — python sat reading stdin and
   the shell hung five minutes; nothing ran. Read the whole command line
   before sending it; an import change is an Edit, not a `sed`.
+  **29 Oct (7h-8): an inline `python -I -c "..."` holding Windows paths
+  with backslashes** (a break-test step) — the exact shape this rule bans;
+  it failed to parse and changed nothing. Inline `-c` scripts count as
+  heredocs here: anything with a backslash or a path goes in a file.
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck
@@ -505,6 +509,19 @@ cause**, never as a new line at the bottom.
   "build plan" as if it had been agreed.** A screen designed inside a shape he
   rejected is re-designed for the new shape, not carried over. (Now SUPER
   RULES S1–S3.)
+
+· **31 Oct (Rahul caught both): I removed a design he had, and I slowed the
+  app he uses every day.** (1) Phase 5e-6 (20 Oct) replaced the customer page's
+  WhatsApp-style history (his June design, "UI: WhatsApp-style party chat view")
+  with ledger lines; the plan asked for "a statement on each customer's page",
+  never for the chat view to go, and I did not ask. It also put 60 entry lines
+  above everything else with no way to find one. (2) 7h-8 (29 Oct) downloaded
+  every screen's code (~3.7 MB) after each release; on his phone's mobile data
+  Khata then took ~2 minutes. I measured only on my fast connection. **Rules:**
+  a change that removes or replaces something on a screen he uses names it in
+  the plan check and waits for his OK (S1, again); any change to what the app
+  downloads or when is measured as a phone on mobile data would feel it
+  (bytes added per release, what queues ahead of a tap) before it ships.
 
 **Cause 2 — Two things describing one thing**
 · Parties filtered in one route, not another · Settle's allowlist lacked 'ask'
