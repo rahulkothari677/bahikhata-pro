@@ -7,10 +7,9 @@
  * screen not yet opened showed a full page "App update available — Reload". The
  * auto-reload listened on window 'error' / 'unhandledrejection', but React catches
  * a failed screen import itself, so neither ever fired.
- *  1. Every screen's code is fetched once the app is idle (one loader per screen,
- *     used by dynamic() and the prefetch list), unless the phone saves data.
- *  2. Should a screen still be missing, the error page reloads once by itself
- *     (one shared rule with the listeners, guarded against loops).
+ *  The error page reloads once by itself for a missing screen (one shared rule with
+ *  the listeners, guarded against loops). An idle download of every screen (7h-8)
+ *  was removed on 31 Oct: on a phone's mobile data it slowed every screen.
  */
 import { isChunkLoadError, reloadOnceForNewVersion } from '@/lib/crash-tracker'
 import { readCode } from '@/test-support/read-source'
@@ -37,22 +36,16 @@ describe('reload once, never loop', () => {
 describe('the app uses it', () => {
   const page = readCode('app/page.tsx')
   const errorPage = readCode('app/error.tsx')
-  it('every dynamic screen has one named loader, and every loader is prefetched', () => {
-    const screens = Array.from(page.matchAll(/const (\w+) = dynamic\((\w+),/g))
-    expect(screens.length).toBeGreaterThanOrEqual(15)
-    const list = page.match(/const SCREEN_LOADERS = \[([^\]]*)\]/)
-    expect(list).not.toBeNull()
-    const listed = list![1].split(',').map((x) => x.trim())
-    for (const [, name, loader] of screens) {
-      expect(loader).toBe(`load${name}`)
-      expect(listed).toContain(loader)
-    }
-    expect(page).not.toMatch(/= dynamic\(\(\) => import\(/)
+  it('a release never makes the phone download every screen (31 Oct: Khata took ~2 min on mobile data)', () => {
+    // 7h-8 fetched all screens' code (~3.7 MB) when idle, after every release; on a phone it queued
+    // ahead of the screen tapped. Screens load when opened; a missing one reloads once (below).
+    expect(page).not.toMatch(/SCREEN_LOADERS/)
+    expect(page).not.toMatch(/requestIdleCallback/)
+    expect(page).not.toMatch(/for \(const load of /)
   })
-  it('the prefetch waits for idle and respects data saving', () => {
-    expect(page).toMatch(/connection\?\.saveData\) return/)
-    expect(page).toMatch(/for \(const load of SCREEN_LOADERS\) load\(\)\.catch/)
-    expect(page).toMatch(/requestIdleCallback/)
+  it('every screen still has its loading outline', () => {
+    const screens = Array.from(page.matchAll(/const (\w+) = dynamic\(/g))
+    expect(screens.length).toBeGreaterThanOrEqual(15)
   })
   it('the error page reloads once by itself for a missing screen', () => {
     expect(errorPage).toContain('const isChunkError = isChunkLoadError(error)')

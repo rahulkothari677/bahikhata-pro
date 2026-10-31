@@ -95,14 +95,6 @@ const AIUsage = dynamic(loadAIUsage, { ssr: false, loading: screenLoading })
 // 🔒 V22-14 (Batch D, Phase 7g): Document Vault
 const loadDocumentVault = () => import('@/components/documents/DocumentVault').then(m => ({ default: m.DocumentVault }))
 const DocumentVault = dynamic(loadDocumentVault, { ssr: false, loading: screenLoading })
-/**
- * #305 (Phase 7h): after a release the old version's screen code is gone, so the first
- * tap on a screen not yet opened failed ("App update available") — mid-bill on a counter.
- * Every screen's code is fetched once the app is idle, so an open session already holds
- * all of it. Skipped when the phone asks to save data. One loader per screen, used by
- * dynamic() and by this list alike.
- */
-const SCREEN_LOADERS = [loadInventory, loadLedger, loadLedgerSplitView, loadIncomeExpense, loadParties, loadTransactionDetail, loadTransactionEntry, loadPartyProfile, loadPartyBills, loadPartySettle, loadBillScanner, loadReports, loadAskChat, loadToolsHub, loadSettings, loadPricingPlans, loadAIComparison, loadAIUsage, loadDocumentVault]
 
 
 export default function Home() {
@@ -339,14 +331,9 @@ export default function Home() {
     registerChunkLoadErrorHandler()
   }, [])
 
-  // #305 (7h): fetch every screen's code once the app is idle (SCREEN_LOADERS above), unless the phone saves data.
-  useEffect(() => {
-    if ((navigator as any).connection?.saveData) return
-    const go = () => { for (const load of SCREEN_LOADERS) load().catch(() => { /* offline: fetched on open instead */ }) }
-    const w = window as any
-    const handle = w.requestIdleCallback ? w.requestIdleCallback(go, { timeout: 8000 }) : window.setTimeout(go, 4000)
-    return () => { if (w.cancelIdleCallback && w.requestIdleCallback) w.cancelIdleCallback(handle); else window.clearTimeout(handle) }
-  }, [])
+  // #305 (7h) once fetched every screen's code when idle; removed 31 Oct: on a phone's mobile data the
+  // ~3.7 MB after each release queued ahead of the screen tapped (Khata took ~2 min). A missing screen
+  // after a release now reloads once by itself instead (app/error.tsx, lib/crash-tracker.ts).
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.id) {
