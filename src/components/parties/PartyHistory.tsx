@@ -253,7 +253,8 @@ export function PartyHistory({ entries, t, balWords, onOpenBill, notice }: {
                           <TypeIcon kind={kind} className={cn('w-4 h-4 shrink-0', gave ? 'text-bad' : 'text-good')} />
                           <span className="truncate">{kind ? label(kind) : e.type}</span>
                         </span>
-                        <span className="block text-xs text-muted-foreground truncate">{[detailOf(e, false), timeOf(e)].filter(Boolean).join(' · ')}</span>
+                        {/* Wraps rather than cuts: at 375 px a cut line hid the entry's time (live, 31 Oct). */}
+                        <span className="block text-xs text-muted-foreground break-words">{[detailOf(e, false), timeOf(e)].filter(Boolean).join(' · ')}</span>
                         <span className="block text-xs text-muted-foreground tabular-nums">{t('bahi.bal')} {balWords(e.runningBalance)}</span>
                       </span>
                       <span className="text-right text-sm tabular-nums text-bad">{gave ? cell(e.amount, true) : cell(paid, false)}</span>

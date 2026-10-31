@@ -162,6 +162,10 @@ describe('the history card', () => {
     render(<PartyHistory entries={[b]} t={t} balWords={() => ''} onOpenBill={() => {}} />)
     const cells = Array.from(document.querySelectorAll('[data-history-view="ledger"] li button > span')).map((n) => n.textContent)
     expect(cells.slice(1)).toEqual(['₹720', '₹88'])
+    // the detail line (bill no., items, time) wraps on a phone, never cut short with "…"
+    const detail = Array.from(document.querySelectorAll('[data-history-view="ledger"] li button span')).find((n) => n.textContent?.startsWith('INV-0001 · 2 items'))
+    expect(detail).toBeTruthy()
+    expect(detail!.className).not.toMatch(/\btruncate\b/)
   })
   it('tapping a bill opens it', () => {
     const open = jest.fn()
