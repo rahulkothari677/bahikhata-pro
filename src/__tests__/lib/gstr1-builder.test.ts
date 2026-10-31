@@ -679,8 +679,12 @@ describe('🔒 V26 N2 — B2C credit notes: B2CS netting + CDNUR filter', () => 
     expect(b2cs[0].samt).toBe(-90)
   })
 
-  test('debit note for unregistered B2CS party INCREASES the aggregate', () => {
-    // A debit note (purchase return equivalent for B2C) adds back to taxable.
+  test('a debit note (a PURCHASE RETURN in EkBook) never touches B2CS', () => {
+    // EXPECTATION CHANGED 31 Oct 2026 (8c). This test said "A debit note
+    // (purchase return equivalent for B2C) adds back to taxable" and expected
+    // 2000 — it named the document a purchase return and then counted it as a
+    // sale. In EkBook 'debit-note' is a return TO a supplier (the supplier's
+    // document); GSTR-1 carries only sales and the credit notes against them.
     const sale: Gstr1Transaction = {
       id: 's3', type: 'sale', invoiceNo: 'INV-DB', date: new Date('2026-07-10'),
       totalAmount: 1180, subtotal: 1000, discountAmount: 0,
@@ -699,8 +703,7 @@ describe('🔒 V26 N2 — B2C credit notes: B2CS netting + CDNUR filter', () => 
     }
     const b2cs = buildB2CS([sale, debitNote], SHOP)
     expect(b2cs).toHaveLength(1)
-    // Sale 1000 + debit 1000 = 2000 (debit note INCREASES outward supply)
-    expect(b2cs[0].txval).toBe(2000)
+    expect(b2cs[0].txval).toBe(1000) // the sale alone
   })
 })
 

@@ -26,66 +26,128 @@
  * return the department has never seen.
  */
 import { roundMoney } from '@/lib/money'
+import { toAmendmentRow, zeroedRow, type DocSection } from '@/lib/gstr1-builder'
 
-/** An invoice or note as a filed return recorded it. */
-export interface FiledInvoice {
-  /*
-   * Notes amend into their own tables (9C): cdnra for notes against a
-   * registered buyer, cdnura for the rest. They are carried here rather than in
-   * a parallel structure because the QUESTION is identical — does this document
-   * still say what we filed? — and only the destination table differs.
-   */
-  section: 'b2b' | 'b2cl' | 'cdnr' | 'cdnur'
-  /** 'C' or 'D' for notes. Absent on invoices. */
-  ntty?: 'C' | 'D'
-  /** Counterparty GSTIN — B2B only. */
-  ctin?: string
-  inum: string
-  idt: string
+export type { DocSection }
+
+/*
+ * ── PHASE 8c (#103 #104 #340), 31 Oct 2026 ─────────────────────────────────
+ *
+ * Three things were wrong with the first version, all fixed here:
+ *
+ *  #340  The rows could not be uploaded. GSTN's Save GSTR1 schema (v4.1/v5.0)
+ *        requires an amended B2B invoice to carry rchrg, inv_typ and its line
+ *        items, and notes to use nt_num/nt_dt/ont_num/ont_dt — and forbids any
+ *        other field. Ours carried none of those and an extra `changes`. Now the
+ *        corrected document is written by the SAME builder as the original
+ *        (documentRow), then re-keyed by toAmendmentRow.
+ *  #104  It compared against the ORIGINAL filing. An invoice corrected once and
+ *        edited again must be compared with the LAST version filed — which may
+ *        itself be an amendment — while still naming the original number and
+ *        date, the portal's key for the document. See latestVersions.
+ *  #103  Every correction went into the next return automatically. An edit made
+ *        for an internal reason must never become a filed amendment without the
+ *        shopkeeper's (or CA's) say. Each correction now carries a fingerprint;
+ *        the route includes only those switched on whose fingerprint still
+ *        matches — edit the bill again and the switch turns itself off.
+ */
+
+/** One VERSION of a document as a filed return declared it — the original, or a later amendment. */
+export interface FiledVersion {
+  section: DocSection
+  /** ctin (b2b, cdnr) or pos (b2cl) the version was filed under; '' for cdnur. */
+  group: string
+  /** The FIRST filing's number and date: the portal's key for the document, however often corrected. */
+  original: { num: string; dt: string }
+  /** As this version declared it. */
+  num: string
+  dt: string
   val: number
   pos: string
-  /** Filing period the invoice was declared in (MMYYYY). */
+  /** Filing period of this version (MMYYYY). */
   fp: string
+  /** This version's row exactly as filed — re-declared at nil if the document is cancelled. */
+  row: Record<string, any>
 }
 
-/** The same invoice as the books hold it today. */
-export interface CurrentInvoice {
-  inum: string
-  idt: string
-  val: number
-  pos: string
-  ctin?: string
-  /** Absent means the invoice no longer exists — cancelled after filing. */
+/** Pull every document version a filed return declared — originals AND its amendments — out of its stored JSON. */
+export function filedVersionsFrom(rawJson: unknown, fp: string): FiledVersion[] {
+  const g = rawJson as any
+  if (!g || typeof g !== 'object') return []
+  const out: FiledVersion[] = []
+  const v = (section: DocSection, group: string, num: string, dt: string, original: { num: string; dt: string }, row: any, pos: string) =>
+    out.push({ section, group, original, num: String(num), dt: String(dt), val: Number(row.val) || 0, pos: String(pos ?? ''), fp, row })
+
+  for (const p of g.b2b || []) for (const r of p.inv || []) v('b2b', p.ctin, r.inum, r.idt, { num: String(r.inum), dt: r.idt }, r, r.pos)
+  for (const p of g.b2cl || []) for (const r of p.inv || []) v('b2cl', p.pos, r.inum, r.idt, { num: String(r.inum), dt: r.idt }, r, p.pos)
+  for (const p of g.cdnr || []) for (const r of p.nt || []) v('cdnr', p.ctin, r.nt_num, r.nt_dt, { num: String(r.nt_num), dt: r.nt_dt }, r, r.pos)
+  for (const r of g.cdnur || []) v('cdnur', '', r.nt_num, r.nt_dt, { num: String(r.nt_num), dt: r.nt_dt }, r, r.pos)
+
+  // Amended versions. Before 8c notes were stored with invoice keys (inum/oinum), so both are read.
+  for (const p of g.b2ba || []) for (const r of p.inv || []) v('b2b', p.ctin, r.inum, r.idt, { num: String(r.oinum), dt: r.oidt }, r, r.pos)
+  for (const p of g.b2cla || []) for (const r of p.inv || []) v('b2cl', p.pos, r.inum, r.idt, { num: String(r.oinum), dt: r.oidt }, r, p.pos)
+  for (const p of g.cdnra || []) for (const r of p.nt || []) {
+    v('cdnr', p.ctin, r.nt_num ?? r.inum, r.nt_dt ?? r.idt, { num: String(r.ont_num ?? r.oinum), dt: r.ont_dt ?? r.oidt }, r, r.pos)
+  }
+  for (const r of g.cdnura || []) {
+    v('cdnur', '', r.nt_num ?? r.inum, r.nt_dt ?? r.idt, { num: String(r.ont_num ?? r.oinum), dt: r.ont_dt ?? r.oidt }, r, r.pos)
+  }
+  return out
+}
+
+const keyOf = (section: DocSection, originalNum: string) => `${section}:${originalNum}`
+/** MMYYYY → YYYYMM, so periods sort as numbers. */
+const order = (fp: string) => Number(fp.slice(2) + fp.slice(0, 2))
+
+/** A document's latest filed version (#104), and the period it was FIRST filed in (which sets its deadline). */
+export interface LatestVersion extends FiledVersion {
+  key: string
+  firstFp: string
+}
+
+/**
+ * #104: the version to compare against is the LAST one filed. Every version of
+ * one document shares its section and original number; the latest period wins.
+ */
+export function latestVersions(versions: FiledVersion[]): LatestVersion[] {
+  const byKey = new Map<string, LatestVersion>()
+  for (const ver of versions) {
+    const key = keyOf(ver.section, ver.original.num)
+    const seen = byKey.get(key)
+    const firstFp = seen && order(seen.firstFp) < order(ver.fp) ? seen.firstFp : ver.fp
+    if (!seen || order(ver.fp) >= order(seen.fp)) byKey.set(key, { ...ver, key, firstFp })
+    else seen.firstFp = firstFp
+  }
+  return [...byKey.values()]
+}
+
+/** The same document as the books hold it today. */
+export interface CurrentDoc {
+  /** false: cancelled (deleted) after it was filed. */
   exists: boolean
+  /** Where it lands today, from documentRow; null when it is no longer a GSTR-1 document of its own. */
+  placed: { section: DocSection; group: string; row: Record<string, any> } | null
 }
 
-export interface AmendedInvoice {
-  /** Original invoice number, as filed. The portal matches on this. */
-  oinum: string
-  /** Original invoice date, as filed. */
-  oidt: string
-  inum: string
-  idt: string
-  val: number
-  pos: string
-  /** What actually changed, for the shopkeeper and their CA to read. */
+/** One correction to a filed document, ready for the shopkeeper to switch on (#103). */
+export interface Correction {
+  key: string
+  section: DocSection
+  /** The ctin / pos it was filed under — where the portal looks for it. */
+  group: string
+  original: { num: string; dt: string }
+  firstFp: string
+  /** The filed version this corrects (#104). */
+  lastFp: string
+  filedVal: number
+  nowVal: number
+  /** What changed, in words — for the screen only, never in the file. */
   changes: string[]
-}
-
-export interface AmendmentTables {
-  /** Table 9A — amended B2B invoices, grouped by counterparty GSTIN. */
-  b2ba: Array<{ ctin: string; inv: AmendedInvoice[] }>
-  /** Table 9A — amended large inter-state B2C invoices, grouped by POS. */
-  b2cla: Array<{ pos: string; inv: AmendedInvoice[] }>
-  /** Table 9C — amended credit/debit notes against a REGISTERED buyer. */
-  cdnra: Array<{ ctin: string; nt: AmendedNote[] }>
-  /** Table 9C — amended notes against an unregistered buyer. */
-  cdnura: AmendedNote[]
-}
-
-export interface AmendedNote extends AmendedInvoice {
-  /** Credit or debit. The portal needs it to know which way the money moved. */
-  ntty: 'C' | 'D'
+  /** The row for the amendment table; null when the app cannot write it (see problem). */
+  row: Record<string, unknown> | null
+  problem: string | null
+  /** Changes whenever the row would change, so a switch set on an older version lapses. */
+  fingerprint: string
 }
 
 /**
@@ -94,85 +156,115 @@ export interface AmendedNote extends AmendedInvoice {
  */
 const MATERIAL = 1
 
+const NAMES: Record<DocSection, string> = {
+  b2b: 'sales to GST customers', b2cl: 'large sales to other states', cdnr: 'notes to GST customers', cdnur: 'notes to other customers',
+}
+
+/** Fields each amendment row must carry (GSTN Save GSTR1 v4.1/v5.0, the rate-row variant). */
+const REQUIRED: Record<DocSection, string[]> = {
+  b2b: ['inum', 'idt', 'oinum', 'oidt', 'val', 'pos', 'rchrg', 'inv_typ', 'itms'],
+  b2cl: ['inum', 'idt', 'oinum', 'oidt', 'val', 'itms'],
+  cdnr: ['nt_num', 'nt_dt', 'ont_num', 'ont_dt', 'ntty', 'pos', 'rchrg', 'inv_typ', 'val', 'itms'],
+  cdnur: ['typ', 'nt_num', 'nt_dt', 'ont_num', 'ont_dt', 'ntty', 'val', 'itms'],
+}
+export function amendmentRowProblems(section: DocSection, row: Record<string, unknown>): string[] {
+  const missing = REQUIRED[section].filter((k) => row[k] === undefined || row[k] === null || row[k] === '')
+  if (!Array.isArray(row.itms) || row.itms.length === 0) missing.push('itms (empty)')
+  return missing
+}
+
 /**
- * Compare what was filed against what the books now say.
+ * Compare each document's LAST filed version with the books as they stand.
  *
- * @param filed   invoices from FILED returns of earlier periods
- * @param current the same invoices as they stand today, keyed by invoice number
+ * @param latest  latestVersions() of every earlier FILED return
+ * @param current the same documents today, keyed by document number
  */
-export function buildAmendments(
-  filed: FiledInvoice[],
-  current: Map<string, CurrentInvoice>,
-): AmendmentTables {
-  const b2ba = new Map<string, AmendedInvoice[]>()
-  const b2cla = new Map<string, AmendedInvoice[]>()
-  const cdnra = new Map<string, AmendedNote[]>()
-  const cdnura: AmendedNote[] = []
+export function buildCorrections(latest: LatestVersion[], current: Map<string, CurrentDoc>): Correction[] {
+  const out: Correction[] = []
+  for (const f of latest) {
+    const now = current.get(f.num) ?? current.get(f.original.num)
+    let changes: string[] = []
+    let row: Record<string, unknown> | null = null
+    let problem: string | null = null
+    let nowVal = 0
 
-  /*
-   * One document, one destination. A note never lands in an invoice table and
-   * an invoice never lands in a note table, so the routing is written once
-   * rather than repeated at each emit site.
-   */
-  const route = (f: FiledInvoice, amended: AmendedInvoice) => {
-    if (f.section === 'cdnr' && f.ctin) push(cdnra, f.ctin, { ...amended, ntty: f.ntty || 'C' })
-    else if (f.section === 'cdnur') cdnura.push({ ...amended, ntty: f.ntty || 'C' })
-    else if (f.section === 'b2b' && f.ctin) push(b2ba, f.ctin, amended)
-    else push(b2cla, f.pos, amended)
-  }
-
-  for (const f of filed) {
-    const now = current.get(f.inum)
-
-    /*
-     * An invoice that no longer exists was cancelled after filing. That is a
-     * real amendment — the portal must be told the value is now nil, or the
-     * buyer keeps claiming credit on a bill that no longer exists — but the app
-     * cannot invent the corrected figures, so it declares the value as zero and
-     * says so plainly.
-     */
     if (!now || !now.exists) {
-      const amended: AmendedInvoice = {
-        oinum: f.inum, oidt: f.idt,
-        inum: f.inum, idt: f.idt,
-        val: 0, pos: f.pos,
-        changes: ['This invoice was cancelled after the return was filed'],
+      /*
+       * Cancelled after filing. A real amendment — the portal must be told the
+       * value is now nil, or the buyer keeps claiming credit on a bill that no
+       * longer exists — declared as the last filed row with every amount at nil.
+       */
+      changes = ['This was cancelled after the return was filed']
+      row = toAmendmentRow(f.section, zeroedRow(f.row), f.original)
+    } else if (!now.placed || now.placed.section !== f.section) {
+      nowVal = now.placed ? roundMoney(Number(now.placed.row.val) || 0) : 0
+      problem = now.placed
+        ? `This now belongs with ${NAMES[now.placed.section]}, not ${NAMES[f.section]} where it was filed — a correction cannot move it. Ask your CA.`
+        : 'This is no longer a separate document in GSTR-1 (for example, it is now all exempt). Ask your CA how to correct it.'
+      changes = [problem]
+    } else {
+      const r = now.placed.row
+      nowVal = roundMoney(Number(r.val) || 0)
+      const dt = String(r.idt ?? r.nt_dt ?? '')
+      const pos = String(r.pos ?? now.placed.group ?? '')
+      if (Math.abs(nowVal - roundMoney(f.val)) >= MATERIAL) changes.push(`Value changed from ₹${roundMoney(f.val)} to ₹${nowVal}`)
+      if (dt !== f.dt) changes.push(`Date changed from ${f.dt} to ${dt}`)
+      if (pos !== f.pos) changes.push(`Place of supply changed from ${f.pos} to ${pos}`)
+      /*
+       * A changed GSTIN is the most consequential: the credit went to the wrong
+       * buyer entirely, and neither the right one nor the wrong one can fix it
+       * from their side.
+       */
+      if ((f.section === 'b2b' || f.section === 'cdnr') && now.placed.group && f.group && now.placed.group !== f.group) {
+        changes.push(`Customer GSTIN changed from ${f.group} to ${now.placed.group}`)
       }
-      route(f, amended)
-      continue
+      if (changes.length === 0) continue
+      row = toAmendmentRow(f.section, r, f.original)
     }
 
-    const changes: string[] = []
-    if (Math.abs(roundMoney(now.val) - roundMoney(f.val)) >= MATERIAL) {
-      changes.push(`Value changed from ₹${roundMoney(f.val)} to ₹${roundMoney(now.val)}`)
-    }
-    if (now.idt !== f.idt) changes.push(`Date changed from ${f.idt} to ${now.idt}`)
-    if (now.pos !== f.pos) changes.push(`Place of supply changed from ${f.pos} to ${now.pos}`)
-    /*
-     * A changed GSTIN is the most consequential of the three: the credit went to
-     * the wrong buyer entirely, and neither the right one nor the wrong one can
-     * fix it from their side.
-     */
-    if (f.section === 'b2b' && now.ctin && f.ctin && now.ctin !== f.ctin) {
-      changes.push(`Customer GSTIN changed from ${f.ctin} to ${now.ctin}`)
+    if (row) {
+      const missing = amendmentRowProblems(f.section, row)
+      if (missing.length) {
+        problem = 'The filed record of this document is in an older format the app cannot correct automatically. Ask your CA.'
+        row = null
+      }
     }
 
-    if (changes.length === 0) continue
-
-    const amended: AmendedInvoice = {
-      oinum: f.inum, oidt: f.idt,
-      inum: now.inum, idt: now.idt,
-      val: roundMoney(now.val), pos: now.pos,
-      changes,
-    }
-    /*
-     * Grouped under the GSTIN it was FILED against, not the corrected one. The
-     * portal has to find the original entry before it can replace it, and it
-     * looks under the counterparty it was told about.
-     */
-    route(f, amended)
+    out.push({
+      key: f.key, section: f.section, group: f.group, original: f.original,
+      firstFp: f.firstFp, lastFp: f.fp,
+      filedVal: roundMoney(f.val), nowVal,
+      changes, row, problem,
+      fingerprint: fingerprint({ key: f.key, group: f.group, row }),
+    })
   }
+  return out
+}
 
+/** The portal's four amendment tables, from the corrections that are going in. */
+export interface AmendmentTables {
+  /** Table 9A — amended B2B invoices, grouped by the GSTIN they were filed under. */
+  b2ba: Array<{ ctin: string; inv: Record<string, unknown>[] }>
+  /** Table 9A — amended large inter-state B2C invoices, grouped by place of supply. */
+  b2cla: Array<{ pos: string; inv: Record<string, unknown>[] }>
+  /** Table 9C — amended notes against a REGISTERED buyer. */
+  cdnra: Array<{ ctin: string; nt: Record<string, unknown>[] }>
+  /** Table 9C — amended notes against an unregistered buyer. */
+  cdnura: Record<string, unknown>[]
+}
+
+export function amendmentTables(corrections: Correction[]): AmendmentTables {
+  const b2ba = new Map<string, Record<string, unknown>[]>()
+  const b2cla = new Map<string, Record<string, unknown>[]>()
+  const cdnra = new Map<string, Record<string, unknown>[]>()
+  const cdnura: Record<string, unknown>[] = []
+  for (const c of corrections) {
+    if (!c.row) continue
+    if (c.section === 'b2b') push(b2ba, c.group, c.row)
+    else if (c.section === 'b2cl') push(b2cla, c.group, c.row)
+    else if (c.section === 'cdnr') push(cdnra, c.group, c.row)
+    else cdnura.push(c.row)
+  }
   return {
     b2ba: [...b2ba.entries()].map(([ctin, inv]) => ({ ctin, inv })),
     b2cla: [...b2cla.entries()].map(([pos, inv]) => ({ pos, inv })),
@@ -186,31 +278,30 @@ function push<T>(m: Map<string, T[]>, key: string, v: T) {
   m.get(key)!.push(v)
 }
 
-/** Pull the invoices a filed return declared, out of its stored JSON. */
-export function filedInvoicesFrom(rawJson: unknown, fp: string): FiledInvoice[] {
-  const g = rawJson as any
-  if (!g || typeof g !== 'object') return []
-  const out: FiledInvoice[] = []
+/** Stable text of a value: object keys sorted, so the same row always prints the same. */
+function stable(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stable).join(',')}]`
+  if (v && typeof v === 'object') return `{${Object.keys(v as object).sort().map((k) => `${JSON.stringify(k)}:${stable((v as any)[k])}`).join(',')}}`
+  return JSON.stringify(v)
+}
 
-  for (const party of g.b2b || []) {
-    for (const inv of party.inv || []) {
-      out.push({ section: 'b2b', ctin: party.ctin, inum: String(inv.inum), idt: inv.idt, val: Number(inv.val) || 0, pos: inv.pos, fp })
-    }
+/** FNV-1a over the stable text — short, deterministic, enough to notice a changed row. */
+export function fingerprint(v: unknown): string {
+  let h = 0x811c9dc5
+  for (const ch of stable(v)) {
+    h ^= ch.charCodeAt(0)
+    h = Math.imul(h, 0x01000193) >>> 0
   }
-  for (const group of g.b2cl || []) {
-    for (const inv of group.inv || []) {
-      out.push({ section: 'b2cl', inum: String(inv.inum), idt: inv.idt, val: Number(inv.val) || 0, pos: group.pos, fp })
-    }
-  }
-  for (const party of g.cdnr || []) {
-    for (const n of party.nt || []) {
-      out.push({ section: 'cdnr', ctin: party.ctin, ntty: n.ntty, inum: String(n.nt_num), idt: n.nt_dt, val: Number(n.val) || 0, pos: n.pos, fp })
-    }
-  }
-  for (const n of g.cdnur || []) {
-    out.push({ section: 'cdnur', ntty: n.ntty, inum: String(n.nt_num), idt: n.nt_dt, val: Number(n.val) || 0, pos: n.pos, fp })
-  }
-  return out
+  return h.toString(16).padStart(8, '0')
+}
+
+/** The corrections switched on for a return: key → fingerprint, as stored on its snapshot. */
+export type IncludedCorrections = Record<string, string>
+
+/** #103: only what was switched on AND still matches — an edit after switching on turns it off. */
+export function includedCorrections(all: Correction[], included: IncludedCorrections | null | undefined): Correction[] {
+  const on = included || {}
+  return all.filter((c) => c.row && on[c.key] === c.fingerprint)
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

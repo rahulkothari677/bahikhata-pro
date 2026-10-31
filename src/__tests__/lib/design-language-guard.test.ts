@@ -40,7 +40,7 @@ const SRC = path.resolve(process.cwd(), 'src')
 const CSS = fs.readFileSync(path.join(SRC, 'app/globals.css'), 'utf8')
 
 /** Ceiling for raw meaning-colour shades in src/. Lower it; never raise it. */
-const RAW_COLOUR_CEILING = 2303  // 7h: the profit reports' coloured stat cards became one TotalsStrip, #280 (was 2375; 2449 before 7c)
+const RAW_COLOUR_CEILING = 2239  // 8b–8c: the item form boxes and the "needs amending" card left raw shades (was 2303; 2375 before 7h)
 
 function sourceFiles(): { rel: string; code: string }[] {
   const out: { rel: string; code: string }[] = []

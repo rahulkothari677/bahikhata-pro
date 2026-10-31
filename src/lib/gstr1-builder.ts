@@ -163,6 +163,8 @@ export interface Gstr1B2clEntry {
 
 export interface Gstr1B2csEntry {
   typ: 'OE' | 'IN'  // OE = outward (inter-state), IN = intra-state (unused, always OE for outward)
+  /** #341: REQUIRED by GSTN's b2cs row (Save GSTR1 v4.1/v5.0) and missing until 8c — so every B2CS row was rejected. */
+  sply_ty: 'INTER' | 'INTRA'
   pos: string
   txval: number
   iamt: number
@@ -181,7 +183,7 @@ export interface Gstr1CdnrEntry {
     ntty: 'C' | 'D'  // C=credit note, D=debit note
     pos: string
     rchrg: 'Y' | 'N'
-    typ: 'R' | 'SEWP' | 'SEWOP' | 'DE'
+    inv_typ: 'R' | 'SEWP' | 'SEWOP' | 'DE'  // #341: GSTN's cdnr field is inv_typ; `typ` is not allowed there
     // 🔒 V26 N1: same { num, itm_det } wrapper as B2B.
     itms: Array<{ num: number; itm_det: { rt: number; txval: number; iamt: number; camt: number; samt: number; csamt: number } }>
   }>
@@ -194,7 +196,6 @@ export interface Gstr1CdnurEntry {
   val: number
   ntty: 'C' | 'D'
   pos: string
-  rchrg: 'Y' | 'N'
   // 🔒 V26 N1: same { num, itm_det } wrapper as B2B.
   itms: Array<{ num: number; itm_det: { rt: number; txval: number; iamt: number; camt: number; samt: number; csamt: number } }>
 }
@@ -341,6 +342,16 @@ export function isRegisteredBuyer(t: Pick<Gstr1Transaction, 'partyGstin'>): bool
   return !!(t.partyGstin && t.partyGstin.length >= 15)
 }
 
+/*
+ * NOT 'debit-note' — anywhere in GSTR-1 (8c, 31 Oct 2026). In EkBook a debit
+ * note is a PURCHASE RETURN to a supplier (i18n "Debit notes — return to
+ * supplier"; party-history "return_out"): the supplier's document, not a sale.
+ * This file was written as if it were a seller's debit note (extra charge to a
+ * customer), which EkBook does not have — so Table 9B, Table 12 and the
+ * computed turnover each counted purchase returns as sales where one was fed.
+ * GSTR-1's own documents are sales and the credit notes against them.
+ */
+
 /**
  * Build B2B section: sales to parties WITH a GSTIN.
  * Groups by counter-party GSTIN (ctin), then lists invoices.
@@ -390,7 +401,7 @@ export function buildB2CL(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2clEn
   const b2clSales = txns.filter(t =>
     t.type === 'sale' &&
     t.isInterState &&
-    (!t.partyGstin || t.partyGstin.length < 15) &&
+    !isRegisteredBuyer(t) &&
     t.totalAmount > B2CL_INVOICE_VALUE_THRESHOLD
   )
   const byPos = new Map<string, Gstr1B2clEntry['inv']>()
@@ -506,7 +517,7 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo, originals?: 
   // Sales that are B2CS: unregistered + (intra-state OR ≤ threshold)
   const b2csSales = txns.filter(t =>
     t.type === 'sale' &&
-    (!t.partyGstin || t.partyGstin.length < 15) &&
+    !isRegisteredBuyer(t) &&
     (!t.isInterState || t.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD)
   )
   // 🔒 V26 N2 + BUG-062: Notes whose ORIGINAL supply is B2CS.
@@ -514,7 +525,7 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo, originals?: 
   // isInterState + totalAmount (falls back to note's own values if the
   // original isn't in the txns array).
   const b2csNotes = txns.filter(t => {
-    if (t.type !== 'credit-note' && t.type !== 'debit-note') return false
+    if (t.type !== 'credit-note') return false
     if (isRegisteredBuyer(t)) return false  // registered → CDNR
     const orig = resolveNoteClassification(t, txns, originals)
     return !orig.isInterState || orig.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD
@@ -539,7 +550,7 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo, originals?: 
     // Nil/exempt lines are Table 8's, not Table 7's — see taxableItems.
     for (const item of taxableItems(txn.items)) addToAgg(item, pos, 1)
   }
-  // 🔒 V26 N2: Subtract B2CS notes (credit notes reduce, debit notes increase)
+  // 🔒 V26 N2: Subtract B2CS credit notes (a 'debit-note' is a purchase return — never here)
   for (const txn of b2csNotes) {
     const pos = placeOfSupply(txn, shop)
     const sign: 1 | -1 = txn.type === 'credit-note' ? -1 : 1
@@ -550,6 +561,8 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo, originals?: 
 
   return Array.from(agg.values()).map(a => ({
     typ: 'OE' as const,
+    // Inside the shop's own state or not — each row is already one place of supply.
+    sply_ty: (a.pos === shop.stateCode ? 'INTRA' : 'INTER') as 'INTER' | 'INTRA',
     pos: a.pos,
     txval: a.txval,
     iamt: a.iamt,
@@ -566,7 +579,7 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo, originals?: 
  */
 export function buildCDNR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnrEntry[] {
   const notes = txns.filter(t =>
-    (t.type === 'credit-note' || t.type === 'debit-note') &&
+    t.type === 'credit-note' &&
     isRegisteredBuyer(t)
   )
   const byGstin = new Map<string, Gstr1CdnrEntry['nt']>()
@@ -581,7 +594,7 @@ export function buildCDNR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnrEn
       ntty: (txn.type === 'credit-note' ? 'C' : 'D') as 'C' | 'D',
       pos,
       rchrg: 'N' as const,
-      typ: 'R' as const,
+      inv_typ: 'R' as const,  // #341: was `typ` — GSTN's cdnr row requires inv_typ and forbids typ
       itms: txn.items.map((item, i) => ({
         num: i + 1,
         itm_det: {
@@ -618,7 +631,7 @@ export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo, originals?:
   // look up the original invoice's isInterState + totalAmount (falls back to
   // note's own values if the original isn't in the txns array).
   const notes = txns.filter(t => {
-    if (t.type !== 'credit-note' && t.type !== 'debit-note') return false
+    if (t.type !== 'credit-note') return false
     if (isRegisteredBuyer(t)) return false  // registered → CDNR
     const orig = resolveNoteClassification(t, txns, originals)
     return orig.isInterState && orig.totalAmount > B2CL_INVOICE_VALUE_THRESHOLD
@@ -630,7 +643,8 @@ export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo, originals?:
     val: roundMoney(txn.totalAmount),
     ntty: (txn.type === 'credit-note' ? 'C' : 'D') as 'C' | 'D',
     pos: placeOfSupply(txn, shop),
-    rchrg: 'N' as const,
+    // #341: no `rchrg` — GSTN's cdnur row has no such field and forbids extra
+    // ones (additionalProperties: false, Save GSTR1 v4.1/v5.0), so it was rejected.
     itms: txn.items.map((item, i) => ({
       num: i + 1,
       itm_det: {
@@ -643,6 +657,69 @@ export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo, originals?:
       },
     })),
   }))
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * ONE DOCUMENT'S ROW, for correcting it later (Table 9A / 9C — #340, Phase 8c)
+ *
+ * An amended row is the corrected document written EXACTLY as the original
+ * tables write it (same items by rate, same reverse-charge and invoice type),
+ * plus the original's number and date. So it is built by the same builders,
+ * never by a second hand: one document → its section, its group, its row.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/** The four tables a filed document can sit in — and so be corrected from. */
+export type DocSection = 'b2b' | 'b2cl' | 'cdnr' | 'cdnur'
+
+/** Where this one document lands today, written as its table writes it — or null (B2CS, all-exempt, not a sale). */
+export function documentRow(
+  txn: Gstr1Transaction,
+  shop: ShopInfo,
+  originals?: OriginalInvoiceLookup,
+): { section: DocSection; group: string; row: Record<string, any> } | null {
+  const b2b = buildB2B([txn], shop)
+  if (b2b.length) return { section: 'b2b', group: b2b[0].ctin, row: b2b[0].inv[0] }
+  const b2cl = buildB2CL([txn], shop)
+  if (b2cl.length) return { section: 'b2cl', group: b2cl[0].pos, row: b2cl[0].inv[0] }
+  const cdnr = buildCDNR([txn], shop)
+  if (cdnr.length) return { section: 'cdnr', group: cdnr[0].ctin, row: cdnr[0].nt[0] }
+  const cdnur = buildCDNUR([txn], shop, originals)
+  if (cdnur.length) return { section: 'cdnur', group: '', row: cdnur[0] }
+  return null
+}
+
+/**
+ * A row of an original table, rewritten as its amendment table takes it —
+ * exactly the fields GSTN's Save GSTR1 schema (v4.1/v5.0) allows there, which
+ * forbids any other (additionalProperties: false):
+ *   b2ba  inum idt oinum oidt val pos rchrg inv_typ itms
+ *   b2cla inum idt oinum oidt val itms              (pos is the group's)
+ *   cdnra nt_num nt_dt ont_num ont_dt ntty pos rchrg inv_typ val itms
+ *   cdnura typ nt_num nt_dt ont_num ont_dt ntty pos val itms
+ * `original` is the FIRST filing's number and date — the portal finds the
+ * document by them, however many times it has been corrected since.
+ */
+export function toAmendmentRow(section: DocSection, row: Record<string, any>, original: { num: string; dt: string }): Record<string, unknown> {
+  const pick = (keys: string[]) => Object.fromEntries(keys.filter((k) => row[k] !== undefined).map((k) => [k, row[k]]))
+  switch (section) {
+    case 'b2b': return { ...pick(['inum', 'idt']), oinum: original.num, oidt: original.dt, ...pick(['val', 'pos', 'rchrg', 'inv_typ', 'itms']) }
+    case 'b2cl': return { ...pick(['inum', 'idt']), oinum: original.num, oidt: original.dt, ...pick(['val', 'itms']) }
+    case 'cdnr': return { ...pick(['nt_num', 'nt_dt']), ont_num: original.num, ont_dt: original.dt, ...pick(['ntty', 'pos', 'rchrg', 'inv_typ', 'val', 'itms']) }
+    case 'cdnur': return { ...pick(['typ', 'nt_num', 'nt_dt']), ont_num: original.num, ont_dt: original.dt, ...pick(['ntty', 'pos', 'val', 'itms']) }
+  }
+}
+
+/** The same row with every amount at nil — how a document cancelled after filing is declared. */
+export function zeroedRow(row: Record<string, any>): Record<string, any> {
+  const items = Array.isArray(row.itms) ? row.itms : []
+  return {
+    ...row,
+    val: 0,
+    itms: items.map((it: any) => ({
+      num: it.num,
+      itm_det: Object.fromEntries(Object.entries(it.itm_det || {}).map(([k, v]) => [k, k === 'rt' ? v : 0])),
+    })),
+  }
 }
 
 /**
@@ -658,8 +735,8 @@ export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo, originals?:
  * num, hsn_sc, uqc, qty, txval, rt (+ the tax amounts), amounts to 2 decimals.
  * Each tab numbers its rows from 1.
  *
- * Sales and debit notes ADD; credit notes SUBTRACT. Debit notes were left out
- * entirely before 8c, so a shop that raised one filed Table 12 short by it.
+ * Sales ADD; credit notes SUBTRACT. No 'debit-note': in EkBook that is a
+ * purchase return (see the GSTR-1 documents note above).
  */
 export function buildHSN(txns: Gstr1Transaction[]): { hsn_b2b: Gstr1HsnEntry[]; hsn_b2c: Gstr1HsnEntry[] } {
   return {
@@ -670,7 +747,7 @@ export function buildHSN(txns: Gstr1Transaction[]): { hsn_b2b: Gstr1HsnEntry[]; 
 
 /** One tab of Table 12: rows keyed by HSN + rate + unit, numbered from 1. */
 function buildHsnTab(txns: Gstr1Transaction[]): Gstr1HsnEntry[] {
-  const outward = txns.filter(t => t.type === 'sale' || t.type === 'credit-note' || t.type === 'debit-note')
+  const outward = txns.filter(t => t.type === 'sale' || t.type === 'credit-note')
   const agg = new Map<string, { hsn: string; desc: string; qty: number; uqc: string; txval: number; iamt: number; camt: number; samt: number; csamt: number; rt: number }>()
 
   for (const txn of outward) {
@@ -725,7 +802,7 @@ function buildHsnTab(txns: Gstr1Transaction[]): Gstr1HsnEntry[] {
         hsn, desc: item.productName, qty: 0, uqc,
         txval: 0, iamt: 0, camt: 0, samt: 0, csamt: 0, rt: item.gstRate,
       }
-      // Credit notes REDUCE the HSN totals (they're returns); sales and debit notes add.
+      // Credit notes REDUCE the HSN totals (they're returns).
       const sign = txn.type === 'credit-note' ? -1 : 1
       existing.qty = roundMoney(existing.qty + sign * item.quantity)
       existing.txval = roundMoney(existing.txval + sign * itemTaxable(item))
@@ -1046,7 +1123,7 @@ export function buildDOC(
  * them.
  *
  * Turnover = value of all outward supplies (net of returns):
- *   Σ(sale taxable) − Σ(credit-note taxable) + Σ(debit-note taxable)
+ *   Σ(sale taxable) − Σ(credit-note taxable)   (a 'debit-note' is a purchase return: excluded)
  *
  * where taxable = subtotal − discountAmount. Income/expense are NOT part of
  * outward supply for GST turnover purposes (income is non-supply income;
@@ -1066,11 +1143,9 @@ export function computeOutwardTurnover(txns: Gstr1Transaction[]): number {
     } else if (t.type === 'credit-note') {
       // Credit notes reduce outward supply (sales return)
       turnover = roundMoney(turnover - taxable)
-    } else if (t.type === 'debit-note') {
-      // Debit notes increase outward supply (additional consideration)
-      turnover = roundMoney(turnover + taxable)
     }
-    // income / expense / estimate: not part of GST outward turnover
+    // income / expense / estimate: not part of GST outward turnover; nor a
+    // 'debit-note', which in EkBook is a purchase return (see GSTR1 note above).
   }
   return turnover
 }

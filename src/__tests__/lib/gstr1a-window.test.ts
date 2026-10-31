@@ -133,7 +133,8 @@ describe('the route surfaces this period, which it never used to', () => {
      * the cheap fix had expired.
      */
     expect(api).toContain("existingSnapshot?.filingStatus === 'filed'")
-    expect(api).toContain('filedInvoicesFrom(existingSnapshot.rawJson, monthYear)')
+    // 8c: its LAST filed version (#104), read by the same reader as earlier periods.
+    expect(api).toContain('latestVersions(filedVersionsFrom(existingSnapshot.rawJson, monthYear))')
   })
 
   test('the window is decided from the SAME period’s GSTR-3B', () => {
@@ -147,20 +148,21 @@ describe('the route surfaces this period, which it never used to', () => {
      * one decides WHICH RETURN a correction belongs in. Same reasoning as the
      * shared composition window.
      */
-    const usesShared = api.includes('buildAmendments(ownFiled, ownCurrent)')
+    // 8c: buildCorrections is that one comparison, for this period and earlier ones alike.
+    const usesShared = api.includes('const own = buildCorrections(ownFiled, await currentDocs(')
+      && api.includes('buildCorrections(latest, await currentDocs(')
     expect({ usesShared }).toEqual({ usesShared: true })
   })
 
-  test('every amendment table is flattened, none silently dropped', () => {
+  test('every correction reaches the screen, none silently dropped', () => {
     /*
-     * The four tables carry rows under three shapes — b2ba/b2cla use `inv`,
-     * cdnra uses `nt`, cdnura is a flat array. My first version spread them
-     * into one loop reading `.inv`, which typechecked only by accident. A
-     * dropped table is a correction the shopkeeper is never told about.
+     * REWRITTEN TO ITS INTENT 31 Oct 2026 (8c). It used to check that four
+     * tables in three shapes were each flattened. buildCorrections now returns
+     * ONE flat list covering all four tables (b2b, b2cl, cdnr, cdnur — proved
+     * in gstr1-schema-shape.test.ts), so the route iterates it whole.
      */
-    for (const table of ['own.b2ba.flatMap', 'own.b2cla.flatMap', 'own.cdnra.flatMap', '...own.cdnura']) {
-      expect({ table, present: api.includes(table) }).toEqual({ table, present: true })
-    }
+    expect(api).toContain('for (const c of own) {')
+    expect(api).not.toMatch(/own\.(b2ba|b2cla|cdnra|cdnura)/)
   })
 
   test('the extra queries only run when the window is actually open', () => {
@@ -197,15 +199,16 @@ describe('the screen does not overclaim', () => {
      * working feature.
      *
      * Silence is also correct — once the window shuts, the correction belongs
-     * in the next period, and NeedsAmending below already shows it. A card
+     * in the next period, and the corrections list below already shows it. A card
      * announcing a closed door would sit on every past month forever.
      */
     expect(ui).toContain("if (window.state === 'closed') return null")
     expect(ui).not.toContain('GSTR-1A has closed for this month')
   })
 
-  test('it renders above NeedsAmending, because it is the one that expires', () => {
+  test('it renders above the corrections list, because it is the one that expires', () => {
     const report = readCode('src/components/reports/Gstr1Report.tsx')
-    expect(report.indexOf('<Gstr1aWindow')).toBeLessThan(report.indexOf('<NeedsAmending'))
+    expect(report.indexOf('<CorrectionsList')).toBeGreaterThan(-1) // the anchor exists, so the order check below is real
+    expect(report.indexOf('<Gstr1aWindow')).toBeLessThan(report.indexOf('<CorrectionsList'))
   })
 })

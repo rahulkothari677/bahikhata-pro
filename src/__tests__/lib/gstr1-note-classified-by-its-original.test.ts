@@ -168,10 +168,20 @@ describe('the route actually supplies the lookup', () => {
       from = end + 1
     }
 
-    // Control: if this found no calls, everything below would pass vacuously.
-    expect(calls.length).toBeGreaterThanOrEqual(2)
+    /*
+     * REWRITTEN TO ITS INTENT 31 Oct 2026 (8c, #342). There were two call sites
+     * because GET and POST each built the return — and POST's copy had drifted
+     * (no amendments, advances or cancelled counts), so "Mark as filed" stored
+     * a different return from the one downloaded. Now ONE build, computeReturn,
+     * serves both. So: exactly one buildGstr1 call, it carries the lookup, and
+     * GET and POST both go through computeReturn.
+     */
+    expect(calls).toHaveLength(1)
     for (const call of calls) {
       expect(call).toContain('originalInvoices')
     }
+    expect((src.match(/await computeReturn\(userId, monthParam\)/g) ?? []).length).toBe(2)
+    // The single-document builder used for corrections gets the same lookup.
+    expect(src).toMatch(/documentRow\(toBuilderTxn\(t\), shop, originalInvoices\)/)
   })
 })

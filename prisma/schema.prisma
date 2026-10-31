@@ -1155,6 +1155,11 @@ model Gstr1Snapshot {
   // Stored as Json so the exact filed return can be reproduced for audit/dispute.
   rawJson Json?
 
+  // #103 (Phase 8c): the corrections to earlier filed returns switched ON for
+  // this month's return — { "b2b:INV-0003": "<fingerprint>" }. Only a correction
+  // whose fingerprint still matches goes in; edit the bill again and it lapses.
+  includedAmendments Json?
+
   // Summary totals (for quick display without parsing rawJson)
   totalTaxableValue Int @default(0)
   totalOutputTax    Int @default(0) // CGST + SGST + IGST

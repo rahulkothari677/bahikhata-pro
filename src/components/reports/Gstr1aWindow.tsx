@@ -3,7 +3,7 @@
 /**
  * "You can still fix this month's return — but not for long."
  *
- * WHY THIS EXISTS (#41). NeedsAmending, its sibling above, tells a shopkeeper
+ * WHY THIS EXISTS (#41). The corrections list (CorrectionsList), its sibling, tells a shopkeeper
  * that a filed invoice has changed and will be corrected in a LATER period.
  * That is right once the period is closed, and it is the expensive answer while
  * GSTR-1A is still open.
@@ -23,7 +23,7 @@
  * WHY IT IS URGENT-LOOKING BUT NOT ALARMING. Nothing has gone wrong: editing a
  * bill is normal and the app allowed it. What is time-limited is the cheap way
  * to declare it. So the wording is about a door closing, not a mistake made —
- * the same tone rule NeedsAmending set.
+ * the same tone rule the corrections list keeps.
  *
  * WHAT IT DOES NOT DO. It does not generate a GSTR-1A file. We do not hold the
  * portal's GSTR-1A JSON schema, and a file that looks upload-ready and is not
@@ -84,7 +84,7 @@ export function Gstr1aWindow({ window, corrections = [], blockedCount = 0 }: Pro
    * dead code that read as a working feature.
    *
    * Silence is also the right answer. Once the window has shut, the correction
-   * genuinely belongs in the next period — and NeedsAmending, directly below,
+   * genuinely belongs in the next period — and the corrections list, directly below,
    * already shows exactly that. A second card announcing a door that closed
    * would appear on every past month forever, saying nothing actionable.
    */

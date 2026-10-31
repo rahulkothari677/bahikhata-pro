@@ -92,15 +92,17 @@ describe('#128: Table 12 has two tabs, in GSTN\'s shape', () => {
 })
 
 describe('notes land in their buyer\'s tab with the right sign', () => {
-  test('a debit note ADDS (it was left out of Table 12 before 8c); a credit note subtracts', () => {
+  test('a credit note subtracts; a debit note (a PURCHASE RETURN in EkBook) is not in Table 12 at all', () => {
+    // Corrected 31 Oct 2026: d75f3b5e added debit notes here as "missing" — in
+    // EkBook a debit note is a return TO a supplier, the supplier's document.
     const r = buildHSN([
       doc('sale', REG, [item({ quantity: 10 })]),                          // +500
-      doc('debit-note', REG, [item({ quantity: 2, unitPrice: 50 })]),       // +100
+      doc('debit-note', REG, [item({ quantity: 2, unitPrice: 50 })]),       // ignored
       doc('credit-note', REG, [item({ quantity: 3, unitPrice: 50 })]),      // −150
     ])
     expect(r.hsn_b2b).toHaveLength(1)
-    expect(r.hsn_b2b[0].qty).toBe(9)
-    expect(r.hsn_b2b[0].txval).toBe(450)
+    expect(r.hsn_b2b[0].qty).toBe(7)
+    expect(r.hsn_b2b[0].txval).toBe(350)
     expect(r.hsn_b2c).toEqual([])
   })
 
@@ -124,8 +126,17 @@ describe('one rule for "registered buyer"', () => {
 
   test('gstr1-builder.ts writes the test once, inside isRegisteredBuyer', () => {
     const code = readCode('src/lib/gstr1-builder.ts') // comments stripped: a comment quoting the rule is not a copy
-    const copies = code.match(/partyGstin\.length\s*>=\s*15/g) ?? []
+    // Both spellings: "registered" (>= 15) and "unregistered" (< 15) — B2CL and B2CS used the second.
+    const copies = code.match(/partyGstin\.length\s*(>=|<)\s*15/g) ?? []
     expect(copies).toHaveLength(1)
     expect(code).toMatch(/export function isRegisteredBuyer[\s\S]{0,160}partyGstin\.length >= 15/)
+  })
+})
+
+describe('a debit note is a purchase return in EkBook — never a GSTR-1 document', () => {
+  test('neither the builder nor the GSTR-1 route names \'debit-note\' in code', () => {
+    for (const f of ['src/lib/gstr1-builder.ts', 'src/app/api/gstr-1/route.ts']) {
+      expect({ f, hits: (readCode(f).match(/['"]debit-note['"]/g) ?? []).length }).toEqual({ f, hits: 0 })
+    }
   })
 })

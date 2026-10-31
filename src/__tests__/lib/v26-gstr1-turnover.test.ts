@@ -93,14 +93,18 @@ describe('V26 N9 — computeOutwardTurnover (pure helper)', () => {
     expect(computeOutwardTurnover([SALE, CREDIT_NOTE])).toBe(700)
   })
 
-  test('debit note INCREASES turnover (additional consideration)', () => {
-    // Sale 1000 + DN 100 = 1100
-    expect(computeOutwardTurnover([SALE, DEBIT_NOTE])).toBe(1100)
+  /*
+   * EXPECTATION CHANGED 31 Oct 2026 (8c): in EkBook a 'debit-note' is a
+   * PURCHASE RETURN to a supplier, not extra consideration charged to a
+   * customer. It is not an outward supply, so it never moves turnover.
+   */
+  test('a debit note (purchase return) does NOT move outward turnover', () => {
+    expect(computeOutwardTurnover([SALE, DEBIT_NOTE])).toBe(1000)
   })
 
-  test('sale + credit note + debit note → net turnover', () => {
-    // 1000 - 300 + 100 = 800
-    expect(computeOutwardTurnover([SALE, CREDIT_NOTE, DEBIT_NOTE])).toBe(800)
+  test('sale + credit note + debit note → sales less credit notes only', () => {
+    // 1000 - 300 = 700; the purchase return is not a sale
+    expect(computeOutwardTurnover([SALE, CREDIT_NOTE, DEBIT_NOTE])).toBe(700)
   })
 
   test('income is NOT part of outward turnover', () => {
@@ -139,10 +143,9 @@ describe('V26 N9 — buildGstr1 populates cur_gt + gt', () => {
     expect(result.cur_gt).toBe(0)
   })
 
-  test('cur_gt includes debit notes (additional consideration)', () => {
-    // Sale 1000 + DN 100 = 1100
+  test('cur_gt leaves out debit notes (purchase returns in EkBook)', () => {
     const result = buildGstr1([SALE, DEBIT_NOTE], SHOP, '072026')
-    expect(result.cur_gt).toBe(1100)
+    expect(result.cur_gt).toBe(1000)
   })
 
   test('cur_gt excludes income (non-supply income)', () => {
