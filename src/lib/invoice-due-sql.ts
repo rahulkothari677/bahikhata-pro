@@ -25,6 +25,21 @@ export const ALLOCATED_JOIN = Prisma.sql`LEFT JOIN (
 
 export const DUE_SQL = Prisma.sql`(t."totalAmount" - t."paidAmount" - COALESCE(a.alloc, 0))`
 
+/**
+ * The same allocations as ALLOCATED_JOIN, read per bill through the
+ * (userId, transactionId) index — for queries over ONE customer's bills, where
+ * grouping every allocation in the database first would read all shops' rows.
+ * Same rule: only allocations of payments not deleted. Gives `a.alloc`.
+ */
+export function allocatedLateral(userId: string): Prisma.Sql {
+  return Prisma.sql`LEFT JOIN LATERAL (
+    SELECT SUM(pa."amount") AS alloc
+    FROM "PaymentAllocation" pa
+    JOIN "Payment" py ON py."id" = pa."paymentId" AND py."deletedAt" IS NULL
+    WHERE pa."userId" = ${userId} AND pa."transactionId" = t."id"
+  ) a ON TRUE`
+}
+
 /** Each customer's oldest sale bill that still has something due (alias t / a inside). */
 export function oldestDueSaleSql(userId: string): Prisma.Sql {
   return Prisma.sql`

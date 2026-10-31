@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState, useMemo, useEffect } from 'react'
+import { Fragment, useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -31,7 +31,7 @@ import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { haptic } from '@/lib/haptic'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
-import { computeStatementRunningBalance } from '@/lib/statement-balance'
+import type { StatementEntry } from '@/lib/statement-balance'
 import {
   buildStatementRows as buildStatementRowsShared,
   computeStatementOpening,
@@ -82,7 +82,7 @@ export function PartyProfile() {
     }
   }, [selectedPartyId, previousView, setView])
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['party-profile', selectedPartyId],
     queryFn: async () => {
       const r = await offlineFetch(`/api/parties/${selectedPartyId}`)
@@ -232,46 +232,23 @@ export function PartyProfile() {
   // from 0→balance on mount + when balance changes (e.g. after recording a
   // payment, the balance ticks down animatedly).
   const animatedBalance = useCountUp(stats?.balance ?? 0, 800)
-  // 🔒 V15 M-2: Statement-grade data — complete (capped at 500), newest-first.
-  // Used ONLY for the account statement. The paginated `transactions` array
-  // above is still used for the recent-transactions list.
-  // 🔒 V17 §2.2: Order changed from oldest-first to newest-first (date DESC).
-  const statementTransactions = data?.statementTransactions || []
-  const statementPayments = data?.statementPayments || []
-  const statementTotals = data?.statementTotals
-
-  // 🔒 V15 M-2 + V17 §2.1/§2.2/§2.3: Build the unified statement with a running
-  // balance.
-  //
-  // V17 §2.1: The logic is extracted into `computeStatementRunningBalance()`
-  // (src/lib/statement-balance.ts) so it can be tested behaviorally without
-  // mounting the React component. The behavioral test in
-  // src/__tests__/lib/balance-reconciliation-behavioral.test.ts calls this
-  // exact function with a fixture and asserts the result agrees with
-  // computePartyBalance() and getReceivablePayable().
-  //
-  // Algorithm (V17 backward walk):
-  //   1. Merge + sort NEWEST → OLDEST.
-  //   2. First entry (newest) gets runningBalance = stats.balance (the true
-  //      current balance from the server). Top row ALWAYS ties to the headline,
-  //      even when truncated (>500 entries).
-  //   3. Each older entry: runningBalance = roundMoney(prev.balance - prev.delta).
-  //   4. If NOT truncated, oldest entry's balance - delta = openingBalance.
-  //
-  // V17 §2.2: Was forward walk from OPENING — broke at >500 entries (showed
-  // oldest 500, closing balance didn't match headline). Now backward from
-  // stats.balance — shows newest 500, top row always matches headline.
-  //
-  // V17 §2.3: Uses roundMoney (not inline Math.round) — eliminates per-row
-  // vs aggregate paisa drift.
-  const statement = useMemo(
-    () => computeStatementRunningBalance(
-      statementTransactions,
-      statementPayments,
-      Number(stats?.balance ?? 0),
-    ),
-    [statementTransactions, statementPayments, stats],
-  )
+  // #327 Step B (31 Oct): the printed and shared statement reads the database's
+  // history (/api/parties/:id/history, lib/party-history-query.ts) — bills and
+  // payments merged in date order, each with its true balance after it, the same
+  // backward walk from today's balance as before (V17 §2.2). It was built here from
+  // the newest 500 bills and, separately, the newest 500 payments, so a big khata
+  // printed older bills without the payments around them, with wrong balances; and
+  // estimates walked the balance as money received. Loaded only when a statement is
+  // printed or shared, so opening the page no longer carries up to 1,000 rows.
+  const STATEMENT_ROWS = 1000
+  const statementRef = useRef<{ entries: StatementEntry[]; total: number }>({ entries: [], total: 0 })
+  const loadStatement = async () => {
+    const r = await offlineFetch(`/api/parties/${selectedPartyId}/history?limit=${STATEMENT_ROWS}`)
+    if (!r.ok) throw new Error("Couldn't load the statement")
+    const page = await r.json()
+    statementRef.current = { entries: page.entries ?? [], total: Number(page.total ?? 0) }
+    return statementRef.current
+  }
 
   // #285: the page in outline while it loads (components/common/Skeletons.tsx).
   if (isLoading || !data) return <PartyPageSkeleton />
@@ -442,12 +419,12 @@ export function PartyProfile() {
   // its 31 "behavioral tests" were passing against code that never shipped.
   // One definition now, exercised by both the app and those tests.
   const statementOpeningBalance = (): number =>
-    computeStatementOpening(statement as any, stats?.balance ?? 0)
+    computeStatementOpening(statementRef.current.entries as any, stats?.balance ?? 0)
 
   // 🔒 2026-07-26: single definition (see the note on statementOpeningBalance).
   // The shared helper reverses newest-first → oldest-first, which is the
   // reading order of a printed khata.
-  const buildStatementRows = () => buildStatementRowsShared(statement as any)
+  const buildStatementRows = () => buildStatementRowsShared(statementRef.current.entries as any)
 
   /**
    * How much of this party's balance was already settled INSIDE the bills
@@ -472,27 +449,37 @@ export function PartyProfile() {
       label: closing > 0
         ? (party?.type === 'supplier' ? 'Advance paid (they owe you)' : 'They owe you')
         : closing < 0 ? 'You owe them' : 'Settled',
-      trueCount: statementTotals?.transactionTotal ?? statement.length,
-      truncated: (statementTotals?.transactionTotal ?? 0) > statement.length,
+      trueCount: statementRef.current.total,
+      truncated: statementRef.current.total > statementRef.current.entries.length,
     }
   }
 
   // 🔒 V19-016 FIX: Was calling handleDownloadStatement() then window.print()
   // which printed the CURRENT PAGE (the PartyProfile UI), not the statement.
   // Now: open the generated HTML in a new window and print that.
-  const handlePrintStatement = () => {
+  const handlePrintStatement = async () => {
     if (!party) return
+    // Opened before the statement loads: a window opened after an await is blocked as a pop-up.
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write('<p style="font-family:Arial,sans-serif;padding:40px">Loading statement…</p>')
+    try {
+      await loadStatement()
+    } catch (e: any) {
+      win.close()
+      sonnerToast.error(e?.message || "Couldn't load the statement")
+      return
+    }
     const shopName = setting?.shopName || 'My Shop'
     const closing = statementClosing()
     const opening = statementOpeningBalance()
     const openingRow = `<tr style="background:#faf7f2"><td style="text-align:center">—</td><td>—</td><td><em>Opening balance</em></td><td></td><td></td><td style="text-align:right;font-weight:600">${opening.toFixed(2)}</td></tr>`
     const rows = openingRow + buildStatementRows().map(r => `<tr><td style="text-align:center">${r.index}</td><td>${r.date}</td><td>${r.particulars}</td><td style="text-align:right">${r.debit ? r.debit.toFixed(2) : ''}</td><td style="text-align:right;color:#059669">${r.credit ? r.credit.toFixed(2) : ''}</td><td style="text-align:right;font-weight:600">${r.balance.toFixed(2)}</td></tr>`).join('')
     const truncNote = closing.truncated
-      ? `<p style="font-size:11px;color:#888">Showing the most recent ${statement.length} of ${closing.trueCount} entries. The closing balance reflects all entries.</p>`
+      ? `<p style="font-size:11px;color:#888">Showing the most recent ${statementRef.current.entries.length} of ${closing.trueCount} entries. The closing balance reflects all entries.</p>`
       : ''
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Statement - ${party.name}</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px}h1{font-size:22px}table{width:100%;border-collapse:collapse}th{background:#fef3e6;padding:10px;font-size:12px;text-align:left}td{padding:8px;font-size:13px;border-bottom:1px solid #e5e7eb}</style></head><body><h1>${shopName}</h1><h2>Statement: ${party.name}</h2><table><thead><tr><th>#</th><th>Date</th><th>Particulars</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th></tr></thead><tbody>${rows}</tbody></table><h3 style="text-align:right">Closing Balance: ${formatINR(closing.closing)} — ${closing.label}</h3>${truncNote}</body></html>`
-    const win = window.open('', '_blank')
-    if (!win) return
+    win.document.open()
     win.document.write(html)
     win.document.close()
     win.focus()
@@ -512,6 +499,7 @@ export function PartyProfile() {
     if (!party || !transactions) return
     haptic.click()
     try {
+      await loadStatement()
       // Generate PDF using jsPDF
       const jsPDFMod: any = await import("jspdf")
       const { registerUnicodeFont, THEME, formatPDFMoney } = await import('@/lib/pdf/theme')
@@ -664,7 +652,7 @@ export function PartyProfile() {
         // statement backward, which allocates OLDEST-FIRST (the FIFO rule
         // ageing requires: outstanding money is owed against the oldest
         // unpaid bills).
-        const buckets = computeAgeingBuckets(statement as any, closing.closing)
+        const buckets = computeAgeingBuckets(statementRef.current.entries as any, closing.closing)
 
         // Draw the ageing mini-table (right-aligned, 4 columns).
         y += 8
@@ -1093,14 +1081,13 @@ export function PartyProfile() {
       )}
 
       {/* #328: the history — last on the page (Rahul, 31 Oct), You gave ↑ / You got ↓, 30 at a time, search and filters. */}
+      {/* #327 Step B: the history pages, searches and totals in the database; it reloads when the page's data does. */}
       <PartyHistory
-        entries={statement as any}
+        partyId={selectedPartyId!}
+        version={dataUpdatedAt}
         t={t}
         balWords={balWords}
         onOpenBill={handleViewTransaction}
-        notice={statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap)
-          ? <Notice level="note" title={t('bahi.truncated').replace('{n}', String(statementTotals.cap))} info={t('bahi.truncated_info')} />
-          : null}
       />
 
       {/* Leaving and removing, kept away from the everyday buttons. */}

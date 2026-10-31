@@ -59,6 +59,18 @@ export type HistoryDirection = 'gave' | 'got'
 export function direction(kind: HistoryKind | null): HistoryDirection {
   return kind === 'sale' || kind === 'gave' || kind === 'return_out' ? 'gave' : 'got'
 }
+/**
+ * The bill types that move a khata's balance — the four computePartyBalance
+ * sums (lib/party-balance.ts). An estimate or a cash expense is not on it.
+ */
+export const LEDGER_BILL_TYPES = ['sale', 'purchase', 'credit-note', 'debit-note'] as const
+
+/**
+ * The stored entry types that are YOU GAVE, for SQL that must split gave/got in the
+ * database (lib/party-history-query.ts). A test holds it equal to `direction` above.
+ */
+export const GAVE_ENTRY_TYPES = ['sale', 'debit-note', 'payment-paid'] as const
+
 export function onRight(kind: HistoryKind | null): boolean {
   return direction(kind) === 'gave'
 }

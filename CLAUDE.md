@@ -287,6 +287,10 @@ save.
   with backslashes** (a break-test step) — the exact shape this rule bans;
   it failed to parse and changed nothing. Inline `-c` scripts count as
   heredocs here: anything with a backslash or a path goes in a file.
+  **31 Oct (#327 Step B): a break-test typed inline held a stray
+  `python -I - <<'X'`** and hung the shell for two minutes; it was stopped
+  and the file restored from its backup. Break-tests are a script file
+  (`break_guards.sh` shape: back up, sed, check the file changed, run, restore).
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck

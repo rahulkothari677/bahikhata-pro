@@ -117,9 +117,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       transactions,
       topProductsAgg,
       monthlyRows,
-      statementTransactions,
-      statementPayments,
-      paymentTotal,
     ] = await Promise.all([
       // 🔒 V15 §1: Single source of truth for balance + money breakdown.
       // Internally does ~6 queries in 2 sub-waves (party.findFirst + 3
@@ -205,44 +202,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         ORDER BY "monthStart" ASC
       `,
 
-      // 🔒 V15 M-2 + V17 §2.2: Statement-grade transactions (newest 500).
-      db.transaction.findMany({
-        where: { userId, partyId: id, deletedAt: null },
-        select: {
-          id: true,
-          date: true,
-          type: true,
-          totalAmount: true,
-          paidAmount: true,
-          invoiceNo: true,
-          _count: { select: { items: true } },
-          // 🔒 AUDIT C5: the statement prints a per-bill "Due" alongside the
-          // running balance. Without allocations that Due is stale, and it
-          // rendered right beneath the corrected Bills card — two different
-          // dues for the same invoice, on one screen.
-          paymentAllocations: { where: LIVE_ALLOCATIONS, select: { amount: true } },
-        },
-        orderBy: { date: 'desc' },
-        take: 500,
-      }),
-
-      // 🔒 V15 M-2 + V17 §2.2: Statement-grade payments (newest 500).
-      db.payment.findMany({
-        where: { userId, partyId: id, deletedAt: null },
-        select: {
-          id: true,
-          date: true,
-          type: true,
-          amount: true,
-          mode: true,
-          notes: true,
-        },
-        orderBy: { date: 'desc' },
-        take: 500,
-      }),
-
-      // True payment count (not capped) — for the "showing 500 of N" banner.
-      db.payment.count({ where: { userId, partyId: id, deletedAt: null } }),
+      // #327 Step B (31 Oct): the statement lists (newest 500 bills + newest 500
+      // payments) are no longer loaded here. The history and the printed statement
+      // read /api/parties/:id/history, which merges and pages them in the database.
     ])
 
     // === Process results (all in JS — no more DB queries) ===
@@ -341,24 +303,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         hasMore,
         nextCursor,
         pageSize: PAGE_SIZE,
-      },
-      // 🔒 V15 M-2 + V17 §2.2: Statement-grade data (newest 500, desc order).
-      // 🔒 AUDIT C5: flatten allocations to `allocatedAmount`, the shape
-      // computeStatementRunningBalance() expects for its per-bill `due`.
-      statementTransactions: (statementTransactions as any[]).map((t: any) => {
-        const { paymentAllocations, ...rest } = t
-        return {
-          ...rest,
-          allocatedAmount: roundMoney(
-            (paymentAllocations || []).reduce((s: number, a: any) => s + (a.amount || 0), 0),
-          ),
-        }
-      }),
-      statementPayments,
-      statementTotals: {
-        transactionTotal: countAgg,
-        paymentTotal,
-        cap: 500,
       },
     })
   } catch (error) {

@@ -109,14 +109,18 @@ describe('🔒 V15 §1 — Balance reconciliation (all screens must agree)', () 
   // These static tests verify the formula patterns are present in the lib file
   // AND that PartyProfile.tsx calls the extracted function.
   describe('🔒 V16 M2 + V17 §2.1/§2.2/§2.3 — Client-side running balance matches server', () => {
-    it('🔒 V17 §2.1: PartyProfile.tsx imports and calls computeStatementRunningBalance', () => {
+    it('🔒 V17 §2.1 → #327 Step B: the statement balances come from ONE tested source, never the component', () => {
       const source = readFile('components/parties/PartyProfile.tsx')
-      // After extraction, the component must import and call the pure function.
-      // This is the bridge between the UI and the testable logic.
-      expect(source).toMatch(/import\s*\{[^}]*computeStatementRunningBalance[^}]*\}\s*from\s*['"]@\/lib\/statement-balance['"]/)
-      expect(source).toMatch(/computeStatementRunningBalance\(/)
-      // The inline logic must be GONE (no more delta ternaries in the component).
+      // Since #327 Step B (31 Oct) the statement rows — each with its balance after —
+      // come from /api/parties/:id/history (lib/party-history-query.ts), whose SQL is
+      // checked against computeStatementRunningBalance to the paisa on the local
+      // database (src/__tests__/db/party-history-parity.db.test.ts).
+      expect(source).toMatch(/\/api\/parties\/\$\{selectedPartyId\}\/history\?limit=\$\{STATEMENT_ROWS\}/)
+      // The component works out no balances itself: no running-balance walk, no delta ternaries.
+      expect(source).not.toMatch(/runningBalance\s*-\s*\w*\.?delta/)
       expect(source).not.toMatch(/t\.type\s*===\s*'sale'\s*\?[^:]*\(t\.totalAmount/)
+      // The history anchors on the one balance helper.
+      expect(readFile('app/api/parties/[id]/history/route.ts')).toMatch(/computePartyBalance\(userId, id\)/)
     })
 
     it('statement-balance.ts delta signs match computePartyBalance() signs', () => {

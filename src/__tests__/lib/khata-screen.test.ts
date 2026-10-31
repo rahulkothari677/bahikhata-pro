@@ -59,14 +59,17 @@ describe('Khata', () => {
     expect(history).not.toMatch(/Bal: \{/)
     expect(history).toMatch(/balWords\(e\.runningBalance\)/)
     // 30 at a time, then "Show older" — never hundreds of lines before anything else; a search and filters.
-    expect(history).toMatch(/rows\.slice\(0, shown\)/)
-    expect(history).toMatch(/setShown\(\(n\) => n \+ HISTORY_PAGE\)/)
+    // #327 Step B: the database sends the 30 (limit = HISTORY_PAGE) and the next 30 on "Show older".
+    expect(history).toMatch(/limit: String\(HISTORY_PAGE\)/)
+    expect(history).toMatch(/onMore=\{\(\) => \{ void query\.fetchNextPage\(\) \}\}/)
+    expect(history).toMatch(/\/api\/parties\/\$\{partyId\}\/history\?/)
     expect(history).toMatch(/id="field-history-search"/)
     // Who owes whom from the party's type (#261), in words.
     expect(page).toMatch(/t\(party\.type === 'supplier' \? 'bahi\.owe_back' : 'stat\.they_owe'\)/)
     expect(page).toMatch(/t\(party\.type === 'customer' \? 'bahi\.advance' : 'stat\.you_owe'\)/)
-    // The cap warning is a Notice with the reason behind ⓘ, not a hand-drawn amber box.
-    expect(page).toMatch(/<Notice level="note" title=\{t\('bahi\.truncated'\)/)
+    // #327 Step B: no 500-entry cap left to warn about — the page loads no statement lists,
+    // and no hand-drawn amber box comes back.
+    expect(page).not.toMatch(/statementTotals|statementTransactions|statementPayments/)
     expect(page).not.toMatch(/border-amber-300 bg-amber-50/)
   })
   test('#269: the toolbar has one padding, and a phone gets the cards with no toggle row (as Items)', () => {

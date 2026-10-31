@@ -13,6 +13,7 @@ import { describe, test, expect } from '@jest/globals'
 import * as fs from 'fs'
 import * as path from 'path'
 import { stripComments } from '@/test-support/read-source'
+import { ALLOCATED_JOIN, allocatedLateral } from '@/lib/invoice-due-sql'
 
 /** Line numbers of `paymentAllocations: {…}` objects that neither use LIVE_ALLOCATIONS nor look at deletedAt. */
 function unfilteredAllocationReads(code: string): number[] {
@@ -52,7 +53,15 @@ describe('settlements of deleted payments never count', () => {
     })
     walk(path.resolve(process.cwd(), 'src/app/api'))
     walk(path.resolve(process.cwd(), 'src/lib'))
-    expect(reads).toBeGreaterThanOrEqual(10)
+    // 9 since #327 Step B (31 Oct): the party statement's Prisma read became SQL
+    // (allocatedLateral, checked below).
+    expect(reads).toBeGreaterThanOrEqual(9)
     expect(offenders).toEqual([])
+  })
+
+  test('the SQL readers of allocations join only live payments', () => {
+    for (const sql of [ALLOCATED_JOIN, allocatedLateral('u1')]) {
+      expect(sql.sql).toMatch(/JOIN "Payment" py ON py\."id" = pa\."paymentId" AND py\."deletedAt" IS NULL/)
+    }
   })
 })

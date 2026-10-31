@@ -14,18 +14,29 @@
  * ENTRY shows its time only when one was recorded. Totals count every matching entry,
  * not only the 30 on screen. Two views: the chat (gave on the right, like your own
  * messages) and the bahi table (You gave | You got, the balance after each).
+ *
+ * #327 Step B: the database pages, searches and totals the history
+ * (/api/parties/:id/history); PartyHistory asks it for 30 at a time and
+ * PartyHistoryView draws what comes back.
  */
 import { useEffect, useState } from 'react'
+import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query'
 import { Search, Receipt, Wallet, RotateCcw, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Notice } from '@/components/ui/notice'
 import { ChipRow } from '@/components/common/ChipRow'
 import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { cn, formatINR, hasRecordedTime } from '@/lib/utils'
 import { billDayKey, billDayLabel, groupByDay } from '@/lib/bill-days'
+import { offlineFetch } from '@/lib/offline-fetch'
 import {
-  HISTORY_FILTERS, HISTORY_PAGE, filterHistory, historyKind, direction, periodTotals, paidOnBill,
+  HISTORY_FILTERS, HISTORY_PAGE, historyKind, direction, paidOnBill,
   type HistoryEntry, type HistoryFilter, type HistoryKind,
 } from '@/lib/party-history'
+
+type Totals = Record<string, { gave: number; got: number }>
+const KINDS: HistoryKind[] = ['sale', 'purchase', 'return_in', 'return_out', 'got', 'gave']
 
 type View = 'chat' | 'ledger'
 const VIEW_KEY = 'bahikhata:party-history-view'
@@ -54,33 +65,43 @@ function GaveGot({ tot, className }: { tot?: { gave: number; got: number }; clas
   )
 }
 
-export function PartyHistory({ entries, t, balWords, onOpenBill, notice }: {
+export interface PartyHistoryViewProps {
+  /** The matching entries loaded so far, newest first. */
   entries: HistoryEntry[]
+  /** billDayKey → that day's gave/got over every matching entry. */
+  dayTotals: Totals
+  /** "2026-10" → that month's gave/got over every matching entry. */
+  monthTotals: Totals
+  /** Entries matching the filter and search, over the whole history. */
+  total: number
+  status: 'loading' | 'error' | 'ready'
+  onRetry: () => void
+  onMore: () => void
+  loadingMore: boolean
+  filter: HistoryFilter
+  onFilter: (f: HistoryFilter) => void
+  q: string
+  onQ: (q: string) => void
   t: (k: string) => string
   /** The balance after an entry, in words ("they owe ₹1,200"). */
   balWords: (b: number) => string
   onOpenBill: (id: string) => void
-  /** The "showing the latest N" note, when the khata holds more than the page loaded. */
-  notice?: React.ReactNode
-}) {
+}
+
+export function PartyHistoryView({
+  entries, dayTotals, monthTotals, total, status, onRetry, onMore, loadingMore,
+  filter, onFilter, q, onQ, t, balWords, onOpenBill,
+}: PartyHistoryViewProps) {
   const [view, setView] = useState<View>('chat')
-  const [filter, setFilter] = useState<HistoryFilter>('all')
-  const [q, setQ] = useState('')
-  const [shown, setShown] = useState(HISTORY_PAGE)
   useEffect(() => { setView(readView()) }, [])
   const pickView = (v: View) => { setView(v); try { localStorage.setItem(VIEW_KEY, v) } catch { /* per device only */ } }
 
   const label = (k: HistoryKind) => t(`bahi.${k}`)
-  // At most the 500 bills + 500 payments the page loads: cheap to filter on every render.
-  const rows = filterHistory(entries, { filter, q, label })
-  useEffect(() => { setShown(HISTORY_PAGE) }, [filter, q])
-  const days = groupByDay(rows.slice(0, shown))
-  const dayTot = periodTotals(rows, (e) => billDayKey(e.date))
-  const monthTot = periodTotals(rows, (e) => monthOf(billDayKey(e.date)))
-  // The oldest month of a capped khata is only partly loaded: no total rather than a short one.
-  const oldestMonth = rows.length ? monthOf(billDayKey(rows[rows.length - 1].date)) : ''
+  const days = groupByDay(entries)
   // "Closed on" is the balance after the month's last entry — true only when nothing is hidden.
   const unfiltered = filter === 'all' && !q.trim()
+  // The search and filters stay once there is anything to search, or a search is on.
+  const hasControls = !unfiltered || total > 0 || entries.length > 0
   const now = new Date()
   const dayName = (key: string) => billDayLabel(key, now, { today: t('bills.today'), yesterday: t('bills.yesterday') })
   const monthName = (key: string) => new Date(`${key}-01T00:00:00.000Z`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -103,7 +124,7 @@ export function PartyHistory({ entries, t, balWords, onOpenBill, notice }: {
     <div className="px-4 pt-4 pb-2 border-t border-border/60 bg-card" data-history-month={key}>
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-bold">{monthName(key)}</span>
-        {(notice && key === oldestMonth) ? null : <GaveGot tot={monthTot.get(key)} className="text-xs font-semibold" />}
+        <GaveGot tot={monthTotals[key]} className="text-xs font-semibold" />
       </div>
       {unfiltered && <p className="text-xs text-muted-foreground tabular-nums">{t(key === monthOf(billDayKey(now)) ? 'bahi.month_now' : 'bahi.month_close').replace('{v}', balWords(closing))}</p>}
     </div>
@@ -129,7 +150,7 @@ export function PartyHistory({ entries, t, balWords, onOpenBill, notice }: {
             onChange={(v) => pickView(v as View)}
           />
         </div>
-        {entries.length > 0 && (
+        {hasControls && (
           <>
             {/* The key, once: what red ↑ and green ↓ mean on this page. */}
             <div className="flex items-center gap-4 text-xs text-muted-foreground" data-history-key>
@@ -142,7 +163,7 @@ export function PartyHistory({ entries, t, balWords, onOpenBill, notice }: {
                 id="field-history-search"
                 type="search"
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => onQ(e.target.value)}
                 placeholder={t('bahi.search_ph')}
                 aria-label={t('bahi.search_ph')}
                 className="pl-9"
@@ -152,16 +173,26 @@ export function PartyHistory({ entries, t, balWords, onOpenBill, notice }: {
               ariaLabel={t('bahi.history')}
               chips={HISTORY_FILTERS.map((f) => ({ value: f, label: t(`bahi.f.${f}`) }))}
               value={filter}
-              onChange={(f) => setFilter(f as HistoryFilter)}
+              onChange={(f) => onFilter(f as HistoryFilter)}
             />
           </>
         )}
-        {notice}
       </div>
 
-      {entries.length === 0 ? (
+      {status === 'loading' && entries.length === 0 ? (
+        // The history in outline while the first 30 arrive.
+        <div className="px-3 pb-4 space-y-2" aria-busy="true" data-history-loading>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className={cn('h-20 w-[84%] max-w-sm rounded-2xl bg-muted animate-pulse', i % 2 === 0 ? 'ml-auto' : '')} />
+          ))}
+        </div>
+      ) : status === 'error' && entries.length === 0 ? (
+        <div className="px-4 pb-5">
+          <Notice level="act" title={t('bahi.load_failed')} action={<Button size="sm" variant="outline" onClick={onRetry}>{t('bahi.retry')}</Button>} />
+        </div>
+      ) : unfiltered && total === 0 ? (
         <p className="px-4 pb-5 text-sm text-muted-foreground">{t('bahi.empty')}</p>
-      ) : rows.length === 0 ? (
+      ) : entries.length === 0 ? (
         <p className="px-4 pb-5 text-sm text-muted-foreground">{t('bahi.no_match').replace('{q}', q.trim() || t(`bahi.f.${filter}`))}</p>
       ) : view === 'chat' ? (
         <div data-history-view="chat" className="pb-2">
@@ -171,7 +202,7 @@ export function PartyHistory({ entries, t, balWords, onOpenBill, notice }: {
               <div className="sticky z-10 flex justify-center py-2 pointer-events-none" style={STICKY_TOP} data-history-day>
                 <span className="inline-flex items-center gap-2 rounded-full bg-card/95 backdrop-blur border border-border/70 shadow-sm px-3 py-1 text-xs font-semibold">
                   <span>{dayName(day.key)}</span>
-                  <GaveGot tot={dayTot.get(day.key)} />
+                  <GaveGot tot={dayTotals[day.key]} />
                 </span>
               </div>
               <ol className="px-3 pb-3 space-y-2">
@@ -236,7 +267,7 @@ export function PartyHistory({ entries, t, balWords, onOpenBill, notice }: {
             <>
               <div className="sticky z-10 flex items-center justify-between gap-2 px-4 py-1.5 bg-muted/90 backdrop-blur border-y border-border/60" style={STICKY_TOP} data-history-day>
                 <span className="text-xs font-semibold">{dayName(day.key)}</span>
-                <GaveGot tot={dayTot.get(day.key)} className="text-xs font-semibold" />
+                <GaveGot tot={dayTotals[day.key]} className="text-xs font-semibold" />
               </div>
               <ol>
                 {day.rows.map((e) => {
@@ -276,17 +307,96 @@ export function PartyHistory({ entries, t, balWords, onOpenBill, notice }: {
         </div>
       )}
 
-      {rows.length > shown && (
+      {total > entries.length && entries.length > 0 && (
         <div className="px-4 py-3">
           <button
             type="button"
-            onClick={() => setShown((n) => n + HISTORY_PAGE)}
-            className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted"
+            onClick={onMore}
+            disabled={loadingMore}
+            aria-busy={loadingMore}
+            className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted disabled:opacity-60"
           >
-            {t('bahi.older').replace('{n}', String(Math.min(HISTORY_PAGE, rows.length - shown))).replace('{m}', String(rows.length - shown))}
+            {t('bahi.older').replace('{n}', String(Math.min(HISTORY_PAGE, total - entries.length))).replace('{m}', String(total - entries.length))}
           </button>
         </div>
       )}
     </section>
+  )
+}
+
+interface HistoryPageResponse {
+  entries: HistoryEntry[]
+  nextCursor: string | null
+  total: number
+  days: Totals
+  months: Totals
+}
+
+/** A value that settles after `ms` without changes — the search waits for a pause in typing. */
+function useSettled<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    const id = setTimeout(() => setSettled(value), ms)
+    return () => clearTimeout(id)
+  }, [value, ms])
+  return settled
+}
+
+/**
+ * The history of one customer or supplier, 30 entries at a time from the database.
+ * `version` changes whenever the page's own data reloads (a payment saved, a bill
+ * edited), so the history reloads with it.
+ */
+export function PartyHistory({ partyId, version, t, balWords, onOpenBill }: {
+  partyId: string
+  version?: number
+  t: (k: string) => string
+  balWords: (b: number) => string
+  onOpenBill: (id: string) => void
+}) {
+  const [filter, setFilter] = useState<HistoryFilter>('all')
+  const [q, setQ] = useState('')
+  const settledQ = useSettled(q.trim(), 300)
+  // The shown words, so a search for "got" — or "मिले" — finds payments.
+  const labels = JSON.stringify(Object.fromEntries(KINDS.map((k) => [k, t(`bahi.${k}`)])))
+
+  const query = useInfiniteQuery({
+    queryKey: ['party-history', partyId, filter, settledQ, labels, version ?? 0],
+    queryFn: async ({ pageParam }): Promise<HistoryPageResponse> => {
+      const params = new URLSearchParams({ limit: String(HISTORY_PAGE), filter, q: settledQ, labels })
+      if (pageParam) params.set('cursor', pageParam)
+      const r = await offlineFetch(`/api/parties/${partyId}/history?${params}`)
+      if (!r.ok) throw new Error(`history ${r.status}`)
+      return r.json()
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    // A new search keeps the last answer on screen until the new one arrives.
+    placeholderData: keepPreviousData,
+    enabled: !!partyId,
+  })
+
+  const pages = query.data?.pages ?? []
+  const entries = pages.flatMap((p) => p.entries)
+  const dayTotals: Totals = Object.assign({}, ...pages.map((p) => p.days))
+  const monthTotals: Totals = Object.assign({}, ...pages.map((p) => p.months))
+  return (
+    <PartyHistoryView
+      entries={entries}
+      dayTotals={dayTotals}
+      monthTotals={monthTotals}
+      total={pages[0]?.total ?? 0}
+      status={query.isError ? 'error' : query.isPending ? 'loading' : 'ready'}
+      onRetry={() => { void query.refetch() }}
+      onMore={() => { void query.fetchNextPage() }}
+      loadingMore={query.isFetchingNextPage}
+      filter={filter}
+      onFilter={setFilter}
+      q={q}
+      onQ={setQ}
+      t={t}
+      balWords={balWords}
+      onOpenBill={onOpenBill}
+    />
   )
 }
