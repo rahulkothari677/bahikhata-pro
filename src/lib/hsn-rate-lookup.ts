@@ -38,6 +38,7 @@
  * @see src/lib/gst-rates.ts — the slabs a shopkeeper may PICK (a different list)
  */
 import table from '@/lib/data/gst-goods-rates.json'
+import { istDateString } from '@/lib/timezone'
 
 export interface RateRule {
   gstRate: number
@@ -78,6 +79,14 @@ export interface RateAmendment {
   notification: string
   effectiveFrom: string
   note: string
+  /**
+   * The rows in force from `effectiveFrom`, when the amending notification's own
+   * text has been read and the new rows are known. Without them the change is
+   * declared and the lookup refuses (as for tobacco); with them it answers.
+   */
+  rules?: RateRule[]
+  /** The code left the rate schedules for the exemption list (exempt-goods-lookup.ts). */
+  exempt?: boolean
 }
 
 export const RATE_AMENDMENTS: RateAmendment[] = [
@@ -88,14 +97,60 @@ export const RATE_AMENDMENTS: RateAmendment[] = [
     note:
       'Pan masala, gutkha, cigarettes and other tobacco moved to 40%. Bidi went the other way, down to 18%, so the heading did not move as one — check the item before accepting any rate.',
   },
+  {
+    // Read from the Gazette (CG-DL-E-27102026-277454): Sch. I S.No. 272A inserted, Sch. II S.No. 138 narrowed.
+    prefixes: ['4012'],
+    notification: '02/2026-Central Tax (Rate), dated 27.10.2026 (G.S.R. 921(E))',
+    effectiveFrom: '2026-11-01',
+    note: 'Retreaded tractor tyres moved to 5%; other retreaded or used tyres stay 18%.',
+    rules: [
+      { gstRate: 5, description: 'Retreaded tractor tyres', schedule: 'I', conditions: [] },
+      {
+        gstRate: 18,
+        description: 'Retreaded or used pneumatic tyres of rubber (other than retreaded tractor tyres); solid or cushion tyres, tyre treads and tyre flaps, of rubber',
+        schedule: 'II',
+        conditions: [],
+      },
+    ],
+  },
+  {
+    // Same notification, Sch. I S.No. 237 substituted: the rate stays 5%; the entry now names
+    // sea-weed bio-stimulants. Carried so a 3101 answer from 1 Nov quotes the words in force.
+    prefixes: ['3101'],
+    notification: '02/2026-Central Tax (Rate), dated 27.10.2026 (G.S.R. 921(E))',
+    effectiveFrom: '2026-11-01',
+    note: 'Fertiliser entry reworded: rate unchanged at 5%; sea-weed extract bio-stimulants are now named in it.',
+    rules: [
+      {
+        gstRate: 5,
+        description: 'All goods i.e. animal or vegetable fertilisers or organic fertilisers pre-packaged and labelled. Explanation: this entry includes sea-weed extract based bio-stimulants, as registered under Schedule VI to the Fertiliser (Inorganic, Organic or Mixed) (Control) Order, 1985',
+        schedule: 'I',
+        conditions: ['pre-packaged-and-labelled'],
+      },
+    ],
+  },
+  {
+    // Read from the Gazette (CG-DL-E-27102026-277454): exemption 10/2025-CT(R) S.No. 87A inserted.
+    prefixes: ['12119013'],
+    notification: '03/2026-Central Tax (Rate), dated 27.10.2026 (G.S.R. 924(E))',
+    effectiveFrom: '2026-11-01',
+    note: 'Psyllium seeds (isabgol) are exempt — no GST, reported as exempt, not nil-rated.',
+    exempt: true,
+  },
 ]
 
-/** The amendment affecting this code, if one lands after the table's date. */
+/**
+ * The amendment affecting this code on this date (IST day), if one lands after the
+ * table's date. A refusal-only amendment also covers a SHORTER typed code inside its
+ * heading ("24" for tobacco); one that carries rows answers only for a code within it.
+ */
 export function amendmentFor(hsn: string, asOn: Date = new Date()): RateAmendment | null {
+  const day = istDateString(asOn)
   for (const a of RATE_AMENDMENTS) {
-    if (new Date(a.effectiveFrom) > asOn) continue          // not in force yet
+    if (a.effectiveFrom > day) continue                      // not in force yet
     if (a.effectiveFrom <= table.source.ratesAsOn) continue  // already in the base
-    if (a.prefixes.some(p => hsn.startsWith(p) || p.startsWith(hsn))) return a
+    const answers = a.rules || a.exempt
+    if (a.prefixes.some(p => hsn.startsWith(p) || (!answers && p.startsWith(hsn)))) return a
   }
   return null
 }
@@ -111,6 +166,8 @@ export type LookupOutcome =
   | 'unknown'
   /** The base notification's rate for this code was changed after it. */
   | 'superseded'
+  /** A later notification moved this code to the exemption list. */
+  | 'exempt'
 
 export interface HsnLookupResult {
   hsn: string
@@ -169,6 +226,8 @@ export const CONDITION_TEXT: Record<string, string> = {
     'This applies only to items named in the notification’s own annexure. The HSN code alone does not decide it.',
   'seed-quality-only':
     'This applies only to goods of seed quality, not the same item sold as food.',
+  'chapter-entry':
+    'This entry covers one named item in the chapter, not every heading in it. Check your item is exactly that.',
 }
 
 /**
@@ -181,9 +240,44 @@ export const CONDITION_TEXT: Record<string, string> = {
  * when an 8-digit one exists — would apply a general rate to a good the
  * statute treats specifically.
  */
-export function lookupHsn(input: string): HsnLookupResult {
+export function lookupHsn(input: string, asOn: Date = new Date()): HsnLookupResult {
   const hsn = normaliseHsn(input)
   const base = { hsn, source: SOURCE }
+  const onDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  /** One reading of a set of rows, whether from the base table or a dated amendment. */
+  const answer = (key: string, rules: RateRule[], from?: RateAmendment): HsnLookupResult => {
+    const extra = from ? { supersededBy: from, source: { notification: from.notification, ratesAsOn: from.effectiveFrom } } : {}
+    // A row that explicitly carves this code out must not answer for it.
+    const applicable = rules.filter(r => !r.excludes?.some(x => hsn.startsWith(x) || x.startsWith(hsn)))
+    if (!applicable.length) {
+      return {
+        ...base, ...extra, outcome: 'unknown', matchedOn: key, rules,
+        suggestedRate: null,
+        message: `HSN ${key} has a rate, but this notification specifically excludes ${hsn}. Check the exemption list or ask your CA.`,
+      }
+    }
+    const rates = [...new Set(applicable.map(r => r.gstRate))]
+    const conditioned = applicable.some(r => r.conditions.length > 0)
+    const since = from ? ` (from ${onDate(from.effectiveFrom)}, ${from.notification})` : ''
+    if (rates.length > 1) {
+      return {
+        ...base, ...extra, outcome: 'ambiguous', matchedOn: key, rules: applicable, suggestedRate: null,
+        message: `HSN ${key} has ${rates.length} different rates (${rates.map(r => r + '%').join(', ')}) depending on the goods${since}. Pick the one that matches what you sell.`,
+      }
+    }
+    if (conditioned) {
+      return {
+        ...base, ...extra, outcome: 'needs-confirmation', matchedOn: key, rules: applicable,
+        suggestedRate: rates[0],
+        message: `HSN ${key} is ${rates[0]}%${since} — but only under a condition. Check it before accepting.`,
+      }
+    }
+    return {
+      ...base, ...extra, outcome: 'single', matchedOn: key, rules: applicable, suggestedRate: rates[0],
+      message: `HSN ${key} is ${rates[0]}% GST${since}.`,
+    }
+  }
 
   if (hsn.length < 2) {
     return {
@@ -198,12 +292,23 @@ export function lookupHsn(input: string): HsnLookupResult {
    * reference — which is precisely how it spent eleven months telling people
    * cigarettes were 28%.
    */
-  const amended = amendmentFor(hsn)
+  const amended = amendmentFor(hsn, asOn)
+  if (amended?.exempt) {
+    const key = amended.prefixes.find(p => hsn.startsWith(p)) ?? hsn
+    return {
+      ...base, outcome: 'exempt', matchedOn: key, rules: [], suggestedRate: null,
+      supersededBy: amended, source: { notification: amended.notification, ratesAsOn: amended.effectiveFrom },
+      message: `HSN ${key} is exempt from ${onDate(amended.effectiveFrom)} (${amended.notification}). ${amended.note}`,
+    }
+  }
+  if (amended?.rules) {
+    return answer(amended.prefixes.find(p => hsn.startsWith(p)) ?? hsn, amended.rules, amended)
+  }
   if (amended) {
     return {
       ...base, outcome: 'superseded', matchedOn: null, rules: [], suggestedRate: null,
       supersededBy: amended,
-      message: `This rate changed on ${new Date(amended.effectiveFrom).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} (${amended.notification}). ${amended.note} Set the rate yourself — our table predates the change.`,
+      message: `This rate changed on ${onDate(amended.effectiveFrom)} (${amended.notification}). ${amended.note} Set the rate yourself — our table predates the change.`,
     }
   }
 
@@ -211,39 +316,22 @@ export function lookupHsn(input: string): HsnLookupResult {
     const key = hsn.slice(0, len)
     const rules = CODES[key]
     if (!rules || !rules.length) continue
-
-    // A row that explicitly carves this code out must not answer for it.
-    const applicable = rules.filter(r => !r.excludes?.some(x => hsn.startsWith(x) || x.startsWith(hsn)))
-    if (!applicable.length) {
+    const found = answer(key, rules)
+    /*
+     * #120 (Phase 8b): a chapter row speaks for every heading in the chapter
+     * only when the shopkeeper's item is the thing it names — chapter 12's
+     * 5% is "all goods other than of seed quality", chapter 64's is footwear
+     * up to ₹2,500. Typed 4+ digits that found nothing closer get the rate as
+     * a question, with the row's own words, never as a plain answer.
+     */
+    if (key.length === 2 && hsn.length > 2 && found.outcome === 'single') {
       return {
-        ...base, outcome: 'unknown', matchedOn: key, rules,
-        suggestedRate: null,
-        message: `HSN ${key} has a rate, but this notification specifically excludes ${hsn}. Check the exemption list or ask your CA.`,
+        ...found, outcome: 'needs-confirmation',
+        // The row's own words can run to 900 characters; the screen shows them behind ⓘ.
+        message: `No row for ${hsn} itself. Chapter ${key} is ${found.suggestedRate}% only for the goods it names — check them before accepting.`,
       }
     }
-
-    const rates = [...new Set(applicable.map(r => r.gstRate))]
-    const conditioned = applicable.some(r => r.conditions.length > 0)
-
-    if (rates.length > 1) {
-      return {
-        ...base, outcome: 'ambiguous', matchedOn: key, rules: applicable, suggestedRate: null,
-        message: `HSN ${key} has ${rates.length} different rates (${rates.map(r => r + '%').join(', ')}) depending on the goods. Pick the one that matches what you sell.`,
-      }
-    }
-
-    if (conditioned) {
-      return {
-        ...base, outcome: 'needs-confirmation', matchedOn: key, rules: applicable,
-        suggestedRate: rates[0],
-        message: `HSN ${key} is ${rates[0]}% — but only under a condition. Check it before accepting.`,
-      }
-    }
-
-    return {
-      ...base, outcome: 'single', matchedOn: key, rules: applicable, suggestedRate: rates[0],
-      message: `HSN ${key} is ${rates[0]}% GST.`,
-    }
+    return found
   }
 
   return {

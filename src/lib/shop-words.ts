@@ -75,6 +75,7 @@ export const SHOP_WORD_GROUPS: readonly (readonly string[])[] = [
   ['pistachio', 'pista'],
   ['dates', 'khajur'],
   ['peanut', 'peanuts', 'moongphali', 'mungfali', 'singdana'],
+  ['isabgol', 'isabgul', 'isabgoal', 'isobgol', 'psyllium'],
   // household
   ['soap', 'sabun', 'saabun'],
   ['toothpaste', 'manjan'],

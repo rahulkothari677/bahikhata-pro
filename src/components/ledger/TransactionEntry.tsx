@@ -2521,8 +2521,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             </SelectTrigger>
                             <SelectContent>
                               {/* See #86 — the line's own rate stays on the list so an old bill
-                                  being edited keeps its 12%. */}
-                              {ratesForPicker(item.gstRate).map(r => (
+                                  being edited keeps its 12%; #121 — a bill dated back to when
+                                  12% or 28% applied is offered it, a bill from today is not. */}
+                              {ratesForPicker(item.gstRate, date).map(r => (
                                 <SelectItem key={r} value={String(r)}>
                                   {r}%{isLegacyGstRate(r) ? ' (old rate)' : ''}
                                 </SelectItem>

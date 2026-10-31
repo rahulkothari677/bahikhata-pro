@@ -29,7 +29,7 @@ import { stripComments } from '@/test-support/read-source'
 
 const SRC = path.resolve(process.cwd(), 'src')
 const PROSE_CEILING = 2176 // 7g-1: the e-Invoice how-to moved behind its ⓘ, #153 (was 2219; 2271 before 6a; 2347 before 5e-6 + 5f-2)
-const BOX_CEILING = 76
+const BOX_CEILING = 65 // 8b: the item form's exemption question and "Exempt" boxes became <Notice> (was 76; 67 counted)
 /** Legal and marketing pages: long text is their job. */
 const NOT_SCREENS = ['app/terms', 'app/privacy', 'app/landing', 'app/dev']
 

@@ -221,8 +221,20 @@ for (const cell of cells) {
 // legitimately appears more than once with different conditions, and hiding
 // the duplicates would silently pick one.
 const byCode = {}
+let droppedFragments = 0
 for (const r of rows) {
-  for (const code of r.hsn) {
+  /*
+   * #120 (Phase 8b): a tariff item wrapped across lines ("2202 99 10") reaches
+   * here as its pieces — "99" and "10" — which then posed as CHAPTER keys and
+   * answered for 3,724 unrelated headings (radios at 5%, books as "tube for
+   * tractor tyres"). A genuine chapter entry stands alone in its row (61
+   * apparel, 64 footwear, "84, 85 or 94" renewable devices); a 2-digit code in
+   * a row that also names a real 4-8 digit code is always such a fragment.
+   */
+  const real = r.hsn.filter((c) => c.length >= 4)
+  const codes = real.length ? real : r.hsn
+  droppedFragments += r.hsn.length - codes.length
+  for (const code of codes) {
     ;(byCode[code] ||= []).push({
       gstRate: r.gstRate,
       description: r.description,
@@ -262,6 +274,7 @@ if (mismatches.length) {
 console.log(`rate cells skipped: ${skipped.length}`)
 for (const k of skipped.slice(0, 10)) console.log('   skip:', JSON.stringify(k))
 const rates = [...new Set(rows.map(r => r.gstRate))].sort((a, b) => a - b)
+console.log(`chapter-like fragments dropped (#120): ${droppedFragments}`)
 console.log(`rules parsed : ${rows.length}`)
 console.log(`distinct HSN : ${Object.keys(byCode).length}`)
 console.log(`GST rates    : ${rates.join(', ')}`)

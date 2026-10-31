@@ -50,7 +50,7 @@ interface Finding {
   conditions: string[]
   suggested: 'exempt' | 'taxable' | null
   source: string | null
-  serial: number | null
+  serial: number | string | null
 }
 
 const TREATMENT_LABEL: Record<string, string> = {

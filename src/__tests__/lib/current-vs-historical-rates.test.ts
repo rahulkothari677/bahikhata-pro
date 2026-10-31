@@ -54,7 +54,22 @@ describe('but 12% must stay reachable, and this is the half a naive fix breaks',
      */
     const opts = ratesForPicker(12)
     expect(opts).toContain(12)
-    expect(opts).toEqual([0, 3, 5, 12, 18, 28, 40])
+    // 28% left the current list too (#121) — it is not offered just because 12% is.
+    expect(opts).toEqual([0, 3, 5, 12, 18, 40])
+  })
+
+  test('#121: 28% only on a bill dated up to 31 Jan 2026; 12% only up to 21 Sep 2025', () => {
+    expect(ratesForPicker(null, '2026-11-01')).toEqual([0, 3, 5, 18, 40])   // a bill from today
+    expect(ratesForPicker(null, '2026-02-01')).not.toContain(28)            // 19/2025-CT(R) from 1 Feb 2026
+    expect(ratesForPicker(null, '2026-01-31')).toEqual([0, 3, 5, 18, 28, 40])
+    expect(ratesForPicker(null, '2025-09-22')).not.toContain(12)            // 09/2025-CT(R) from 22 Sep 2025
+    expect(ratesForPicker(null, '2025-09-21')).toEqual([0, 3, 5, 12, 18, 28, 40])
+    expect(ratesForPicker(null)).toEqual([0, 3, 5, 18, 40])                 // an item, with no bill date
+  })
+
+  test('#121: an item or line already at 28% keeps 28% on its own picker, whatever the date', () => {
+    expect(ratesForPicker(28, '2026-11-01')).toContain(28)
+    expect(ratesForPicker(28)).toContain(28)
   })
 
   test('it is labelled as old, so nobody picks it for a new line by accident', () => {

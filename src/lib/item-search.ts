@@ -108,6 +108,22 @@ function isShopWord(t: Tok, s: Tok): boolean {
     (s.fold.length >= 4 && t.fold === s.fold)
 }
 
+/**
+ * The shop-word groups an item's name names, each as its group's first word —
+ * "Aashirvaad Aata 5kg" → ['atta'], "चीनी" → ['sugar']. Phase 8b (#129): the
+ * item form's HSN-by-name reads names through this, so search and HSN agree on
+ * what a word means.
+ */
+export function shopWordsIn(name: string): string[] {
+  const out: string[] = []
+  for (const w of words(name).map(tok)) {
+    for (const g of SHOP_GROUPS) {
+      if (!out.includes(g[0].light) && g.some((m) => isShopWord(w, m))) out.push(g[0].light)
+    }
+  }
+  return out
+}
+
 function unitGroupFor(q: Tok): Tok[] | null {
   return UNIT_GROUPS.find((g) => g.some((m) => m.light === q.light)) ?? null
 }

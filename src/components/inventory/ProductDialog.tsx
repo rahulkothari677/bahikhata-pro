@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { describeSaveOutcome } from '@/lib/edit-conflict'
 import { groupChoices } from '@/lib/item-groups'
@@ -26,6 +26,9 @@ import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { defaultTracksInventory } from '@/lib/inventory-tracking'
 import { ratesForPicker, isLegacyGstRate } from '@/lib/gst-rates'
 import { lookupExemption, CONDITION_QUESTION } from '@/lib/exempt-goods-lookup'
+import { hsnChoices, suggestHsnForName, choiceFits, checkHsnFormat, hsnDigitsFor, type HsnChoice } from '@/lib/hsn-by-name'
+import { HsnSuggestCard, HsnCodeLine } from '@/components/inventory/HsnAssist'
+import { Notice } from '@/components/ui/notice'
 
 
 const UNITS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'm', 'box', 'dozen', 'packet']
@@ -140,8 +143,52 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
     ))
   }, [allConditionsAnswered, conditionAnswers, requiredConditions])
 
-  /* A different item is a different question — never inherit the last answer. */
-  useEffect(() => { setConditionAnswers({}) }, [form.hsn, form.gstRate])
+  /*
+   * A different item is a different question — never inherit the last answer.
+   * Except the answer that came WITH the change: a tapped HSN choice sets the
+   * code, the rate and its answer together (applyChoice), and keeps it.
+   */
+  const keepAnswersFor = useRef<string | null>(null)
+  useEffect(() => {
+    const key = `${form.hsn}|${form.gstRate}`
+    if (keepAnswersFor.current === key) { keepAnswersFor.current = null; return }
+    setConditionAnswers({})
+  }, [form.hsn, form.gstRate])
+
+  /*
+   * Phase 8b (#129): the HSN checked as it is typed, and suggested from the
+   * name (lib/hsn-by-name.ts). Suggestions are for a GST-registered shop only;
+   * the shape check is for everyone. Pure lookups over two small tables, so
+   * they run per keystroke with no request.
+   */
+  const gstShop = shopGst !== 'unregistered'
+  const hsnFormat = useMemo(
+    () => checkHsnFormat(form.hsn, hsnDigitsFor((setting as { priorFyTurnover?: number | null } | null)?.priorFyTurnover)),
+    [form.hsn, setting],
+  )
+  const codeChoices = useMemo(
+    () => (gstShop && hsnFormat.code && !hsnFormat.problem ? hsnChoices(hsnFormat.code) : []),
+    [gstShop, hsnFormat],
+  )
+  const nameSuggestion = useMemo(
+    () => (gstShop && !form.hsn.trim() ? suggestHsnForName(form.name) : null),
+    [gstShop, form.hsn, form.name],
+  )
+  const rateFits = choiceFits(codeChoices, parseFloat(form.gstRate) || 0, form.gstTreatment)
+
+  /** One tap: the code, its rate, its treatment and the answer to its question, together. */
+  const applyChoice = (hsn: string, c: HsnChoice) => {
+    const gstRate = String(c.gstRate)
+    if (hsn !== form.hsn || gstRate !== form.gstRate) keepAnswersFor.current = `${hsn}|${gstRate}`
+    setConditionAnswers(c.answers)
+    setForm((f) => ({
+      ...f,
+      hsn,
+      gstRate,
+      gstTreatment: c.treatment,
+      ...(serviceTouched || product ? {} : { tracksInventory: defaultTracksInventory(hsn) }),
+    }))
+  }
 
   // #264: opened to change the price — select the sale price once the form holds the product's values.
   useEffect(() => {
@@ -209,6 +256,12 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
       sonnerToast.error('Product name required')
       return
     }
+    // #129: a code GSTR-1 cannot take is stopped here, with the fix beside the field — not at filing.
+    if (hsnFormat.problem) {
+      sonnerToast.error(hsnFormat.problem, { description: hsnFormat.fix ? `Tap "Use ${hsnFormat.fix}" under the HSN, or correct it.` : 'Correct the HSN, or leave it empty.' })
+      document.getElementById('field-hsn-sac-code')?.focus()
+      return
+    }
     // 🔒 V17 Audit Phase 1 P1.5: Client-side check for contradictory gstRate + gstTreatment.
     // Exempt/Non-GST products must have gstRate=0. The Zod schema also enforces this
     // server-side, but the client-side check gives immediate feedback before the API call.
@@ -258,7 +311,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
         name: form.name.trim(),
         sku: form.sku.trim() || null,
         barcode: form.barcode.trim() || null,
-        hsn: form.hsn.trim() || null,
+        hsn: hsnFormat.code || null, // digits only: "0910 30" is saved as 091030, the shape GSTR-1 takes
         category: form.category.trim() || null,
         unit: form.unit || 'pcs',
         purchasePrice: parseFloat(form.purchasePrice) || 0,
@@ -374,6 +427,8 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
               autoFocus={!product && !!initial?.brand}
               onFocus={(e) => { if (!product && initial?.brand) { const n = e.currentTarget.value.length; e.currentTarget.setSelectionRange(n, n) } }}
             />
+            {/* Phase 8b: right under the name, where it is seen — the HSN field sits below the fold on a phone. */}
+            {nameSuggestion && <HsnSuggestCard suggestion={nameSuggestion} onPick={applyChoice} />}
           </div>
           {/* #270: the prices — the fields changed most — come straight after the name (they sat below SKU,
               barcode, category, HSN and unit, under the fold on a phone). */}
@@ -479,6 +534,20 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
                 }))
               }}
               placeholder="e.g. 1101 (goods) or 9971 (service)"
+              inputMode="numeric"
+              aria-invalid={!!hsnFormat.problem}
+            />
+            <HsnCodeLine
+              code={hsnFormat.code}
+              problem={hsnFormat.problem}
+              fix={hsnFormat.fix}
+              choices={codeChoices}
+              fits={rateFits}
+              gst={gstShop}
+              gstRate={parseFloat(form.gstRate) || 0}
+              treatment={form.gstTreatment}
+              onFix={(code) => setForm((f) => ({ ...f, hsn: code }))}
+              onPick={(c) => applyChoice(hsnFormat.code, c)}
             />
           </div>
           <div>
@@ -526,14 +595,20 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
             * Spans both columns because it is a question, not a field.
             */}
           {/* Phase 1c-2: the exemption questions are about GST filing — not for a shop that is not registered. */}
-          {shopGst !== 'unregistered' && (
-          <>
-          {exemption?.outcome === 'needs-confirmation' && (
-            <div className="sm:col-span-2 rounded-lg border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-3">
-              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-                This is GST-free only under a condition
-              </p>
-              <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 italic">
+          {/*
+            * Phase 8b: when the HSN help (HsnCodeLine) already offers this code's
+            * choices — each answering its question in one tap — these two do not
+            * repeat it. They remain for what it does not cover: a chapter-wide
+            * row (#334) and a code with no row of its own.
+            */}
+          {gstShop && codeChoices.length === 0 && exemption?.outcome === 'needs-confirmation' && (
+            <Notice
+              level="act"
+              className="sm:col-span-2"
+              title="GST-free only under a condition"
+              info={`${exemption.source} · entry ${exemption.rules[0].serial}. Exempt and taxable go in different boxes of your GSTR-1.`}
+              content={<>
+              <p className="text-xs italic text-muted-foreground">
                 “{exemption.rules[0].description}”
               </p>
 
@@ -556,7 +631,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
                 if (!q) return null
                 return (
                   <div key={code} className="mt-3">
-                    <p className="text-xs font-medium text-amber-900 dark:text-amber-200">{q.question}</p>
+                    <p className="text-xs font-medium">{q.question}</p>
                     <div className="flex flex-wrap gap-2 mt-2">
                       <Button
                         type="button" size="sm" variant="outline"
@@ -575,7 +650,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
                         {q.taxableLabel}
                       </Button>
                       {conditionAnswers[code] && (
-                        <span className="self-center text-xs text-amber-900 dark:text-amber-200">
+                        <span className="self-center text-xs font-medium">
                           ✓ {conditionAnswers[code] === 'exempt' ? q.exemptLabel : q.taxableLabel}
                         </span>
                       )}
@@ -584,17 +659,13 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
                 )
               })}
 
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-3">
-                {allConditionsAnswered
-                  ? `Answered — this item is set to ${form.gstTreatment === 'exempt' ? 'Exempt' : 'Taxable'}.`
-                  : 'Exempt and taxable go in different boxes of your GSTR-1, so this decides whether your return is right.'}
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-                {exemption.source} · entry {exemption.rules[0].serial}
-              </p>
-            </div>
-          )}
-          </>
+              {allConditionsAnswered && (
+                <p className="text-xs text-muted-foreground mt-3">
+                  Set to {form.gstTreatment === 'exempt' ? 'Exempt' : 'Taxable'}
+                </p>
+              )}
+              </>}
+            />
           )}
 
           {/*
@@ -603,19 +674,15 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
             * line of which notification says so. §0 — every figure shows
             * receipts that open the real record.
             */}
-          {shopGst !== 'unregistered' && (
-          <>
-          {exemption?.outcome === 'exempt' && (
-            <div className="sm:col-span-2 rounded-lg border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3">
-              <p className="text-xs text-emerald-900 dark:text-emerald-200">
-                <b>Exempt from GST.</b> {exemption.rules[0].description}
-              </p>
-              <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
-                {exemption.source} · entry {exemption.rules[0].serial}
-              </p>
-            </div>
-          )}
-          </>
+          {gstShop && codeChoices.length === 0 && exemption?.outcome === 'exempt' && (
+            <Notice
+              level="clear"
+              className="sm:col-span-2"
+              title="Exempt from GST"
+              info={`${exemption.source} · entry ${exemption.rules[0].serial}`}
+            >
+              {exemption.rules[0].description}
+            </Notice>
           )}
 
           {/* 🔒 V17 Audit §4.2: GST treatment — for GSTR-3B 3.1(c) nil/exempt/non-GST breakdown */}

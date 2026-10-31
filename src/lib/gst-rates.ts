@@ -81,19 +81,35 @@ export const GST_RATES: number[] = [...GST_RATE_SLABS]
  * validation and reporting keep the full historical set.
  * ═══════════════════════════════════════════════════════════════════════ */
 
-/** What a NEW sale may be charged at. 12% is gone from here, and only here. */
-export const CURRENT_GST_RATE_SLABS = [0, 3, 5, 18, 28, 40] as const
+/**
+ * What a NEW sale may be charged at today. 12% and 28% are gone from here, and only here.
+ *
+ * #121 (Phase 8b, 31 Oct 2026): 28% stayed on this list after its last goods
+ * left it. The 28% schedule was left with tobacco alone after 22 Sep 2025
+ * (09/2025-CT(R)), and tobacco moved to 40% (bidi to 18%) from 1 Feb 2026
+ * (19/2025-CT(R), 31.12.2025) — so from that day a new bill at 28% is wrong.
+ */
+export const CURRENT_GST_RATE_SLABS = [0, 3, 5, 18, 40] as const
 
 /**
- * Rates no longer live, kept so old bills remain enterable and editable.
- *
- * Not "deprecated" in the sense of unusable — an invoice dated before
- * 22 Sep 2025 is correctly 12%, and so is a credit note against it.
+ * Rates no longer live, each with the LAST day it applied, kept so an older bill
+ * stays enterable and editable: an invoice dated before 22 Sep 2025 is correctly
+ * 12%, one for cigarettes in January 2026 correctly 28%, and so is a credit note
+ * against either.
  */
-export const LEGACY_GST_RATES = [12] as const
+export const LEGACY_GST_RATE_LAST_DAY = {
+  12: '2025-09-21', // 09/2025-CT(R): no goods at 12% from 22 Sep 2025
+  28: '2026-01-31', // 19/2025-CT(R): tobacco to 40% (bidi 18%) from 1 Feb 2026
+} as const
+export const LEGACY_GST_RATES = [12, 28] as const
 
 export function isLegacyGstRate(rate: number): boolean {
   return LEGACY_GST_RATES.includes(rate as (typeof LEGACY_GST_RATES)[number])
+}
+
+/** The old rates still lawful on a bill of this date (YYYY-MM-DD, the bill's IST day). */
+export function legacyRatesOn(billDay: string): number[] {
+  return LEGACY_GST_RATES.filter((r) => billDay <= LEGACY_GST_RATE_LAST_DAY[r])
 }
 
 /**
@@ -105,15 +121,14 @@ export function isLegacyGstRate(rate: number): boolean {
  * pre-September product the moment somebody opened it to fix a typo.
  *
  * Passing the row's own rate keeps it on the list for that row only. A new
- * bill, which passes nothing, never sees 12% at all.
+ * bill, which passes nothing, never sees 12% at all. A bill dated back to when
+ * an old rate applied (`billDay`, YYYY-MM-DD) is offered that rate too.
  */
-export function ratesForPicker(currentValue?: number | null): number[] {
-  const base = [...CURRENT_GST_RATE_SLABS]
+export function ratesForPicker(currentValue?: number | null, billDay?: string | null): number[] {
+  const base: number[] = [...CURRENT_GST_RATE_SLABS, ...(billDay ? legacyRatesOn(billDay) : [])]
   const v = Number(currentValue)
-  if (Number.isFinite(v) && v > 0 && !base.includes(v as (typeof CURRENT_GST_RATE_SLABS)[number])) {
-    return [...base, v].sort((a, b) => a - b)
-  }
-  return base
+  if (Number.isFinite(v) && v > 0 && !base.includes(v)) base.push(v)
+  return [...new Set(base)].sort((a, b) => a - b)
 }
 
 /**

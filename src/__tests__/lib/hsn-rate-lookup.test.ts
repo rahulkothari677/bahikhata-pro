@@ -21,6 +21,7 @@ import {
   CONDITION_TEXT,
 } from '@/lib/hsn-rate-lookup'
 import { GST_RATE_SLABS } from '@/lib/gst-rates'
+import rateTable from '@/lib/data/gst-goods-rates.json'
 
 describe('the table itself', () => {
   test('is the 22 Sep 2025 notification, not something older', () => {
@@ -189,6 +190,83 @@ describe('matching the right level of code', () => {
   test('one digit is not a question', () => {
     expect(lookupHsn('7').outcome).toBe('unknown')
     expect(lookupHsn('').outcome).toBe('unknown')
+  })
+})
+
+describe('Phase 8b: a rate change read from the notification answers from its date (IST)', () => {
+  // 02/2026-CT(R), 27 Oct 2026: Sch. I S.No. 272A retreaded tractor tyres at 5%; Sch. II S.No. 138 narrowed.
+  const before = new Date('2026-10-31T18:00:00.000Z') // 31 Oct, 23:30 IST
+  const after = new Date('2026-10-31T18:31:00.000Z')  // 1 Nov, 00:01 IST
+
+  test('before 1 Nov: every retreaded tyre is 18%', () => {
+    const r = lookupHsn('4012', before)
+    expect(r.outcome).toBe('single')
+    expect(r.suggestedRate).toBe(18)
+  })
+  test('from 1 Nov: two rates, so the shopkeeper picks — 5% tractor, 18% the rest — citing 02/2026', () => {
+    const r = lookupHsn('401210', after)
+    expect(r.outcome).toBe('ambiguous')
+    expect(r.rules.map((x) => x.gstRate).sort((a, b) => a - b)).toEqual([5, 18])
+    expect(r.rules.find((x) => x.gstRate === 5)!.description).toBe('Retreaded tractor tyres')
+    expect(r.source.notification).toMatch(/02\/2026-Central Tax \(Rate\)/)
+    expect(r.message).toMatch(/1 November 2026/)
+  })
+  test('fertiliser (3101): still 5% and still conditional; from 1 Nov the words of 02/2026 S.No. 237', () => {
+    const was = lookupHsn('3101', before)
+    const now = lookupHsn('31010099', after)
+    expect([was.suggestedRate, now.suggestedRate]).toEqual([5, 5])
+    expect([was.outcome, now.outcome]).toEqual(['needs-confirmation', 'needs-confirmation'])
+    expect(was.rules[0].description).not.toMatch(/bio-stimulants/)
+    expect(now.rules[0].description).toMatch(/sea-weed extract based bio-stimulants/)
+    expect(now.source.notification).toMatch(/^02\/2026-Central Tax \(Rate\)/)
+  })
+  test('a short code ("40") is not answered by the tyre rows', () => {
+    expect(lookupHsn('40', after).supersededBy?.prefixes).not.toEqual(['4012'])
+  })
+})
+
+describe('#120: a chapter key answers only as a question, and only genuine chapters exist', () => {
+  /*
+   * A tariff item wrapped across lines ("2202 99 10") reached the table as its
+   * pieces, and "99", "10", "49"… posed as chapter keys: 3,724 of the 9,700
+   * headings were answered by a fragment — radios at 5%, books as "tube for
+   * tractor tyres". Hand-picked tests all passed. Only a sweep of every
+   * heading showed it, so the sweep is the guard.
+   */
+  // Rows whose ONLY code is a chapter: 61 apparel, 64 footwear, "84, 85 or 94"
+  // renewable devices, "or any Chapter" medical goods, and the like.
+  const GENUINE_CHAPTERS = [
+    '07', '08', '12', '27', '28', '29', '30', '32', '39', '44', '48', '60', '61',
+    '62', '63', '64', '68', '83', '84', '85', '87', '88', '90', '94',
+  ]
+  const codes = Object.keys(rateTable.codes)
+
+  test('the table holds no chapter key but the genuine ones', () => {
+    expect(codes.filter((k) => k.length === 2).sort()).toEqual([...GENUINE_CHAPTERS].sort())
+  })
+
+  test('sweep: no heading in chapters 01–98 gets a plain rate from a chapter row', () => {
+    let viaChapter = 0
+    const bad: string[] = []
+    for (let ch = 1; ch <= 98; ch++) {
+      for (let h = 1; h <= 99; h++) {
+        const hsn = String(ch).padStart(2, '0') + String(h).padStart(2, '0')
+        const r = lookupHsn(hsn, new Date('2026-10-01T06:30:00Z'))
+        if (r.matchedOn?.length !== 2) continue
+        viaChapter++
+        if (r.outcome === 'single' || !GENUINE_CHAPTERS.includes(r.matchedOn)) bad.push(`${hsn}→${r.matchedOn}:${r.outcome}`)
+      }
+    }
+    expect(bad).toEqual([])
+    expect(viaChapter).toBeGreaterThan(0) // the sweep reached chapter rows at all
+  })
+
+  test('the two symptoms that found it are gone', () => {
+    expect(lookupHsn('4901').rules.map((r) => r.description)).not.toContain('Tube for tractor tyres')
+    const radio = lookupHsn('8527')
+    expect(radio.outcome).not.toBe('single')
+    expect(radio.message).toMatch(/only for the goods it names/)
+    expect(radio.rules[0].description).toMatch(/renewable energy devices/) // the words, for the ⓘ
   })
 })
 

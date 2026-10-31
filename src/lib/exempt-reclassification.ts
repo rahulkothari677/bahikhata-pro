@@ -91,7 +91,7 @@ export interface ReclassifyResult {
   /** What it would become if every condition is answered the exempt way. */
   suggested: 'exempt' | 'taxable' | null
   source: string | null
-  serial: number | null
+  serial: number | string | null
 }
 
 const OK: ReclassifyResult = {

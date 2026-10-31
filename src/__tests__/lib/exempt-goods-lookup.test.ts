@@ -17,7 +17,33 @@ import {
   EXEMPT_TABLE_INFO,
   CONDITION_QUESTION,
 } from '@/lib/exempt-goods-lookup'
-import { CONDITION_TEXT } from '@/lib/hsn-rate-lookup'
+import { CONDITION_TEXT, lookupHsn } from '@/lib/hsn-rate-lookup'
+
+describe('Phase 8b: exemptions inserted after 10/2025 apply from their own date (IST)', () => {
+  // 03/2026-CT(R), 27 Oct 2026, S.No. 87A: psyllium seeds, in force 1 Nov 2026.
+  const before = new Date('2026-10-31T18:00:00.000Z') // 31 Oct, 23:30 IST
+  const after = new Date('2026-10-31T18:31:00.000Z')  // 1 Nov, 00:01 IST
+
+  test('isabgol is exempt from 1 Nov 2026, citing the notification and its serial', () => {
+    const r = lookupExemption('12119013', after)
+    expect(r.outcome).toBe('exempt')
+    expect(r.matchedOn).toBe('12119013')
+    expect(r.rules[0].serial).toBe('87A')
+    expect(r.source).toMatch(/03\/2026-Central Tax \(Rate\)/)
+  })
+  test('a bill dated before 1 Nov keeps the old answer', () => {
+    expect(lookupExemption('12119013', before).outcome).not.toBe('exempt')
+  })
+  test('only the named tariff item: other 1211 plants are untouched', () => {
+    expect(lookupExemption('12119019', after).rules[0]?.serial).not.toBe('87A')
+  })
+  test('the rate lookup says exempt too — never a 0% rate, never the old 5%', () => {
+    const r = lookupHsn('12119013', after)
+    expect(r.outcome).toBe('exempt')
+    expect(r.suggestedRate).toBeNull()
+    expect(lookupHsn('12119013', before).suggestedRate).toBe(5)
+  })
+})
 import { readCode } from '@/test-support/read-source'
 
 describe('the condition that decides half the kirana', () => {
@@ -138,6 +164,54 @@ describe('exemptions with no HSN are kept, not dropped', () => {
     expect(text).toContain('rakhi')
     expect(text).toContain('puja samagri')
     expect(UNKEYED_EXEMPTIONS.length).toBeGreaterThanOrEqual(6)
+  })
+})
+
+describe('#334: a chapter row never exempts a whole chapter outright', () => {
+  /*
+   * The twin of #120. Chapter rows name one thing ("Idols made of clay", 69)
+   * and, carrying no condition, answered "exempt" for every heading in their
+   * chapter — floor tiles (6907) and wash-basins (6910) included. The sweep
+   * over every heading is the guard, not a few examples.
+   */
+  test('sweep: no heading in chapters 01–98 is exempt outright from a chapter row', () => {
+    const bad: string[] = []
+    let viaChapter = 0
+    for (let ch = 1; ch <= 98; ch++) {
+      for (let h = 1; h <= 99; h++) {
+        const hsn = String(ch).padStart(2, '0') + String(h).padStart(2, '0')
+        const r = lookupExemption(hsn, new Date('2026-10-01T06:30:00Z'))
+        if (r.matchedOn?.length !== 2) continue
+        viaChapter++
+        if (r.outcome !== 'needs-confirmation') bad.push(`${hsn}→${r.matchedOn}:${r.outcome}`)
+      }
+    }
+    expect(bad).toEqual([])
+    expect(viaChapter).toBeGreaterThan(0)
+  })
+
+  test.each([
+    ['6907', 'floor tiles', '69'],
+    ['6910', 'wash-basins', '69'],
+    ['6302', 'bed linen', '63'],
+    ['5208', 'cotton fabric', '52'],
+    ['2601', 'iron ore', '26'],
+  ])('%s (%s) is asked, not exempted, by chapter %s', (hsn, _what, chapter) => {
+    const r = lookupExemption(hsn)
+    expect(r.outcome).toBe('needs-confirmation')
+    expect(r.matchedOn).toBe(chapter)
+    expect(r.rules.some((x) => x.conditions.includes('chapter-entry'))).toBe(true)
+  })
+
+  test('the chapter itself, typed alone, still answers as the row says', () => {
+    expect(lookupExemption('69').outcome).toBe('exempt') // "Idols made of clay" — nothing longer was typed
+  })
+
+  test('a chapter row that already carries a condition keeps its own question', () => {
+    // 0910 (ginger, turmeric) has no row of its own and falls to chapter 09's "All goods of seed quality".
+    const r = lookupExemption('0910')
+    expect(r.matchedOn).toBe('09')
+    expect(r.rules[0].conditions).toEqual(['seed-quality-only'])
   })
 })
 

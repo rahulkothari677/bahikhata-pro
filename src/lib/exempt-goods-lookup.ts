@@ -36,13 +36,42 @@
  * every 0% good as nil-rated "wrong treatment".
  */
 import table from '@/lib/data/gst-exempt-goods.json'
+import { istDateString } from '@/lib/timezone'
 
 export interface ExemptRule {
   /** The notification's own words, kept verbatim — never paraphrased. */
   description: string
   conditions: string[]
-  /** Serial number in the Schedule, so an answer can cite its row. */
-  serial: number
+  /** Serial number in the Schedule, so an answer can cite its row ("87A" for an inserted one). */
+  serial: number | string
+}
+
+/**
+ * Exemptions inserted AFTER 10/2025, each from its own date. The table is that
+ * one notification parsed; an amendment rides here, with its instrument, until
+ * the table is rebuilt — and a bill dated before it keeps the old answer.
+ */
+export interface ExemptAddition {
+  /** The tariff item the amendment names (8 digits). */
+  code: string
+  notification: string
+  effectiveFrom: string
+  rule: ExemptRule
+}
+
+export const EXEMPT_ADDITIONS: ExemptAddition[] = [
+  {
+    code: '12119013',
+    notification: '03/2026-Central Tax (Rate), dated 27.10.2026 (G.S.R. 924(E)), S.No. 87A',
+    effectiveFrom: '2026-11-01',
+    rule: { description: 'Psyllium seeds (Isobgul/Isobgol)', conditions: [], serial: '87A' },
+  },
+]
+
+/** The addition covering this code on this date, if any (dates compared as IST days). */
+export function exemptAdditionFor(hsn: string, asOn: Date = new Date()): ExemptAddition | null {
+  const day = istDateString(asOn)
+  return EXEMPT_ADDITIONS.find((a) => a.effectiveFrom <= day && hsn.startsWith(a.code)) ?? null
 }
 
 export type ExemptOutcome =
@@ -97,7 +126,7 @@ export const UNKEYED_EXEMPTIONS = table.unkeyed as Array<{
  * ten million, and the data is a 40 KB import rather than a query — nothing
  * here gets slower as a shop grows.
  */
-export function lookupExemption(hsn: string | null | undefined): ExemptLookupResult {
+export function lookupExemption(hsn: string | null | undefined, asOn: Date = new Date()): ExemptLookupResult {
   const raw = String(hsn ?? '').replace(/\D/g, '')
   const base: Omit<ExemptLookupResult, 'outcome' | 'matchedOn' | 'rules' | 'message'> = {
     hsn: raw,
@@ -114,11 +143,34 @@ export function lookupExemption(hsn: string | null | undefined): ExemptLookupRes
     }
   }
 
+  // An exemption inserted after the table, in force on this date, answers first.
+  const added = exemptAdditionFor(raw, asOn)
+  if (added) {
+    return {
+      ...base,
+      outcome: 'exempt',
+      matchedOn: added.code,
+      rules: [added.rule],
+      source: added.notification,
+      message: `HSN ${added.code} is exempt from ${new Date(added.effectiveFrom).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} under ${added.notification}: ${added.rule.description}`,
+    }
+  }
+
   for (const len of [8, 6, 4, 2]) {
     if (raw.length < len) continue
     const key = raw.slice(0, len)
-    const rules = CODES[key]
-    if (!rules?.length) continue
+    const found = CODES[key]
+    if (!found?.length) continue
+    /*
+     * #334 (Phase 8b, the twin of #120): a chapter row names ONE thing — "Idols
+     * made of clay" (69), "Indian National Flag" (63), "Uranium ore" (26) — and,
+     * carrying no condition, it answered "exempt" outright for every heading in
+     * its chapter: floor tiles, bed sheets, every ore. For a longer code it
+     * becomes a question: is the item exactly what the row names?
+     */
+    const rules = len === 2 && raw.length > 2
+      ? found.map(r => (r.conditions.length ? r : { ...r, conditions: ['chapter-entry'] }))
+      : found
 
     /*
      * If ANY matching rule is unconditional, the goods are exempt outright —
@@ -246,6 +298,12 @@ export const CONDITION_QUESTION: Record<string, ConditionQuestion> = {
     question: 'This entry excludes some goods — read it above. Is yours covered?',
     exemptLabel: 'Yes, covered',
     taxableLabel: 'No, or not sure',
+  },
+  // #334: a chapter-wide row answering a longer code (see lookupExemption).
+  'chapter-entry': {
+    question: 'Is your item exactly what this entry names?',
+    exemptLabel: 'Yes, exactly that',
+    taxableLabel: 'No, something else',
   },
 }
 

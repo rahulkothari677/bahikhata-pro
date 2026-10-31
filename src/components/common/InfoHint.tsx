@@ -97,7 +97,10 @@ export function InfoHint({
         side="top"
         align="start"
         sideOffset={6}
-        className="w-64 text-xs leading-relaxed p-3"
+        // 8b: the §4 16px margin from the screen edge (it sat flush on a 375px phone), and a
+        // hint's own line breaks kept — a statute quote with two rows read as one run-on line.
+        collisionPadding={16}
+        className="w-64 text-xs leading-relaxed p-3 whitespace-pre-line"
         // Clicking inside the bubble must not fall through to the row either.
         onClick={e => e.stopPropagation()}
       >
