@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
 import { Redis } from '@upstash/redis'
+import { FAST_REDIS_OPTIONS } from './redis-fast'
 import { createHash } from 'crypto'
 
 /**
@@ -48,7 +49,7 @@ function getTokenVersionRedis(): Redis | null {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) return null
   try {
-    tokenVersionRedis = new Redis({ url, token })
+    tokenVersionRedis = new Redis({ url, token, ...FAST_REDIS_OPTIONS })
   } catch {
     tokenVersionRedis = null
   }

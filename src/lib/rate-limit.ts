@@ -23,6 +23,7 @@
 
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
+import { FAST_REDIS_OPTIONS } from './redis-fast'
 
 // --- Upstash Redis client (singleton) ------------------------------------
 
@@ -34,7 +35,7 @@ function getRedis(): Redis | null {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) return null
   try {
-    redisClient = new Redis({ url, token })
+    redisClient = new Redis({ url, token, ...FAST_REDIS_OPTIONS })
   } catch {
     redisClient = null
   }
