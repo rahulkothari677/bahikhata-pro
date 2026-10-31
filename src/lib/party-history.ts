@@ -26,6 +26,21 @@ export interface HistoryEntry {
   paymentMode?: string | null
   notes?: string | null
   runningBalance: number
+  /** What the entry did to the balance (lib/statement-balance.ts — the one rule). */
+  delta?: number
+}
+
+const money = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Money paid ON a bill when it was made ("₹250 sale, ₹90 paid at the counter"): the
+ * bill's amount less what it added to the balance. Settlements made later are not in
+ * it — those are their own payment entries, and counting them here would count the
+ * same rupees twice (statement-balance.ts, AUDIT C5).
+ */
+export function paidOnBill(e: HistoryEntry): number {
+  if (e.isPayment || e.delta == null) return 0
+  return Math.max(0, money((Number(e.amount) || 0) - Math.abs(e.delta)))
 }
 
 export function historyKind(e: Pick<HistoryEntry, 'type' | 'isPayment'>): HistoryKind | null {
@@ -34,12 +49,51 @@ export function historyKind(e: Pick<HistoryEntry, 'type' | 'isPayment'>): Histor
 }
 
 /**
- * Right side of the chat — his June design: sales, payments received and supplier
- * returns (money or goods owed TO the shop) on the right; purchases, payments made
- * and customer returns on the left.
+ * Which way it went, from the shop's side — the "You gave / You got" every ledger app
+ * uses (31 Oct, Rahul: sale and payment must look different, with symbols for in and
+ * out). GAVE: goods or money left the shop (a sale, a payment made, goods returned to
+ * a supplier) — red, ↑, the right side of the chat like your own messages. GOT: came in
+ * (a payment received, a purchase, goods returned by a customer) — green, ↓, left.
  */
+export type HistoryDirection = 'gave' | 'got'
+export function direction(kind: HistoryKind | null): HistoryDirection {
+  return kind === 'sale' || kind === 'gave' || kind === 'return_out' ? 'gave' : 'got'
+}
 export function onRight(kind: HistoryKind | null): boolean {
-  return kind === 'sale' || kind === 'got' || kind === 'return_out'
+  return direction(kind) === 'gave'
+}
+
+/**
+ * A period's totals for its header: what was given and got, in rupees. A bill counts
+ * whole on its side, and the money paid on it counts on the other — so a ₹250 sale
+ * with ₹90 paid is "gave ₹250, got ₹90", and gave − got is exactly what the period
+ * moved the balance (31 Oct: October showed got ₹1,750 while ₹597 paid at the counter
+ * was missing, so the month did not add up to its closing balance).
+ */
+export function dayTotals(entries: HistoryEntry[]): { gave: number; got: number } {
+  let gave = 0, got = 0
+  for (const e of entries) {
+    const a = Number(e.amount) || 0
+    const paid = paidOnBill(e)
+    if (direction(historyKind(e)) === 'gave') { gave += a; got += paid }
+    else { got += a; gave += paid }
+  }
+  return { gave: money(gave), got: money(got) }
+}
+
+/**
+ * Totals per period (a day, a month) over EVERY matching entry, not just the ones on
+ * screen — a day cut in two by "Show older" must still show the whole day's total.
+ */
+export function periodTotals(entries: HistoryEntry[], keyOf: (e: HistoryEntry) => string): Map<string, { gave: number; got: number }> {
+  const groups = new Map<string, HistoryEntry[]>()
+  for (const e of entries) {
+    const k = keyOf(e)
+    const g = groups.get(k)
+    if (g) g.push(e)
+    else groups.set(k, [e])
+  }
+  return new Map([...groups].map(([k, g]) => [k, dayTotals(g)]))
 }
 
 export function matchesFilter(e: HistoryEntry, f: HistoryFilter): boolean {

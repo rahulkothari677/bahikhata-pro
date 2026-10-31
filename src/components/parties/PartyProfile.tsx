@@ -864,16 +864,6 @@ export function PartyProfile() {
         ))}
       </div>
 
-      {/* #328: the history in his June chat view (or the ledger lines), 30 at a time, with search and filters. */}
-      <PartyHistory
-        entries={statement as any}
-        t={t}
-        balWords={balWords}
-        onOpenBill={handleViewTransaction}
-        notice={statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap)
-          ? <Notice level="note" title={t('bahi.truncated').replace('{n}', String(statementTotals.cap))} info={t('bahi.truncated_info')} />
-          : null}
-      />
 
       {/* The smaller things, one row: bills, payment link, print and share the statement. */}
       <div className="flex flex-wrap gap-2">
@@ -1101,6 +1091,17 @@ export function PartyProfile() {
           </CardContent>
         </Card>
       )}
+
+      {/* #328: the history — last on the page (Rahul, 31 Oct), You gave ↑ / You got ↓, 30 at a time, search and filters. */}
+      <PartyHistory
+        entries={statement as any}
+        t={t}
+        balWords={balWords}
+        onOpenBill={handleViewTransaction}
+        notice={statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap)
+          ? <Notice level="note" title={t('bahi.truncated').replace('{n}', String(statementTotals.cap))} info={t('bahi.truncated_info')} />
+          : null}
+      />
 
       {/* Leaving and removing, kept away from the everyday buttons. */}
       <div className="flex items-center gap-2">

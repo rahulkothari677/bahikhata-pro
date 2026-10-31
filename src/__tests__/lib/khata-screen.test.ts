@@ -43,10 +43,11 @@ describe('Khata', () => {
     const page = readCode('src/components/parties/PartyProfile.tsx')
     const history = readCode('src/components/parties/PartyHistory.tsx')
     const at = (s: string) => { const i = page.indexOf(s); expect({ s, found: i >= 0 }).toEqual({ s, found: true }); return i }
-    // The order: balance → actions → figures → history → the smaller things → leave / delete.
+    // The order: balance → actions → figures → the smaller things and details → the history LAST (Rahul, 31 Oct) → leave / delete.
     expect(at('{balanceWords}')).toBeLessThan(at('{settleLabel}'))
     expect(at('{settleLabel}')).toBeLessThan(at('data-party-figures'))
     expect(at('data-party-figures')).toBeLessThan(at('<PartyHistory'))
+    expect(at('Top Products')).toBeLessThan(at('<PartyHistory'))
     expect(at("onClick={() => setView('parties')}")).toBeGreaterThan(at('<PartyHistory'))
     // The four tall figure cards are one strip now.
     expect(page).not.toMatch(/<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">/)
