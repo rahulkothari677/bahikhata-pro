@@ -58,7 +58,7 @@
  *      correctness — the window either is or is not open.
  */
 
-import { gstinChangeBlocksAmendment, GSTIN_AMENDMENT_REMEDY } from '@/lib/gstr1-amendments'
+import { gstinChanged, GSTIN_GSTR1A_REMEDY } from '@/lib/gstr1-amendments'
 
 export interface Gstr1aInputs {
   /** Has the period's GSTR-1 been filed? */
@@ -140,11 +140,11 @@ export function gstr1aWindow(input: Gstr1aInputs): Gstr1aWindow {
  * an invoice was billed to moves input credit from one taxpayer to another, and
  * no amendment is allowed to do that.
  *
- * CORRECTED 29 Aug 2026. This comment used to end "it has to go through the
- * later-period route", and the message said the same. That was wrong: a GSTIN
- * cannot be amended in a later period either. Sending someone to next month's
- * amendment screen would have cost them a rejected return and a wasted month.
- * The real remedy is a credit note plus a fresh invoice (#90).
+ * CORRECTED AGAIN 31 Oct 2026 (#100). On 29 Aug this said a GSTIN "cannot be
+ * amended in a later period either" — also wrong: the GSTN GSTR-1A FAQ says it
+ * can be changed "only through GSTR 1 of the following tax periods". GSTR-1A
+ * refuses it; whether 9A really accepts it is disputed (#345, for the CA). The
+ * route every source accepts is a credit note plus a fresh invoice.
  *
  * This matters because the GSTIN case is not rare: typing the wrong customer's
  * GSTIN is one of the commonest filing mistakes there is. Offering GSTR-1A for
@@ -165,18 +165,14 @@ export function correctionFitsGstr1a(changes: string[]): {
    * eventually disagree, and the disagreement would be invisible: one route
    * would offer a correction the other refuses, on the same invoice.
    */
-  if (gstinChangeBlocksAmendment(changes)) {
+  if (gstinChanged(changes)) {
     return {
       fits: false,
       /*
-       * CORRECTED 29 Aug 2026. This used to say the change "has to go in next
-       * month's return as an amendment" — which is wrong, and wrong in the
-       * direction that costs the shopkeeper a rejected return. A GSTIN cannot
-       * be amended in ANY period. The remedy is a credit note plus a fresh
-       * invoice, and it now says so in the same words the amendment screen
-       * uses.
+       * #100 (8c-3): "not in GSTR-1A", then the route every source accepts — in
+       * the same words the corrections list uses (GSTIN_CORRECTION_ROUTE).
        */
-      reason: GSTIN_AMENDMENT_REMEDY,
+      reason: GSTIN_GSTR1A_REMEDY,
     }
   }
   return { fits: true, reason: '' }

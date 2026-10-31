@@ -334,6 +334,8 @@ function correctionsForScreen(all: Correction[], included: Correction[], existin
       canInclude: !!c.row && !deadline.expired,
       problem: c.problem ?? (deadline.expired ? deadline.message : null),
       deadline: deadline.message,
+      // #344: the date alone, for the row; the sentence goes behind ⓘ.
+      deadlineDate: deadline.effectiveDeadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
       daysLeft: deadline.daysLeft,
     }
   })

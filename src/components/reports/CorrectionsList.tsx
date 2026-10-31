@@ -42,6 +42,8 @@ export interface CorrectionRow {
   canInclude: boolean
   problem: string | null
   deadline: string
+  /** "30 Nov 2027" — the row shows this; the sentence above sits behind ⓘ (#344). */
+  deadlineDate: string
   daysLeft: number
 }
 
@@ -134,7 +136,11 @@ export function CorrectionsList({ month, monthName, rows, filed }: {
                     {r.lapsed && !r.included && (
                       <p className="text-xs text-check font-medium mt-1">Changed again since you switched it on — switch on again to include</p>
                     )}
-                    <p className={cn('text-xs mt-1', r.daysLeft <= 30 ? 'text-check' : 'text-muted-foreground')}>{r.deadline}</p>
+                    {/* #344: the date on the row; the full rule (annual return closes it sooner) behind ⓘ. */}
+                    <p className={cn('text-xs mt-1 flex items-center gap-1', r.daysLeft <= 30 ? 'text-check font-medium' : 'text-muted-foreground')}>
+                      <span>Until {r.deadlineDate}{r.daysLeft <= 30 ? ` · ${r.daysLeft} ${r.daysLeft === 1 ? 'day' : 'days'} left` : ''}</span>
+                      <InfoHint text={r.deadline} label={`deadline for ${r.number}`} className="ml-1" />
+                    </p>
                   </>
                 )}
               </div>

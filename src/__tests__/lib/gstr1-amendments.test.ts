@@ -8,6 +8,7 @@
  */
 import {
   buildCorrections, filedVersionsFrom, latestVersions, amendmentTables, includedCorrections, amendmentRowProblems, fingerprint,
+  lineChanges, GSTIN_CORRECTION_ROUTE,
   type CurrentDoc, type LatestVersion,
 } from '@/lib/gstr1-amendments'
 import { documentRow, type Gstr1Transaction, type ShopInfo } from '@/lib/gstr1-builder'
@@ -87,9 +88,48 @@ describe('other changes are caught', () => {
     const [c] = run(filed, { 'INV-0003': sale({ partyGstin: '08AAAPL5555C1Z9' }) })
     expect(c.changes).toContain(`Customer GSTIN changed from ${BUYER} to 08AAAPL5555C1Z9`)
   })
-  test('it is filed under the GSTIN it was ORIGINALLY declared against', () => {
+  test('#100: a GSTIN change is NOT written as a 9A row — the sure route is given instead, and nothing enters the file', () => {
+    // GSTN's 9A row has no field for a new GSTIN (the group's ctin finds the original),
+    // so a row would keep the old GSTIN and look like a fix. Disputed route → the CA (#345).
     const [c] = run(filed, { 'INV-0003': sale({ partyGstin: '08AAAPL5555C1Z9' }) })
-    expect(amendmentTables([c]).b2ba[0].ctin).toBe(BUYER)
+    expect(c.row).toBeNull()
+    expect(c.problem).toBe(GSTIN_CORRECTION_ROUTE)
+    expect(amendmentTables([c]).b2ba).toEqual([])
+    expect(includedCorrections([c], { [c.key]: c.fingerprint })).toEqual([])
+  })
+})
+
+describe('#105: a change the total cannot show is still a change', () => {
+  const filed = latestVersions(filedVersionsFrom(filedReturn([sale()]), '082026'))
+  test('a rate corrected at the same total: 5% → 18%, total ₹525 both times', () => {
+    const now = sale({ subtotal: 444.92, cgst: 40.04, sgst: 40.04, totalAmount: 525 })
+    now.items = [{ ...now.items[0], gstRate: 18, cgst: 40.04, sgst: 40.04, total: 525 }]
+    const [c] = run(filed, { 'INV-0003': now })
+    expect(c.changes).toEqual(['Tax rate changed from 5% to 18%'])
+    expect((c.row!.itms as any[])[0].itm_det.rt).toBe(18)
+  })
+  test('a line moved to exempt at the same total: the taxable value drops, and that is declared', () => {
+    const now = sale({ totalAmount: 525 })
+    now.items = [
+      { ...now.items[0], quantity: 5, cgst: 6.25, sgst: 6.25, total: 262.5 },
+      { ...now.items[0], productName: 'Loose atta', quantity: 5, gstRate: 0, gstTreatment: 'exempt', cgst: 0, sgst: 0, total: 262.5 },
+    ]
+    const [c] = run(filed, { 'INV-0003': now })
+    expect(c.changes).toEqual(['Taxable value changed from ₹500 to ₹250'])
+  })
+  test('the same rates and total, split differently between them', () => {
+    const two = sale({ items: [{ ...sale().items[0], quantity: 5, cgst: 6.25, sgst: 6.25 }, { ...sale().items[0], quantity: 5, gstRate: 18, cgst: 22.5, sgst: 22.5 }] })
+    const f2 = latestVersions(filedVersionsFrom(filedReturn([two]), '082026'))
+    const moved = sale({ items: [{ ...sale().items[0], quantity: 7, cgst: 8.75, sgst: 8.75 }, { ...sale().items[0], quantity: 3, gstRate: 18, cgst: 13.5, sgst: 13.5 }] })
+    expect(run(f2, { 'INV-0003': moved })[0].changes).toEqual(['Value split between tax rates changed'])
+  })
+  test('when the total moved as well, only a rate change adds a line — no repeated "taxable value"', () => {
+    const [c] = run(filed, { 'INV-0003': sale({ totalAmount: 1050, subtotal: 1000 }, 20) })
+    expect(c.changes).toEqual(['Value changed from ₹525 to ₹1050'])
+  })
+  test('lineChanges is quiet when nothing changed', () => {
+    const r = documentRow(sale(), SHOP)!.row
+    expect(lineChanges(r, r)).toEqual([])
   })
 })
 

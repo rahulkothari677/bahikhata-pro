@@ -1,5 +1,5 @@
 /**
- * How long a correction stays possible, and which ones are never possible
+ * How long a correction stays possible, and what a GSTIN change needs
  * (#89, #90).
  *
  * `buildAmendments` answers "has this invoice changed since we filed it?".
@@ -9,8 +9,9 @@
 
 import {
   amendmentDeadline,
-  gstinChangeBlocksAmendment,
-  GSTIN_AMENDMENT_REMEDY,
+  gstinChanged,
+  GSTIN_GSTR1A_REMEDY,
+  GSTIN_CORRECTION_ROUTE,
 } from '@/lib/gstr1-amendments'
 import { correctionFitsGstr1a } from '@/lib/gstr1a-window'
 
@@ -70,31 +71,31 @@ describe('the deadline — 30 November, or the annual return, whichever is EARLI
   })
 })
 
-describe('a customer GSTIN can never be amended', () => {
-  test('it is blocked, whatever else changed on the invoice', () => {
-    expect(gstinChangeBlocksAmendment(['Customer GSTIN changed from A to B'])).toBe(true)
-    expect(gstinChangeBlocksAmendment(['Value changed', 'Customer GSTIN changed'])).toBe(true)
+describe('a customer GSTIN: GSTR-1A refuses it, the later-month route is disputed (#100)', () => {
+  test('a GSTIN change is recognised, whatever else changed on the invoice', () => {
+    expect(gstinChanged(['Customer GSTIN changed from A to B'])).toBe(true)
+    expect(gstinChanged(['Value changed', 'Customer GSTIN changed'])).toBe(true)
   })
 
-  test('ordinary corrections are not blocked', () => {
+  test('ordinary corrections are not GSTIN changes', () => {
     for (const c of ['Value changed', 'Invoice date changed', 'Place of supply changed']) {
-      expect({ c, blocked: gstinChangeBlocksAmendment([c]) }).toEqual({ c, blocked: false })
+      expect({ c, blocked: gstinChanged([c]) }).toEqual({ c, blocked: false })
     }
   })
 
-  test('the remedy is credit note + fresh invoice, not an amendment', () => {
+  test('the advice no longer calls it impossible — it gives the sure route and names the dispute', () => {
     /*
-     * WHAT I SHIPPED THIS MORNING WAS WRONG. The GSTR-1A route said a GSTIN
-     * change "has to go in next month's return as an amendment". It does not —
-     * it cannot be amended in any period, because it would move input credit
-     * to a different business without telling the original buyer.
-     *
-     * Sending someone to next month's amendment screen would cost them a
-     * rejected return and a wasted month.
+     * REWRITTEN 31 Oct 2026 (#100). On 29 Aug this test locked in "it cannot
+     * be amended in any period" — which contradicts the GSTN GSTR-1A FAQ ("only
+     * through GSTR 1 of the following tax periods") and the CA, three times.
+     * GSTR-1A refuses it; whether Table 9A accepts it is disputed (#345); the
+     * credit note + fresh bill route is the one every source accepts.
      */
-    expect(GSTIN_AMENDMENT_REMEDY).toMatch(/credit note/)
-    expect(GSTIN_AMENDMENT_REMEDY).toMatch(/fresh bill/)
-    expect(GSTIN_AMENDMENT_REMEDY).not.toMatch(/next month/)
+    expect(GSTIN_CORRECTION_ROUTE).toMatch(/credit note/)
+    expect(GSTIN_CORRECTION_ROUTE).toMatch(/fresh bill/)
+    expect(GSTIN_CORRECTION_ROUTE).toMatch(/ask your CA/i)
+    expect(GSTIN_CORRECTION_ROUTE).not.toMatch(/cannot|never|impossible/i)
+    expect(GSTIN_GSTR1A_REMEDY).toMatch(/^GSTR-1A cannot change a customer’s GSTIN\./)
   })
 
   test('both correction routes give the SAME answer', () => {
@@ -107,7 +108,8 @@ describe('a customer GSTIN can never be amended', () => {
     const changes = ['Customer GSTIN changed from A to B']
     const viaGstr1a = correctionFitsGstr1a(changes)
     expect(viaGstr1a.fits).toBe(false)
-    expect(viaGstr1a.reason).toBe(GSTIN_AMENDMENT_REMEDY)
-    expect(gstinChangeBlocksAmendment(changes)).toBe(true)
+    expect(viaGstr1a.reason).toBe(GSTIN_GSTR1A_REMEDY)
+    expect(viaGstr1a.reason).toContain(GSTIN_CORRECTION_ROUTE) // the corrections list says the same words
+    expect(gstinChanged(changes)).toBe(true)
   })
 })

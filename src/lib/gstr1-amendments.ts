@@ -215,11 +215,28 @@ export function buildCorrections(latest: LatestVersion[], current: Map<string, C
        * buyer entirely, and neither the right one nor the wrong one can fix it
        * from their side.
        */
-      if ((f.section === 'b2b' || f.section === 'cdnr') && now.placed.group && f.group && now.placed.group !== f.group) {
-        changes.push(`Customer GSTIN changed from ${f.group} to ${now.placed.group}`)
-      }
+      const gstinChanged = (f.section === 'b2b' || f.section === 'cdnr') && !!now.placed.group && !!f.group && now.placed.group !== f.group
+      if (gstinChanged) changes.push(`Customer GSTIN changed from ${f.group} to ${now.placed.group}`)
+      // #105: a rate or a nil/exempt move at the SAME total is still a change — the lines are compared, not just val.
+      // When the total moved too, only a rate change adds news; "taxable value changed" would repeat it.
+      const valueMoved = changes.some((c) => c.startsWith('Value changed'))
+      changes.push(...lineChanges(f.row, r).filter((c) => !valueMoved || c.startsWith('Tax rate')))
       if (changes.length === 0) continue
-      row = toAmendmentRow(f.section, r, f.original)
+      if (gstinChanged) {
+        /*
+         * #100 (8c-3): NOT impossible — but not a 9A row the app writes either.
+         * GSTN's 9A row has no field for a new GSTIN: the group's ctin is how the
+         * portal finds the ORIGINAL ("GSTIN of the receiver does not match the
+         * original invoice records"), so a row would keep the old GSTIN and look
+         * like a fix. Whether the portal lets 9A change it is disputed (GSTN FAQ:
+         * "only through GSTR 1 of the following tax periods"; offline-tool guides:
+         * not editable) — logged for the CA, #345. The route every source accepts
+         * is a credit note and a fresh bill.
+         */
+        problem = GSTIN_CORRECTION_ROUTE
+      } else {
+        row = toAmendmentRow(f.section, r, f.original)
+      }
     }
 
     if (row) {
@@ -240,6 +257,50 @@ export function buildCorrections(latest: LatestVersion[], current: Map<string, C
   }
   return out
 }
+
+/** Per rate: taxable value and tax, summed over a row's items. */
+function byRate(row: Record<string, any>): Map<number, { txval: number; tax: number }> {
+  const m = new Map<number, { txval: number; tax: number }>()
+  for (const it of Array.isArray(row?.itms) ? row.itms : []) {
+    const d = it.itm_det || {}
+    const rt = Number(d.rt) || 0
+    const cur = m.get(rt) || { txval: 0, tax: 0 }
+    cur.txval = roundMoney(cur.txval + (Number(d.txval) || 0))
+    cur.tax = roundMoney(cur.tax + (Number(d.iamt) || 0) + (Number(d.camt) || 0) + (Number(d.samt) || 0) + (Number(d.csamt) || 0))
+    m.set(rt, cur)
+  }
+  return m
+}
+
+/**
+ * #105 (Phase 8c-3, CA review Q1.4): changes the total cannot show. A rate
+ * corrected from 18% to 5%, or a line moved between taxable and nil/exempt,
+ * can leave the bill total exactly where it was — and still change what the
+ * return declares. Compared line by line, by rate.
+ */
+export function lineChanges(filedRow: Record<string, any>, nowRow: Record<string, any>): string[] {
+  const a = byRate(filedRow)
+  const b = byRate(nowRow)
+  const rates = (m: Map<number, unknown>) => [...m.keys()].sort((x, y) => x - y)
+  const list = (r: number[]) => r.map((x) => `${x}%`).join(' + ') || 'none'
+  const ra = rates(a)
+  const rb = rates(b)
+  if (ra.join() !== rb.join()) return [`Tax rate changed from ${list(ra)} to ${list(rb)}`]
+  const sum = (m: Map<number, { txval: number }>) => roundMoney([...m.values()].reduce((s, v) => s + v.txval, 0))
+  const out: string[] = []
+  if (Math.abs(sum(b) - sum(a)) >= MATERIAL) out.push(`Taxable value changed from ₹${sum(a)} to ₹${sum(b)}`)
+  else if (ra.some((rt) => Math.abs(a.get(rt)!.txval - b.get(rt)!.txval) >= MATERIAL || Math.abs(a.get(rt)!.tax - b.get(rt)!.tax) >= MATERIAL)) {
+    out.push('Value split between tax rates changed')
+  }
+  return out
+}
+
+/**
+ * #100: how a wrong customer GSTIN is put right. Shown on the correction itself
+ * and by GSTR-1A, so both say the same thing.
+ */
+export const GSTIN_CORRECTION_ROUTE =
+  'Customer GSTIN changed: raise a credit note on this bill and a fresh bill to the right GSTIN — the route the portal always accepts. A Table 9A change of GSTIN is disputed between sources; ask your CA before trying it.'
 
 /** The portal's four amendment tables, from the corrections that are going in. */
 export interface AmendmentTables {
@@ -313,31 +374,30 @@ export function includedCorrections(all: Correction[], included: IncludedCorrect
  * ═══════════════════════════════════════════════════════════════════════ */
 
 /**
- * A CUSTOMER'S GSTIN CANNOT BE AMENDED. Ever. (#90)
+ * A CUSTOMER'S GSTIN — what can and cannot fix it (#90, CORRECTED by #100 in 8c-3).
  *
- * `buildAmendments` happily reports "Customer GSTIN changed from X to Y" as
- * something to declare, and the portal will not accept it. Changing who an
- * invoice was billed to moves input credit from one taxpayer to another, and
- * an amendment is not allowed to do that — the original buyer would lose
- * credit they may already have claimed, without ever being told.
+ * This block used to say a GSTIN "cannot be amended in ANY period". That was
+ * wrong (#100): the GSTN GSTR-1A FAQ says a GSTIN can be changed "only through
+ * GSTR 1 of the following tax periods" — it is GSTR-1A that refuses it. But
+ * whether Table 9A really accepts a new GSTIN is disputed (offline-tool guides
+ * call the field not editable, and the portal finds the original BY its GSTIN),
+ * and GSTN's 9A row has no field for a new one. So: GSTR-1A blocks it; the
+ * later-month route is not written by the app (buildCorrections shows the
+ * reason, GSTIN_CORRECTION_ROUTE, instead of a row); the credit note + fresh
+ * bill route is the one every source accepts. Open question for the CA: #345.
  *
- * The real remedy is two documents: a CREDIT NOTE cancelling the original, and
- * a FRESH INVOICE to the correct GSTIN. That is a different action with
- * different paperwork, so telling someone it is "an amendment" sends them to a
- * screen that refuses them and leaves them thinking the app is broken.
+ * ONE DEFINITION, used by both correction routes — two GSTIN rules would be
+ * the drift class that caused four earlier bugs.
  *
- * ONE DEFINITION, used by both correction routes. lib/gstr1a-window.ts asks the
- * same question for the same-period route and must get the same answer — two
- * GSTIN rules would be the drift class that caused four earlier bugs.
- *
- * @param changes the `changes` array buildAmendments already produces
+ * @param changes the `changes` array buildCorrections produces
  */
-export function gstinChangeBlocksAmendment(changes: string[]): boolean {
+export function gstinChanged(changes: string[]): boolean {
   return changes.some(c => /gstin/i.test(c))
 }
 
-export const GSTIN_AMENDMENT_REMEDY =
-  'A customer’s GSTIN cannot be corrected by amending the bill — the portal will not accept it, because it would move the input credit to a different business. Raise a credit note against the original bill, then issue a fresh bill to the correct GSTIN.'
+/** GSTR-1A's answer (#100): not here — and how instead. */
+export const GSTIN_GSTR1A_REMEDY =
+  'GSTR-1A cannot change a customer’s GSTIN. ' + GSTIN_CORRECTION_ROUTE
 
 export interface AmendmentDeadline {
   /** 30 November following the end of that financial year. */

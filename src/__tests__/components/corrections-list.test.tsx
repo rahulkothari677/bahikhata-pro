@@ -19,7 +19,7 @@ beforeAll(() => {
 const ROW: CorrectionRow = {
   key: 'b2b:INV-0003', section: 'b2b', number: 'INV-0003', firstFp: '082026', lastFp: '082026',
   filedVal: 525, nowVal: 1050, changes: ['Value changed from ₹525 to ₹1050'], fingerprint: 'abc12345',
-  included: false, lapsed: false, canInclude: true, problem: null, deadline: 'You have 395 days — until 30 November 2027.', daysLeft: 395,
+  included: false, lapsed: false, canInclude: true, problem: null, deadline: 'You have 395 days — until 30 November 2027.', deadlineDate: '30 Nov 2027', daysLeft: 395,
 }
 const show = (rows: CorrectionRow[] | undefined, filed = false) => render(
   <QueryClientProvider client={new QueryClient()}>
@@ -77,6 +77,19 @@ test('nothing to correct says nothing at all', () => {
   expect(container).toBeEmptyDOMElement()
   const again = show(undefined)
   expect(again.container).toBeEmptyDOMElement()
+})
+
+test('#344: the deadline is a date on the row; the sentence is behind ⓘ', () => {
+  show([ROW])
+  const row = screen.getByTestId('correction-row')
+  expect(row).toHaveTextContent('Until 30 Nov 2027')
+  expect(row.textContent).not.toContain('You have 395 days')
+  expect(screen.getByRole('button', { name: 'About deadline for INV-0003' })).toBeInTheDocument()
+})
+
+test('#344: within 30 days the row says how many are left', () => {
+  show([{ ...ROW, daysLeft: 12 }])
+  expect(screen.getByTestId('correction-row')).toHaveTextContent('Until 30 Nov 2027 · 12 days left')
 })
 
 test('period names read as shop words', () => {
