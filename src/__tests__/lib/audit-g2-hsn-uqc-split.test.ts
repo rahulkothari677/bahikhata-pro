@@ -48,7 +48,7 @@ function txn(items: any[], over: Partial<any> = {}) {
 
 describe('G2 — HSN summary splits rows by unit of measure', () => {
   test('same HSN + rate but different units produce SEPARATE rows', () => {
-    const { data } = buildHSN([
+    const { hsn_b2c: data } = buildHSN([
       txn([
         item({ quantity: 5, unit: 'kg' }),
         item({ quantity: 10, unit: 'packet' }),
@@ -71,7 +71,7 @@ describe('G2 — HSN summary splits rows by unit of measure', () => {
 
   test('same HSN + rate + SAME unit still aggregates into one row', () => {
     // The fix must not fragment the common case.
-    const { data } = buildHSN([
+    const { hsn_b2c: data } = buildHSN([
       txn([
         item({ quantity: 5, unit: 'kg' }),
         item({ quantity: 7, unit: 'kg' }),
@@ -84,7 +84,7 @@ describe('G2 — HSN summary splits rows by unit of measure', () => {
   })
 
   test('different rates under one HSN stay separate (unchanged behaviour)', () => {
-    const { data } = buildHSN([
+    const { hsn_b2c: data } = buildHSN([
       txn([
         item({ quantity: 5, unit: 'kg', gstRate: 5 }),
         item({ quantity: 3, unit: 'kg', gstRate: 12 }),
@@ -98,7 +98,7 @@ describe('G2 — HSN summary splits rows by unit of measure', () => {
   })
 
   test('credit notes reduce the row matching their own unit, not another', () => {
-    const { data } = buildHSN([
+    const { hsn_b2c: data } = buildHSN([
       txn([
         item({ quantity: 10, unit: 'kg' }),
         item({ quantity: 10, unit: 'packet' }),
@@ -122,8 +122,8 @@ describe('G2 — HSN summary splits rows by unit of measure', () => {
 
     // Splitting by unit redistributes rows; it must not change the totals that
     // actually carry tax liability.
-    expect(sum(twoUnits.data, 'txval')).toBeCloseTo(sum(oneUnit.data, 'txval'), 2)
-    expect(sum(twoUnits.data, 'camt')).toBeCloseTo(sum(oneUnit.data, 'camt'), 2)
-    expect(sum(twoUnits.data, 'samt')).toBeCloseTo(sum(oneUnit.data, 'samt'), 2)
+    expect(sum(twoUnits.hsn_b2c, 'txval')).toBeCloseTo(sum(oneUnit.hsn_b2c, 'txval'), 2)
+    expect(sum(twoUnits.hsn_b2c, 'camt')).toBeCloseTo(sum(oneUnit.hsn_b2c, 'camt'), 2)
+    expect(sum(twoUnits.hsn_b2c, 'samt')).toBeCloseTo(sum(oneUnit.hsn_b2c, 'samt'), 2)
   })
 })

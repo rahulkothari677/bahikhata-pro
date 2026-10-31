@@ -202,16 +202,17 @@ describe('🔒 V17 Audit Phase 3 — B2CS section', () => {
 // ─── HSN ──────────────────────────────────────────────────────────────────
 
 describe('🔒 V17 Audit Phase 3 — HSN section', () => {
-  test('aggregates by HSN + rate', () => {
+  test('#128: a registered buyer\'s lines go to the B2B tab, the rest to B2C', () => {
     const result = buildHSN([B2B_SALE, B2C_SALE])
     // B2B has HSN 1006 @ 18%, B2C has HSN 1701 @ 5%
-    expect(result.data).toHaveLength(2)
+    expect(result.hsn_b2b.map(d => d.hsn_sc)).toEqual(['1006'])
+    expect(result.hsn_b2c.map(d => d.hsn_sc)).toEqual(['1701'])
   })
 
-  test('credit notes REDUCE HSN totals (sign convention)', () => {
+  test('credit notes REDUCE HSN totals (sign convention), in their buyer\'s tab', () => {
     const result = buildHSN([B2B_SALE, CREDIT_NOTE])
     // Both have HSN 1006 @ 18%. Sale = 20kg, CN = 6kg. Net = 14kg.
-    const hsn1006 = result.data.find(d => d.hsn_sc === '1006')
+    const hsn1006 = result.hsn_b2b.find(d => d.hsn_sc === '1006')
     expect(hsn1006).toBeDefined()
     expect(hsn1006!.qty).toBe(14)  // 20 - 6
     expect(hsn1006!.txval).toBe(700)  // 1000 - 300
@@ -240,8 +241,8 @@ describe('🔒 V17 Audit Phase 3 — HSN section', () => {
       items: [{ ...SALE_ITEM_5, hsn: null }],
     }
     const result = buildHSN([noHsnSale])
-    expect(result.data).toEqual([])
-    expect(result.data.some(d => d.hsn_sc === '9999')).toBe(false)
+    expect(result.hsn_b2c).toEqual([])
+    expect([...result.hsn_b2b, ...result.hsn_b2c].some(d => d.hsn_sc === '9999')).toBe(false)
   })
 
   test('lines WITH an HSN still report, even when another line lacks one', () => {
@@ -252,16 +253,16 @@ describe('🔒 V17 Audit Phase 3 — HSN section', () => {
       items: [{ ...SALE_ITEM_5, hsn: null }, { ...SALE_ITEM_5, hsn: '1006' }],
     }
     const result = buildHSN([mixed])
-    expect(result.data.map(d => d.hsn_sc)).toEqual(['1006'])
+    expect(result.hsn_b2c.map(d => d.hsn_sc)).toEqual(['1006'])
   })
 
   test('unit mapping: kg → KGS, pcs → PCS', () => {
     const result = buildHSN([B2B_SALE])
-    expect(result.data[0].uqc).toBe('KGS')
+    expect(result.hsn_b2b[0].uqc).toBe('KGS')
   })
 
-  test('empty input → empty array', () => {
-    expect(buildHSN([]).data).toHaveLength(0)
+  test('empty input → both tabs present and empty', () => {
+    expect(buildHSN([])).toEqual({ hsn_b2b: [], hsn_b2c: [] })
   })
 })
 
@@ -401,7 +402,7 @@ describe('🔒 V17 Audit Phase 3 — Full GSTR-1 build', () => {
     expect(result.b2b).toHaveLength(1)
     expect(result.b2cs).toHaveLength(1)
     expect(result.cdnr).toHaveLength(1)
-    expect(result.hsn.data.length).toBeGreaterThan(0)
+    expect(result.hsn.hsn_b2b.length + result.hsn.hsn_b2c.length).toBeGreaterThan(0)
     // 🔒 V26 BUG-059: nil section now uses supply-type buckets, not 3 dummy entries.
     // B2B_SALE + B2C_SALE have gstRate=18/5, so no nil-rated items → 0 entries.
     expect(result.nil.inv).toHaveLength(0)
@@ -415,7 +416,7 @@ describe('🔒 V17 Audit Phase 3 — Full GSTR-1 build', () => {
     expect(result.b2cs).toHaveLength(0)
     expect(result.cdnr).toHaveLength(0)
     expect(result.cdnur).toHaveLength(0)
-    expect(result.hsn.data).toHaveLength(0)
+    expect(result.hsn).toEqual({ hsn_b2b: [], hsn_b2c: [] })
     expect(result.nil.inv).toHaveLength(0)  // V26 BUG-059: no nil-rated items → 0 entries (was always 3 dummy)
     expect(result.doc_issue.doc_det).toHaveLength(0)
   })
@@ -434,7 +435,7 @@ describe('🔒 V17 Audit Phase 3 — Cross-path consistency', () => {
     // HSN 1701 @ 5%: 200
     // Total HSN = 900
 
-    const hsnTotal = result.hsn.data.reduce((s, e) => s + e.txval, 0)
+    const hsnTotal = [...result.hsn.hsn_b2b, ...result.hsn.hsn_b2c].reduce((s, e) => s + e.txval, 0)
     expect(hsnTotal).toBe(900)  // 700 + 200
 
     // B2B taxable (one invoice: 1000)

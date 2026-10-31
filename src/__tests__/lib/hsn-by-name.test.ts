@@ -2,7 +2,7 @@
  * Phase 8b (#129): HSN and rate from the item's name — suggestions only, every
  * pairing proven against the notification's own row.
  */
-import { HSN_BY_SHOP_WORD, hsnChoices, suggestHsnForName, choiceFits, checkHsnFormat, hsnDigitsFor, rowNames } from '@/lib/hsn-by-name'
+import { HSN_BY_SHOP_WORD, hsnChoices, suggestHsnForName, choiceFits, checkHsnFormat, hsnDigitsFor, rowNames, shortName } from '@/lib/hsn-by-name'
 import { SHOP_WORD_GROUPS } from '@/lib/shop-words'
 
 const NOV1 = new Date('2026-11-01T06:30:00Z') // noon IST, 1 Nov 2026
@@ -87,6 +87,25 @@ describe('every pairing is the statute, not memory', () => {
   test('each shop word is paired once', () => {
     const words = HSN_BY_SHOP_WORD.map((p) => p.word)
     expect(new Set(words).size).toBe(words.length)
+  })
+})
+
+describe('#339: a long row name is cut between words, never inside one', () => {
+  test('the sugar row reads "Cane or beet sugar and chemically…", not "…chemicall…"', () => {
+    expect(shortName('Cane or beet sugar and chemically pure sucr ose, in solid form')).toBe('Cane or beet sugar and chemically…')
+  })
+  test('every row name the tables can produce ends on a whole word', () => {
+    const bad: string[] = []
+    for (const p of HSN_BY_SHOP_WORD) {
+      for (const c of hsnChoices(p.hsn, NOV1)) {
+        const s = shortName(c.description)
+        if (!s.endsWith('…')) continue
+        const kept = s.slice(0, -1)
+        const next = c.description.replace(/\s+/g, ' ').trim().slice(kept.length, kept.length + 1)
+        if (next && /\w/.test(next)) bad.push(`${p.hsn}: ${s}`)
+      }
+    }
+    expect(bad).toEqual([])
   })
 })
 

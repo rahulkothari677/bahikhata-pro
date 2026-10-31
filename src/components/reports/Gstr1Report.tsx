@@ -116,8 +116,10 @@ export function Gstr1Report() {
     rows.push(`B2CS (Small B2C),${g.b2cs.length},${g.b2cs.reduce((s: number, e: any) => s + e.txval, 0)},${g.b2cs.reduce((s: number, e: any) => s + e.camt, 0)},${g.b2cs.reduce((s: number, e: any) => s + e.samt, 0)},${g.b2cs.reduce((s: number, e: any) => s + e.iamt, 0)},-`)
     rows.push(`CDNR (Registered Notes),${g.cdnr.length},-,-,-,-,-`)
     rows.push(`CDNUR (Unregistered Notes),${g.cdnur.length},-,-,-,-,-`)
-    rows.push(`HSN Summary,${g.hsn.data.length},-,-,-,-,-`)
-    rows.push(`NIL Supplies,3,${g.nil.inv.reduce((s: number, e: any) => s + e.txval, 0)},0,0,0,0`)
+    // #128: Table 12 has two tabs. The count was a hard-coded 3 for NIL before the nil section became per supply type.
+    rows.push(`HSN Summary - B2B,${g.hsn.hsn_b2b.length},${hsnTaxable(g.hsn.hsn_b2b)},-,-,-,-`)
+    rows.push(`HSN Summary - B2C,${g.hsn.hsn_b2c.length},${hsnTaxable(g.hsn.hsn_b2c)},-,-,-,-`)
+    rows.push(`NIL Supplies,${g.nil.inv.length},${g.nil.inv.reduce((s: number, e: any) => s + e.txval, 0)},0,0,0,0`)
     rows.push(`Documents,${g.doc_issue.doc_det.length},-,-,-,-,-`)
     rows.push('')
     rows.push(`Summary,Taxable Value,Output Tax,Invoices,Credit Notes`)
@@ -204,7 +206,7 @@ export function Gstr1Report() {
     { key: 'b2cs', label: 'B2CS', count: g?.b2cs?.length || 0, icon: FileText },
     { key: 'cdnr', label: 'CDNR', count: g?.cdnr?.length || 0, icon: FileText },
     { key: 'cdnur', label: 'CDNUR', count: g?.cdnur?.length || 0, icon: FileText },
-    { key: 'hsn', label: 'HSN', count: g?.hsn?.data?.length || 0, icon: Table },
+    { key: 'hsn', label: 'HSN', count: (g?.hsn?.hsn_b2b?.length || 0) + (g?.hsn?.hsn_b2c?.length || 0), icon: Table },
     { key: 'nil', label: 'NIL', count: g?.nil?.inv?.length || 0, icon: FileText },
     { key: 'doc', label: 'DOC', count: g?.doc_issue?.doc_det?.length || 0, icon: FileCheck },
   ]
@@ -483,32 +485,13 @@ function Gstr1SectionContent({ section, g }: { section: string; g: any }) {
       )
 
     case 'hsn':
-      if (!g.hsn?.data?.length) return <EmptySection label="HSN-wise summary" />
+      // #128: Table 12 in its two tabs, as the portal shows them — shop words first, the form's words small.
+      if (!g.hsn?.hsn_b2b?.length && !g.hsn?.hsn_b2c?.length) return <EmptySection label="HSN-wise summary" />
       return (
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-muted-foreground border-b">
-              <th className="text-left py-1.5">#</th>
-              <th className="text-left py-1.5">HSN</th>
-              <th className="text-left py-1.5">Description</th>
-              <th className="text-right py-1.5">Qty</th>
-              <th className="text-right py-1.5">Taxable</th>
-              <th className="text-right py-1.5">Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {g.hsn.data.map((e: any, i: number) => (
-              <tr key={i} className="border-b border-border/20">
-                <td className="py-1.5">{e.num}</td>
-                <td className="py-1.5 font-mono">{e.hsn_sc}</td>
-                <td className="py-1.5">{e.desc}</td>
-                <td className="text-right py-1.5 tabular-nums">{e.qty} {e.uqc}</td>
-                <td className="text-right py-1.5 tabular-nums">{formatINR(e.txval)}</td>
-                <td className="text-right py-1.5">{e.rt}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="space-y-4">
+          <HsnTab title="Sales to GST customers" form="Table 12 · B2B" rows={g.hsn.hsn_b2b} />
+          <HsnTab title="Other sales" form="Table 12 · B2C" rows={g.hsn.hsn_b2c} />
+        </div>
       )
 
     case 'nil':
@@ -583,6 +566,54 @@ function Gstr1SectionContent({ section, g }: { section: string; g: any }) {
     default:
       return <p className="text-xs text-muted-foreground">Unknown section</p>
   }
+}
+
+/** Taxable value of one Table 12 tab, to the paisa. */
+function hsnTaxable(rows: Array<{ txval: number }>): number {
+  return Math.round(rows.reduce((s, e) => s + e.txval, 0) * 100) / 100
+}
+
+/** One tab of Table 12 (#128): its shop-words title, the form's name small, its total, its rows. */
+function HsnTab({ title, form, rows }: { title: string; form: string; rows: any[] }) {
+  return (
+    <section>
+      <div className="flex items-baseline justify-between gap-2 pb-1.5 border-b">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="text-xs text-muted-foreground">{form}</p>
+        </div>
+        <p className="text-sm font-semibold tabular-nums">{formatINR(hsnTaxable(rows))}</p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-3 text-xs text-muted-foreground">None this month</p>
+      ) : (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-muted-foreground border-b">
+              <th className="text-left py-1.5">#</th>
+              <th className="text-left py-1.5">HSN</th>
+              <th className="text-left py-1.5">Description</th>
+              <th className="text-right py-1.5">Qty</th>
+              <th className="text-right py-1.5">Taxable</th>
+              <th className="text-right py-1.5">Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((e: any, i: number) => (
+              <tr key={i} className="border-b border-border/20">
+                <td className="py-1.5">{e.num}</td>
+                <td className="py-1.5 font-mono">{e.hsn_sc}</td>
+                <td className="py-1.5">{e.desc}</td>
+                <td className="text-right py-1.5 tabular-nums">{e.qty} {e.uqc}</td>
+                <td className="text-right py-1.5 tabular-nums">{formatINR(e.txval)}</td>
+                <td className="text-right py-1.5">{e.rt}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  )
 }
 
 function EmptySection({ label }: { label: string }) {

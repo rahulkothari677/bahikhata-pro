@@ -123,10 +123,15 @@ export interface HsnChoice {
 const squash = (s: string) => s.toLowerCase().replace(/\s+/g, '')
 const onDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
 
-/** The row's name, short enough for a button: up to its first comma, semicolon or bracket. */
-function shortName(description: string): string {
+/**
+ * The row's name, short enough for a button: up to its first comma, semicolon or
+ * bracket, and when still long, cut at a word boundary (#339: "…chemicall…").
+ */
+export function shortName(description: string): string {
   const head = description.split(/[,;([]/)[0].replace(/\s+/g, ' ').trim()
-  return head.length > 34 ? `${head.slice(0, 32).trimEnd()}…` : head
+  if (head.length <= 34) return head
+  const space = head.lastIndexOf(' ', 33) // a space AT 33 means the first 33 letters end a word
+  return `${(space > 12 ? head.slice(0, space) : head.slice(0, 33)).trimEnd()}…`
 }
 
 /**

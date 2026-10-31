@@ -247,7 +247,8 @@ export interface Gstr1Result {
   b2cs: Gstr1B2csEntry[]
   cdnr: Gstr1CdnrEntry[]
   cdnur: Gstr1CdnurEntry[]
-  hsn: { data: Gstr1HsnEntry[] }
+  /** Table 12 in its two tabs (#128) — see buildHSN. */
+  hsn: { hsn_b2b: Gstr1HsnEntry[]; hsn_b2c: Gstr1HsnEntry[] }
   nil: { inv: Gstr1NilEntry[] }
   doc_issue: { doc_det: Gstr1DocEntry[] }
   /** Table 9A — invoices from earlier FILED returns that have since changed. */
@@ -330,11 +331,22 @@ export const B2CL_INVOICE_VALUE_THRESHOLD = 100000
 // ─── Section builders ─────────────────────────────────────────────────────
 
 /**
+ * Is the buyer registered — does this document belong to the B2B side of the return?
+ *
+ * ONE rule (8c): it was written inline five times in this file (B2B, CDNR,
+ * CDNUR, B2CS, nil), and Table 12's B2B/B2C split needs it a sixth time.
+ * A guard (gstr1-hsn-split.test.ts) keeps it the only copy.
+ */
+export function isRegisteredBuyer(t: Pick<Gstr1Transaction, 'partyGstin'>): boolean {
+  return !!(t.partyGstin && t.partyGstin.length >= 15)
+}
+
+/**
  * Build B2B section: sales to parties WITH a GSTIN.
  * Groups by counter-party GSTIN (ctin), then lists invoices.
  */
 export function buildB2B(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2bEntry[] {
-  const b2bSales = txns.filter(t => t.type === 'sale' && t.partyGstin && t.partyGstin.length >= 15)
+  const b2bSales = txns.filter(t => t.type === 'sale' && isRegisteredBuyer(t))
   const byGstin = new Map<string, Gstr1B2bInvoice[]>()
 
   for (const txn of b2bSales) {
@@ -503,7 +515,7 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo, originals?: 
   // original isn't in the txns array).
   const b2csNotes = txns.filter(t => {
     if (t.type !== 'credit-note' && t.type !== 'debit-note') return false
-    if (t.partyGstin && t.partyGstin.length >= 15) return false  // registered → CDNR
+    if (isRegisteredBuyer(t)) return false  // registered → CDNR
     const orig = resolveNoteClassification(t, txns, originals)
     return !orig.isInterState || orig.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD
   })
@@ -555,7 +567,7 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo, originals?: 
 export function buildCDNR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnrEntry[] {
   const notes = txns.filter(t =>
     (t.type === 'credit-note' || t.type === 'debit-note') &&
-    t.partyGstin && t.partyGstin.length >= 15
+    isRegisteredBuyer(t)
   )
   const byGstin = new Map<string, Gstr1CdnrEntry['nt']>()
 
@@ -607,7 +619,7 @@ export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo, originals?:
   // note's own values if the original isn't in the txns array).
   const notes = txns.filter(t => {
     if (t.type !== 'credit-note' && t.type !== 'debit-note') return false
-    if (t.partyGstin && t.partyGstin.length >= 15) return false  // registered → CDNR
+    if (isRegisteredBuyer(t)) return false  // registered → CDNR
     const orig = resolveNoteClassification(t, txns, originals)
     return orig.isInterState && orig.totalAmount > B2CL_INVOICE_VALUE_THRESHOLD
   })
@@ -634,11 +646,31 @@ export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo, originals?:
 }
 
 /**
- * Build HSN section: HSN-wise summary of ALL outward supplies (sales + credit notes).
- * Aggregates by HSN code + rate.
+ * GSTR-1 Table 12, the HSN summary — in TWO tabs since the May 2025 return
+ * period (#128; GSTN Table 12 Phase 3 advisory, updated 25 Apr 2025):
+ *
+ *   hsn_b2b — supplies to registered buyers (compared with Tables 4, 6B/6C, 9B, …)
+ *   hsn_b2c — everyone else (5, 7, 9B unregistered, …); exports go here too
+ *
+ * Shape from GSTN's "Save GSTR1" schema, v4.1 (4 Feb 2025) and v5.0 (23 Feb
+ * 2026), read field by field: `hsn: { hsn_b2b: [...], hsn_b2c: [...] }`, no
+ * `data` key (the old single list), at least one tab present; a row carries
+ * num, hsn_sc, uqc, qty, txval, rt (+ the tax amounts), amounts to 2 decimals.
+ * Each tab numbers its rows from 1.
+ *
+ * Sales and debit notes ADD; credit notes SUBTRACT. Debit notes were left out
+ * entirely before 8c, so a shop that raised one filed Table 12 short by it.
  */
-export function buildHSN(txns: Gstr1Transaction[]): { data: Gstr1HsnEntry[] } {
-  const outward = txns.filter(t => t.type === 'sale' || t.type === 'credit-note')
+export function buildHSN(txns: Gstr1Transaction[]): { hsn_b2b: Gstr1HsnEntry[]; hsn_b2c: Gstr1HsnEntry[] } {
+  return {
+    hsn_b2b: buildHsnTab(txns.filter(isRegisteredBuyer)),
+    hsn_b2c: buildHsnTab(txns.filter((t) => !isRegisteredBuyer(t))),
+  }
+}
+
+/** One tab of Table 12: rows keyed by HSN + rate + unit, numbered from 1. */
+function buildHsnTab(txns: Gstr1Transaction[]): Gstr1HsnEntry[] {
+  const outward = txns.filter(t => t.type === 'sale' || t.type === 'credit-note' || t.type === 'debit-note')
   const agg = new Map<string, { hsn: string; desc: string; qty: number; uqc: string; txval: number; iamt: number; camt: number; samt: number; csamt: number; rt: number }>()
 
   for (const txn of outward) {
@@ -693,7 +725,7 @@ export function buildHSN(txns: Gstr1Transaction[]): { data: Gstr1HsnEntry[] } {
         hsn, desc: item.productName, qty: 0, uqc,
         txval: 0, iamt: 0, camt: 0, samt: 0, csamt: 0, rt: item.gstRate,
       }
-      // Credit notes REDUCE the HSN totals (they're returns)
+      // Credit notes REDUCE the HSN totals (they're returns); sales and debit notes add.
       const sign = txn.type === 'credit-note' ? -1 : 1
       existing.qty = roundMoney(existing.qty + sign * item.quantity)
       existing.txval = roundMoney(existing.txval + sign * itemTaxable(item))
@@ -720,7 +752,7 @@ export function buildHSN(txns: Gstr1Transaction[]): { data: Gstr1HsnEntry[] } {
     rt: a.rt,
   }))
 
-  return { data }
+  return data
 }
 
 /** Map EkBook units to GST portal UQC codes. */
@@ -780,7 +812,7 @@ export function buildNIL(txns: Gstr1Transaction[]): { inv: Gstr1NilEntry[] } {
 
   for (const txn of sales) {
     // Determine supply type
-    const isB2B = !!(txn.partyGstin && txn.partyGstin.length >= 15)
+    const isB2B = isRegisteredBuyer(txn)
     const sply_ty: 'INTRAB2B' | 'INTRB2B' | 'INTRAB2C' | 'INTRB2C' = txn.isInterState
       ? (isB2B ? 'INTRB2B' : 'INTRB2C')
       : (isB2B ? 'INTRAB2B' : 'INTRAB2C')
