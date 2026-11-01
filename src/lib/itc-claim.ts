@@ -77,6 +77,8 @@ export interface ItcPurchase {
   igst: number
   /** The period its credit was claimed in, once a 3B claiming it was filed. */
   itcClaimedIn: string | null
+  /** Supplier name, for the ending-soon list (#112). */
+  supplier?: string | null
 }
 
 export interface TwoBLine {
@@ -108,6 +110,11 @@ export interface ItcClaim {
   stillWaiting: ItcPurchase[]
   /** Past the s.16(4) window for this period — can no longer be claimed. */
   lapsed: ItcPurchase[]
+  /**
+   * #112: still waiting, and the window closes with THIS return (final) or the
+   * next one. These are the bills to chase a supplier about, by name.
+   */
+  endingSoon: Array<ItcPurchase & { lastFp: string; final: boolean }>
   totals: {
     claim: { taxable: number; cgst: number; sgst: number; igst: number }
     shortBy: number
@@ -115,7 +122,15 @@ export interface ItcClaim {
     stillWaitingTax: number
     lapsedTax: number
     lateCount: number
+    endingSoonTax: number
   }
+}
+
+/** The period after `fp` (MMYYYY). */
+export function nextPeriod(fp: string): string {
+  const m = Number(fp.slice(0, 2))
+  const y = Number(fp.slice(2))
+  return m === 12 ? `01${y + 1}` : `${String(m + 1).padStart(2, '0')}${y}`
 }
 
 const tax = (p: { cgst: number; sgst: number; igst: number }) => roundMoney(p.cgst + p.sgst + p.igst)
@@ -160,6 +175,13 @@ export function claimForPeriod(fp: string, purchases: ItcPurchase[], twoB: TwoBL
     claimed.push({ id: p.id, billFp: p.billFp, late: p.billFp !== fp, book, twoB: twoBv, claim, shortBy: roundMoney(tax(book) - tax(claim)) })
   }
 
+  // #112: the window (s.16(4)) shuts after the October return; warn this period and the one before it.
+  const endingSoon = [...deferred, ...stillWaiting]
+    .map((p) => ({ ...p, lastFp: lastClaimPeriod(p.billFp) }))
+    .filter((p) => p.lastFp === fp || p.lastFp === nextPeriod(fp))
+    .map((p) => ({ ...p, final: p.lastFp === fp }))
+    .sort((a, b) => Number(b.final) - Number(a.final) || tax(b) - tax(a))
+
   const sum = (xs: Array<{ taxable: number; cgst: number; sgst: number; igst: number }>) => ({
     taxable: roundMoney(xs.reduce((s, x) => s + x.taxable, 0)),
     cgst: roundMoney(xs.reduce((s, x) => s + x.cgst, 0)),
@@ -167,7 +189,7 @@ export function claimForPeriod(fp: string, purchases: ItcPurchase[], twoB: TwoBL
     igst: roundMoney(xs.reduce((s, x) => s + x.igst, 0)),
   })
   return {
-    claimed, deferred, stillWaiting, lapsed,
+    claimed, deferred, stillWaiting, lapsed, endingSoon,
     totals: {
       claim: sum(claimed.map((c) => c.claim)),
       shortBy: roundMoney(claimed.reduce((s, c) => s + c.shortBy, 0)),
@@ -175,6 +197,7 @@ export function claimForPeriod(fp: string, purchases: ItcPurchase[], twoB: TwoBL
       stillWaitingTax: roundMoney(stillWaiting.reduce((s, p) => s + tax(p), 0)),
       lapsedTax: roundMoney(lapsed.reduce((s, p) => s + tax(p), 0)),
       lateCount: claimed.filter((c) => c.late).length,
+      endingSoonTax: roundMoney(endingSoon.reduce((s, p) => s + tax(p), 0)),
     },
   }
 }

@@ -2,7 +2,7 @@
  * Phase 8d (#116, #117) — the input credit a GSTR-3B may claim.
  * Rule 36(4) (40/2021-CT), the late-2B timing (GSTN FAQ, law report), s.16(4) (Circular 237/31/2024).
  */
-import { claimForPeriod, itcMatchKey, lastClaimPeriod, earliestClaimableBill, fyStart, type ItcPurchase, type TwoBLine } from '@/lib/itc-claim'
+import { claimForPeriod, itcMatchKey, lastClaimPeriod, earliestClaimableBill, fyStart, nextPeriod, type ItcPurchase, type TwoBLine } from '@/lib/itc-claim'
 
 const SUP = '08AAACS1234K1Z5'
 const p = (over: Partial<ItcPurchase> = {}): ItcPurchase => ({
@@ -85,5 +85,45 @@ describe('s.16(4): 30 November after the bill\'s financial year', () => {
     expect(earliestClaimableBill('112026')).toEqual({ month: 4, year: 2026 })
     expect(earliestClaimableBill('032027')).toEqual({ month: 4, year: 2026 })
     expect(earliestClaimableBill('042026')).toEqual({ month: 4, year: 2025 })
+  })
+})
+
+describe('#112: credit about to end (s.16(4)) — listed by bill, before it lapses', () => {
+  // A 2025-26 bill: the October 2026 return is the last that can claim it.
+  const old = p({ id: 'old', billFp: '022026', invoiceNo: 'S-9', cgst: 300, sgst: 300, supplier: 'Shree Traders' })
+  test('the October return is final for last year\'s unfiled bills', () => {
+    const r = claimForPeriod('102026', [old], [])
+    expect(r.endingSoon.map((b) => [b.id, b.final, b.lastFp])).toEqual([['old', true, '102026']])
+    expect(r.endingSoon[0].supplier).toBe('Shree Traders')
+    expect(r.totals.endingSoonTax).toBe(600)
+  })
+  test('September warns a month ahead — not final yet', () => {
+    const r = claimForPeriod('092026', [old], [])
+    expect(r.endingSoon.map((b) => b.final)).toEqual([false])
+  })
+  test('August: not yet; November: lapsed, not "ending"', () => {
+    expect(claimForPeriod('082026', [old], []).endingSoon).toEqual([])
+    const nov = claimForPeriod('112026', [old], [])
+    expect(nov.endingSoon).toEqual([])
+    expect(nov.lapsed.map((b) => b.id)).toEqual(['old'])
+  })
+  test('a bill that reached the 2B is claimed, not listed', () => {
+    const r = claimForPeriod('102026', [old], [line({ invoiceNumber: 'S-9', cgst: 300, sgst: 300 })])
+    expect(r.endingSoon).toEqual([])
+    expect(r.claimed.map((c) => c.id)).toEqual(['old'])
+  })
+  test('this year\'s bills are never "ending" in October', () => {
+    expect(claimForPeriod('102026', [p({ id: 'new', billFp: '082026' })], []).endingSoon).toEqual([])
+  })
+  test('final first, then the biggest', () => {
+    const r = claimForPeriod('102026', [
+      p({ id: 'small', billFp: '052025', invoiceNo: 'A', cgst: 10, sgst: 10 }),
+      p({ id: 'big', billFp: '052025', invoiceNo: 'B', cgst: 900, sgst: 900 }),
+    ], [])
+    expect(r.endingSoon.map((b) => b.id)).toEqual(['big', 'small'])
+  })
+  test('nextPeriod rolls the year', () => {
+    expect(nextPeriod('122026')).toBe('012027')
+    expect(nextPeriod('092026')).toBe('102026')
   })
 })

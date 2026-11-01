@@ -360,7 +360,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
         // Not claimed by another period's filed 3B (#117).
         OR: [{ itcClaimedIn: null }, { itcClaimedIn: fp }],
       },
-      select: { id: true, date: true, subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true, invoiceNo: true, itcClaimedIn: true, party: { select: { gstin: true } } },
+      select: { id: true, date: true, subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true, invoiceNo: true, itcClaimedIn: true, party: { select: { gstin: true, name: true } } },
     })
     itcClaim = claimForPeriod(
       fp,
@@ -372,6 +372,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
         taxable: roundMoney((p.subtotal || 0) - (p.discountAmount || 0)),
         cgst: p.cgst || 0, sgst: p.sgst || 0, igst: p.igst || 0,
         itcClaimedIn: p.itcClaimedIn,
+        supplier: p.party?.name || null,
       })),
       gstr2b.invoices.map((i) => ({ supplierGstin: i.supplierGstin, invoiceNumber: i.invoiceNumber, taxableValue: i.taxableValue, cgst: i.cgst, sgst: i.sgst, igst: i.igst })),
     )
@@ -428,6 +429,12 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       stillWaitingTax: itcClaim.totals.stillWaitingTax,
       lapsedCount: itcClaim.lapsed.length,
       lapsedTax: itcClaim.totals.lapsedTax,
+      // #112: bills to chase, by name, before s.16(4) shuts the window.
+      endingSoonTax: itcClaim.totals.endingSoonTax,
+      endingSoon: itcClaim.endingSoon.map((p) => ({
+        id: p.id, invoiceNo: p.invoiceNo, supplier: p.supplier ?? null, gstin: p.gstin,
+        billFp: p.billFp, tax: roundMoney(p.cgst + p.sgst + p.igst), final: p.final,
+      })),
     } : null,
     claimedPurchaseIds: itcClaim ? itcClaim.claimed.map((c) => c.id) : [],
     blockedItcTaxableValue, blockedItcCgst, blockedItcSgst, blockedItcIgst, blockedItcCount,
