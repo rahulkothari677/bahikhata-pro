@@ -28,3 +28,19 @@ test('one match key: neither route builds its own GSTIN|invoice key', () => {
   expect(recon).toContain('itcMatchKey(p.party.gstin, p.invoiceNo)')
   expect(recon).toContain('itcMatchKey(inv.supplierGstin, inv.invoiceNumber)')
 })
+
+/*
+ * #132 (8e): a 0% purchase line is exempt inward (Table 5), never credit
+ * (Table 4). Live 1 Oct: ₹6,000 of 0% toor dal sat inside 4(a) on a mixed
+ * bill, and Table 5 read ₹0 because it counted only all-0% bills.
+ * Local 1 Nov after the fix: ₹1,000 at 5% + ₹600 at 0% → Table 4 ₹1,000, Table 5 ₹600.
+ */
+test('#132: Table 5 sums 0% lines; Table 4 and the 2B claim use taxed lines only', () => {
+  // Table 5: line level, not "bills with no taxed line".
+  expect(threeB).toMatch(/FROM "TransactionItem" ti\s+JOIN "Transaction" t[\s\S]{0,300}AND ti\."gstRate" = 0/)
+  expect(threeB).not.toMatch(/NOT EXISTS \(SELECT 1 FROM "TransactionItem" ti WHERE ti\."transactionId" = t\.id AND ti\."gstRate" > 0\)/)
+  // Table 4: the taxed lines, per purchase — books and 2B claim alike.
+  expect(threeB).toMatch(/AND ti\."gstRate" > 0\s+GROUP BY ti\."transactionId"/)
+  expect(threeB).toContain('taxable: roundMoney(taxedById.get(p.id) || 0)')
+  expect(threeB).not.toMatch(/const bookItcTaxable = roundMoney\(\(itcPurchasesAgg\._sum\.subtotal/)
+})

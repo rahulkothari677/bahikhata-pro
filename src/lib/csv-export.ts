@@ -106,7 +106,7 @@ export async function exportPLReportCSV(data: any, periodLabel: string) {
  * Export GST report data to CSV.
  */
 export async function exportGSTReportCSV(data: any, periodLabel: string) {
-  const { outputSales, inputPurchases, netGSTPayable, totalInvoices } = data
+  const { outputSales, inputPurchases, netGSTPayable, totalInvoices, creditCarryForward } = data
   const headers = ['GST Slab (%)', 'Sales Taxable', 'CGST', 'SGST', 'IGST', 'Purchase Taxable', 'Input CGST', 'Input SGST', 'Input IGST']
   const slabs = GST_RATES
   const rows: (string | number)[][] = [
@@ -115,7 +115,8 @@ export async function exportGSTReportCSV(data: any, periodLabel: string) {
     ['Total Invoices', totalInvoices],
     ['Output Tax (Sales)', outputSales.outputTax],
     ['Input Tax (Purchases)', inputPurchases.inputTax],
-    ['Net GST Payable', netGSTPayable],
+    ['GST to pay (after set-off)', netGSTPayable],
+    ['Credit carried forward', creditCarryForward || 0],
     [''],
     ['SLAB-WISE BREAKDOWN', ''],
     headers,

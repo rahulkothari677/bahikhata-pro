@@ -197,4 +197,23 @@ describe('GSTR-3B screen surfaces filing readiness', () => {
     await waitFor(() => expect(screen.getByText('August 2026')).toBeInTheDocument())
     expect(screen.queryByText(/Estimate/)).not.toBeInTheDocument()
   })
+
+  /*
+   * #133: the live case (1 Oct) — "Net tax payable −₹61.19". The return says
+   * ₹0 to pay and ₹61.19 credit carried forward; the screen must say that.
+   */
+  it('shows tax to pay in cash and the credit carried — never a negative payable', async () => {
+    const zero = { igst: 0, cgst: 0, sgst: 0, total: 0 }
+    mockOfflineFetch.mockImplementation((url: string) =>
+      url.includes('/api/gst-readiness') ? ok(READINESS_WITH_BLOCKER) : ok({
+        ...GSTR3B, itcBasis: 'gstr2b', netTaxPayable: -61.19,
+        cashPayable: zero, creditCarryForward: { igst: 0, cgst: 0, sgst: 61.19, total: 61.19 },
+      }),
+    )
+    renderReport()
+    await waitFor(() => expect(screen.getByText('August 2026')).toBeInTheDocument())
+    expect(screen.getByText('6.1 Tax to pay in cash')).toBeInTheDocument()
+    expect(screen.getByText(/₹61\.19 credit carried to next month/)).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/-₹61|−₹61|₹-61/)
+  })
 })

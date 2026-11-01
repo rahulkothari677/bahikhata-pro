@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { setOffGst } from '@/lib/gst-setoff'
 import { db, withConnectionRetry } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { getAuthContext } from '@/lib/get-auth'
@@ -512,7 +513,12 @@ export async function GET(req: NextRequest) {
     const rangeInputTax = roundMoney(
       fromPaise(Number(kpi.purchase_cgst_paise)) + fromPaise(Number(kpi.purchase_sgst_paise)) + fromPaise(Number(kpi.purchase_igst_paise))
     )
-    const netGSTPayable = roundMoney((rangeCGST + rangeSGST + rangeIGST) - rangeInputTax)
+    // #133 (8e): what is paid after head-wise set-off — never a negative "net".
+    const gstSetOff = setOffGst(
+      { igst: rangeIGST, cgst: rangeCGST, sgst: rangeSGST },
+      { igst: fromPaise(Number(kpi.purchase_igst_paise)), cgst: fromPaise(Number(kpi.purchase_cgst_paise)), sgst: fromPaise(Number(kpi.purchase_sgst_paise)) },
+    )
+    const netGSTPayable = gstSetOff.cash.total
 
     // Payment mode split
     const paymentModeSplit = rangePaymentAgg.map(r => ({
@@ -689,6 +695,7 @@ export async function GET(req: NextRequest) {
         outputTax: roundMoney(rangeCGST + rangeSGST + rangeIGST),
         inputTax: rangeInputTax,
         netPayable: netGSTPayable,
+        creditCarryForward: gstSetOff.carryForward.total,
       },
       recentTransactions: recentTransactionsData,
     }

@@ -1046,8 +1046,11 @@ describe('V17 Phase 2G — paise-read-pattern regression guard (gstr-3b)', () =>
       expect(q).not.toMatch(/AS\s+"igst"\s/)
     }
 
-    // Exempt inward queries: have NOT EXISTS + gstRate > 0
-    const exemptInwardQueries = queries.filter(q => q.includes('NOT EXISTS') && q.includes('"gstRate" > 0'))
+    // Exempt inward (Table 5): 0% LINES of purchases (#132, 8e) — it was
+    // "bills with no taxed line" (NOT EXISTS … gstRate > 0), which missed the
+    // 0% lines of a mixed bill. Still a paise alias.
+    expect(queries.some(q => q.includes('NOT EXISTS') && q.includes('"gstRate" > 0'))).toBe(false)
+    const exemptInwardQueries = queries.filter(q => q.includes('"TransactionItem" ti') && q.includes("'purchase'") && q.includes('"gstRate" = 0'))
     expect(exemptInwardQueries.length).toBeGreaterThanOrEqual(1)
     for (const q of exemptInwardQueries) {
       expect(q).toContain('"totalValuePaise"')

@@ -11,6 +11,7 @@ import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
+import { setOffGst } from '@/lib/gst-setoff'
 import { claimForPeriod, earliestClaimableBill } from '@/lib/itc-claim'
 
 /**
@@ -184,13 +185,20 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
       _count: true,
     }),
+    /*
+     * #132 (8e): Table 5 is every 0% LINE bought, not only bills that are 0%
+     * throughout. Toor dal at 0% on a bill that also carries 5% atta was
+     * counted nowhere in Table 5 and sat inside Table 4's value instead.
+     * The same line rule 3.1(c) uses for sales (LINE_TAXABLE_SQL).
+     */
     db.$queryRaw<Array<{ totalValuePaise: string }>>`
-      SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValuePaise"
-      FROM "Transaction" t
+      SELECT COALESCE(SUM(${LINE_TAXABLE_SQL}), 0)::text AS "totalValuePaise"
+      FROM "TransactionItem" ti
+      JOIN "Transaction" t ON ti."transactionId" = t.id
       WHERE t."userId" = ${userId}
         AND t."deletedAt" IS NULL AND t."type" = 'purchase'
         AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
-        AND NOT EXISTS (SELECT 1 FROM "TransactionItem" ti WHERE ti."transactionId" = t.id AND ti."gstRate" > 0)
+        AND ti."gstRate" = 0
     `,
   ])
 
@@ -324,7 +332,28 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     include: { invoices: true },
   })
 
-  const bookItcTaxable = roundMoney((itcPurchasesAgg._sum.subtotal || 0) - (itcPurchasesAgg._sum.discountAmount || 0))
+  /*
+   * #132 (8e): Table 4's value is the TAXED lines only. A 0% line carries no
+   * credit; it belongs in Table 5 (above), and counting it here too reported
+   * the same purchase twice. Per purchase, so the 2B claim below uses it too.
+   */
+  // Bounded by s.16(4): no older bill can still be claimed, so none is needed.
+  const taxedEarliest = earliestClaimableBill(monthYearOf(periodStart))
+  const taxedFrom = istMonthStartOffset(new Date(Date.UTC(taxedEarliest.year, taxedEarliest.month - 1, 15)), 0)
+  const taxedRows = await db.$queryRaw<Array<{ id: string; taxedPaise: string }>>`
+    SELECT ti."transactionId" AS id, COALESCE(SUM(${LINE_TAXABLE_SQL}), 0)::text AS "taxedPaise"
+    FROM "TransactionItem" ti
+    JOIN "Transaction" t ON ti."transactionId" = t.id
+    WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'purchase'
+      AND t."date" >= ${taxedFrom} AND t."date" < ${periodEnd} AND ti."gstRate" > 0
+    GROUP BY ti."transactionId"
+  `
+  const taxedById = new Map(taxedRows.map((r) => [r.id, fromPaise(Number(r.taxedPaise))]))
+  const itcPeriodIds = await db.transaction.findMany({
+    where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: false, itcBlockedReason: null, date: { gte: periodStart, lt: periodEnd } },
+    select: { id: true },
+  })
+  const bookItcTaxable = roundMoney(itcPeriodIds.reduce((s, p) => s + (taxedById.get(p.id) || 0), 0))
   const bookItcCgst = roundMoney(itcPurchasesAgg._sum.cgst || 0)
   const bookItcSgst = roundMoney(itcPurchasesAgg._sum.sgst || 0)
   const bookItcIgst = roundMoney(itcPurchasesAgg._sum.igst || 0)
@@ -369,7 +398,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
         billFp: monthYearOf(p.date),
         gstin: p.party?.gstin || null,
         invoiceNo: p.invoiceNo,
-        taxable: roundMoney((p.subtotal || 0) - (p.discountAmount || 0)),
+        taxable: roundMoney(taxedById.get(p.id) || 0), // #132: taxed lines only
         cgst: p.cgst || 0, sgst: p.sgst || 0, igst: p.igst || 0,
         itcClaimedIn: p.itcClaimedIn,
         supplier: p.party?.name || null,
@@ -403,6 +432,17 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
   const netTaxPayable = roundMoney(
     totalOutputTax + totalRcmInward - totalCreditNoteTax
     - totalItc - totalRcmItc + totalDebitNoteTax
+  )
+  /*
+   * #133 (8e): what is actually paid. netTaxPayable above is plain arithmetic
+   * and goes negative; the return never does. Head by head, credit in the
+   * order s.49(5)/Rule 88A fix, reverse charge in cash (lib/gst-setoff.ts).
+   * netTaxPayable stays for the filed-snapshot comparison it already feeds.
+   */
+  const setOff = setOffGst(
+    { igst: outwardIgst - creditNoteIgst, cgst: outwardCgst - creditNoteCgst, sgst: outwardSgst - creditNoteSgst },
+    { igst: itcIgst + rcmItcIgst - debitNoteIgst, cgst: itcCgst + rcmItcCgst - debitNoteCgst, sgst: itcSgst + rcmItcSgst - debitNoteSgst },
+    { igst: rcmIgst, cgst: rcmCgst, sgst: rcmSgst },
   )
 
   return {
@@ -443,6 +483,8 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst,
     exemptInwardValue,
     netTaxPayable,
+    cashPayable: setOff.cash,
+    creditCarryForward: setOff.carryForward,
     totalOutputTax, totalRcmInward, totalCreditNoteTax, totalItc, totalRcmItc, totalDebitNoteTax,
     counts: {
       sales: outwardSalesAgg._count,
@@ -528,7 +570,7 @@ export async function GET(req: NextRequest) {
       rcmItcTaxableValue, rcmItcCgst, rcmItcSgst, rcmItcIgst,
       debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst,
       exemptInwardValue,
-      netTaxPayable,
+      netTaxPayable, cashPayable, creditCarryForward,
       totalOutputTax, totalRcmInward, totalCreditNoteTax, totalItc, totalRcmItc, totalDebitNoteTax,
       counts,
     } = values
@@ -596,6 +638,9 @@ export async function GET(req: NextRequest) {
       debitNoteIgst,
       // Section 6
       netTaxPayable,
+      // #133: what is paid in cash and what credit carries forward — never negative.
+      cashPayable,
+      creditCarryForward,
       totalOutputTax,
       totalRcmInward,
       totalCreditNoteTax,

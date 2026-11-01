@@ -59,7 +59,10 @@ export interface CaPackInput {
     filingStatus: string
     outputTax: number
     itcClaimed: number
+    /** Paid in cash after head-wise set-off (#133) — never negative. */
     netPayable: number
+    /** Credit left over, carried to next month. */
+    creditCarried?: number
   } | null
   /** Do the two returns agree, and by how much if not. */
   returnsAgree: { agree: boolean; difference: number } | null
@@ -129,7 +132,8 @@ export function buildCaPack(input: CaPackInput): string {
     L.push(`  Status          ${statusWord(input.gstr3b.filingStatus)}`)
     L.push(`  Output tax      ${inr(input.gstr3b.outputTax)}`)
     L.push(`  Input credit    ${inr(input.gstr3b.itcClaimed)}`)
-    L.push(`  Net payable     ${inr(input.gstr3b.netPayable)}`)
+    L.push(`  Tax paid (cash) ${inr(input.gstr3b.netPayable)}`)
+    if ((input.gstr3b.creditCarried || 0) > 0) L.push(`  Credit carried  ${inr(input.gstr3b.creditCarried || 0)}`)
   } else {
     L.push('  Not available for this month.')
   }

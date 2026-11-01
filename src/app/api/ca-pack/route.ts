@@ -4,6 +4,7 @@ import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
 import { roundMoney } from '@/lib/money'
+import { setOffGst } from '@/lib/gst-setoff'
 import { buildCaPack, type CaPackWarning } from '@/lib/ca-pack'
 import { assessItcReversal, needsAttention, RULE_37_DAYS, WARN_WITHIN_DAYS } from '@/lib/itc-180-day'
 import { reviewProduct } from '@/lib/exempt-reclassification'
@@ -170,7 +171,16 @@ export async function GET(req: NextRequest) {
         filingStatus: snap3b.filingStatus,
         outputTax: roundMoney(snap3b.outwardCgst + snap3b.outwardSgst + snap3b.outwardIgst),
         itcClaimed: roundMoney(snap3b.itcCgst + snap3b.itcSgst + snap3b.itcIgst),
-        netPayable: roundMoney(snap3b.netTaxPayable),
+        // #133: the set-off the return makes — cash per head, credit carried. RCM
+        // credit is the RCM tax itself (both come from the same purchases).
+        ...(() => {
+          const so = setOffGst(
+            { igst: snap3b.outwardIgst - snap3b.creditNoteIgst, cgst: snap3b.outwardCgst - snap3b.creditNoteCgst, sgst: snap3b.outwardSgst - snap3b.creditNoteSgst },
+            { igst: snap3b.itcIgst + snap3b.rcmIgst - snap3b.debitNoteIgst, cgst: snap3b.itcCgst + snap3b.rcmCgst - snap3b.debitNoteCgst, sgst: snap3b.itcSgst + snap3b.rcmSgst - snap3b.debitNoteSgst },
+            { igst: snap3b.rcmIgst, cgst: snap3b.rcmCgst, sgst: snap3b.rcmSgst },
+          )
+          return { netPayable: so.cash.total, creditCarried: so.carryForward.total }
+        })(),
       } : null,
       returnsAgree,
       warnings: warnings.slice(0, MAX_WARNINGS),

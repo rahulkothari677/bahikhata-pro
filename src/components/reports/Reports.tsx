@@ -711,7 +711,14 @@ function GSTReport({ data }: { data: any }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <ReportStatCard label="Output Tax (Sales)" value={formatINR(outputSales.outputTax)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
         <ReportStatCard label="Input Tax (Purchases)" value={formatINR(inputPurchases.inputTax)} icon={ArrowDownRight} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100" />
-        <ReportStatCard label="Net GST Payable" value={formatINR(netGSTPayable)} icon={Receipt} color={netGSTPayable >= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'} bg={netGSTPayable >= 0 ? 'bg-rose-100' : 'bg-emerald-100'} />
+        <ReportStatCard
+          label="GST to pay"
+          value={formatINR(netGSTPayable)}
+          icon={Receipt}
+          color={netGSTPayable > 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}
+          bg={netGSTPayable > 0 ? 'bg-rose-100' : 'bg-emerald-100'}
+          hint={(data?.creditCarryForward || 0) > 0 ? `${formatINR(data.creditCarryForward)} credit carried forward` : undefined}
+        />
         <ReportStatCard label="Total Invoices" value={String(data?.totalInvoices ?? 0)} icon={FileText} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />
       </div>
 

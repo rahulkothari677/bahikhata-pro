@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { setOffGst } from '@/lib/gst-setoff'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
@@ -465,7 +466,22 @@ export async function GET(req: NextRequest) {
           inputTax,
           bySlab: Array.from(inputSlabMap.entries()).map(([rate, v]) => ({ rate, ...v })),
         },
-        netGSTPayable: roundMoney(outputTax - inputTax),
+        // #133 (8e): head-wise set-off (lib/gst-setoff) — never a negative payable.
+        ...(() => {
+          const so = setOffGst(
+            {
+              igst: (saleGstAgg._sum.igst || 0) - (creditNoteGstAgg._sum.igst || 0),
+              cgst: (saleGstAgg._sum.cgst || 0) - (creditNoteGstAgg._sum.cgst || 0),
+              sgst: (saleGstAgg._sum.sgst || 0) - (creditNoteGstAgg._sum.sgst || 0),
+            },
+            {
+              igst: (purchaseGstAgg._sum.igst || 0) - (debitNoteGstAgg._sum.igst || 0),
+              cgst: (purchaseGstAgg._sum.cgst || 0) - (debitNoteGstAgg._sum.cgst || 0),
+              sgst: (purchaseGstAgg._sum.sgst || 0) - (debitNoteGstAgg._sum.sgst || 0),
+            },
+          )
+          return { netGSTPayable: so.cash.total, creditCarryForward: so.carryForward.total }
+        })(),
         totalInvoices: saleCountAgg,
         totalPurchaseBills: purchaseCountAgg,
       })

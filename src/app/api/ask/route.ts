@@ -1446,7 +1446,9 @@ export async function POST(req: NextRequest) {
         })
         if (!r.ok) throw new Error(`gstr-3b returned ${r.status}`)
         const g3 = await r.json()
-        const net = g3.netTaxPayable || 0
+        // #133: what is paid in cash after set-off — never a negative figure.
+        const net = g3.cashPayable?.total ?? Math.max(0, g3.netTaxPayable || 0)
+        const carried = g3.creditCarryForward?.total || 0
 
         /*
          * ── THE ANSWER CARRIES THE FILING RISK ────────────────────────
@@ -1508,6 +1510,7 @@ export async function POST(req: NextRequest) {
           detail: [
             notice.line,
             `Output tax ${money(g3.totalOutputTax || 0)} less credit notes ${money(g3.totalCreditNoteTax || 0)} and input credit ${money(g3.totalItc || 0)}. This is the GSTR-3B figure.`,
+            carried > 0 ? `${money(carried)} of credit is left over and carries to next month.` : '',
           ].filter(Boolean).join('\n\n'),
           actions: notice.action ? [notice.action] : undefined,
           sources: [],

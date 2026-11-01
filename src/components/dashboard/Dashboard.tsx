@@ -951,7 +951,13 @@ export function Dashboard() {
                 <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600 dark:text-amber-400" />
                 <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600 dark:text-emerald-400" />
                 <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
-                <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'} highlight />
+                <GstMiniStat
+                  label="GST to pay"
+                  value={gstSummary.netPayable}
+                  color={gstSummary.netPayable > 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}
+                  note={(gstSummary.creditCarryForward || 0) > 0 ? `${formatINR(gstSummary.creditCarryForward)} credit carried` : undefined}
+                  highlight
+                />
               </div>
             ) : (
               <p className="text-sm text-muted-foreground py-4 text-center">
@@ -1201,16 +1207,19 @@ function MiniStatCard({ label, value, icon: Icon, color, subtitle, onClick }: {
   )
 }
 
-function GstMiniStat({ label, value, color, highlight }: {
+function GstMiniStat({ label, value, color, highlight, note }: {
   label: string
   value: number
   color: string
   highlight?: boolean
+  /** #133: a second fact under the figure (credit carried forward). */
+  note?: string
 }) {
   return (
     <div className={cn('rounded-lg p-3 border', highlight ? 'bg-muted/50 border-primary/30' : 'bg-card border-border')}>
       <p className="text-xs text-muted-foreground font-medium">{label}</p>
       <p className={cn('text-base font-bold mt-1', color)}>{formatINR(value)}</p>
+      {note && <p className="text-xs text-muted-foreground mt-0.5">{note}</p>}
     </div>
   )
 }

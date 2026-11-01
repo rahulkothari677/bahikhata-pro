@@ -29,6 +29,7 @@
  */
 
 import { useState } from 'react'
+import { InfoHint } from '@/components/common/InfoHint'
 import { FilingReadiness } from '@/components/reports/FilingReadiness'
 import { ReturnsAgree } from '@/components/reports/ReturnsAgree'
 import { NoticeRisk } from '@/components/reports/NoticeRisk'
@@ -81,6 +82,16 @@ export function Gstr3bReport() {
       return r.json()
     },
   })
+
+  /*
+   * #133: what is paid in cash, head by head after set-off, and the credit
+   * carried forward (lib/gst-setoff via the route). Never a negative "net".
+   * An older cached response without them falls back to the arithmetic net,
+   * floored at zero.
+   */
+  const zero = { igst: 0, cgst: 0, sgst: 0, total: 0 }
+  const toPay: typeof zero = data?.cashPayable ?? { ...zero, total: Math.max(0, data?.netTaxPayable || 0) }
+  const carry: typeof zero = data?.creditCarryForward ?? zero
 
   // Navigate months
   const goToMonth = (delta: number) => {
@@ -191,7 +202,9 @@ export function Gstr3bReport() {
     rows.push(`Credit Notes (reduce output tax),${data?.creditNoteTaxableValue || 0},${data?.creditNoteCgst || 0},${data?.creditNoteSgst || 0},${data?.creditNoteIgst || 0},${(data?.creditNoteCgst || 0) + (data?.creditNoteSgst || 0) + (data?.creditNoteIgst || 0)}`)
     rows.push(`Debit Notes (reduce ITC),${data?.debitNoteTaxableValue || 0},${data?.debitNoteCgst || 0},${data?.debitNoteSgst || 0},${data?.debitNoteIgst || 0},${(data?.debitNoteCgst || 0) + (data?.debitNoteSgst || 0) + (data?.debitNoteIgst || 0)}`)
     rows.push('')
-    rows.push(`6.1,Net Tax Payable,,,${data?.netTaxPayable || 0}`)
+    // #133: what is paid in cash per head after set-off, and the credit carried — never a negative total.
+    rows.push(`6.1,Tax to pay in cash,,${toPay.cgst},${toPay.sgst},${toPay.igst},${toPay.total}`)
+    rows.push(`,Credit carried forward,,${carry.cgst},${carry.sgst},${carry.igst},${carry.total}`)
     rows.push(`,Total Sale Invoices: ${data?.totalSaleInvoices || 0}`)
     rows.push(`,Total Purchase Bills: ${data?.totalPurchaseBills || 0}`)
     rows.push(`,RCM Purchases: ${data?.totalRcmPurchases || 0}`)
@@ -394,10 +407,10 @@ export function Gstr3bReport() {
         />
         <SummaryCard
           icon={<Wallet className="w-4 h-4" />}
-          label="Net Tax Payable"
-          value={data?.netTaxPayable || 0}
-          color={data?.netTaxPayable > 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}
-          bg={data?.netTaxPayable > 0 ? 'bg-rose-100 dark:bg-rose-900/40' : 'bg-emerald-100 dark:bg-emerald-900/40'}
+          label="Tax to pay"
+          value={toPay.total}
+          color={toPay.total > 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}
+          bg={toPay.total > 0 ? 'bg-rose-100 dark:bg-rose-900/40' : 'bg-emerald-100 dark:bg-emerald-900/40'}
           highlight
           estimate={estimate}
         />
@@ -628,19 +641,29 @@ export function Gstr3bReport() {
       {/* Section 6.1: Net Tax Payable (highlighted) */}
       <div className={cn(
         'rounded-2xl p-5 text-white shadow-lg',
-        (data?.netTaxPayable || 0) > 0
+        toPay.total > 0
           ? 'bg-gradient-to-r from-rose-500 to-red-600'
           : 'bg-gradient-to-r from-emerald-500 to-teal-600'
       )}>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-white/80 text-xs font-medium flex items-center gap-1">
-              6.1 Net Tax Payable
+              6.1 Tax to pay in cash
               {estimate && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold text-white">Estimate</span>}
             </p>
             <p className="text-3xl font-bold tabular-nums mt-1">
-              {formatINR(data?.netTaxPayable || 0)}
+              {formatINR(toPay.total)}
             </p>
+            {carry.total > 0 && (
+              <p className="text-xs text-white/90 mt-1 flex items-center gap-1">
+                {formatINR(carry.total)} credit carried to next month
+                <InfoHint
+                  label="Credit carried forward"
+                  text={`Credit is used head by head (section 49(5), Rule 88A): IGST credit first, CGST credit never pays SGST and SGST credit never pays CGST, and reverse-charge tax is paid in cash. What is left — IGST ${formatINR(carry.igst)}, CGST ${formatINR(carry.cgst)}, SGST ${formatINR(carry.sgst)} — stays in your electronic credit ledger for next month.`}
+                  className="text-white"
+                />
+              </p>
+            )}
             {estimate && (
               <p className="text-xs text-white/85 mt-1">
                 Credit not yet checked against GSTR-2B — the tax may be higher.
