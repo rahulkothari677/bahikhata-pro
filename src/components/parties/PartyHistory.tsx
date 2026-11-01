@@ -97,6 +97,12 @@ export function PartyHistoryView({
   const pickView = (v: View) => { setView(v); try { localStorage.setItem(VIEW_KEY, v) } catch { /* per device only */ } }
 
   const label = (k: HistoryKind) => t(`bahi.${k}`)
+  // 8f: a discount note is named as one — "Return from them" said goods came back when none did.
+  const entryLabel = (e: HistoryEntry, k: HistoryKind | null) =>
+    !k ? e.type
+      : e.noteReason === 'post-sale-discount' && k === 'return_in' ? t('bahi.discount_given')
+        : e.noteReason === 'post-sale-discount' && k === 'return_out' ? t('bahi.discount_got')
+          : label(k)
   const days = groupByDay(entries)
   // "Closed on" is the balance after the month's last entry — true only when nothing is hidden.
   const unfiltered = filter === 'all' && !q.trim()
@@ -114,7 +120,8 @@ export function PartyHistoryView({
     const paid = withPaid ? paidOnBill(e) : 0
     return [
       e.invoiceNo,
-      (e.itemCount === 1 ? t('items.count_1') : t('bahi.items_n')).replace('{n}', String(e.itemCount ?? 0)),
+      // 8f: a discount note's lines are its GST rates, not items anyone bought or returned.
+      e.noteReason === 'post-sale-discount' ? '' : (e.itemCount === 1 ? t('items.count_1') : t('bahi.items_n')).replace('{n}', String(e.itemCount ?? 0)),
       paid > 0 && (e.due ?? 0) > 0.004 ? t('bahi.paid_v').replace('{v}', formatINR(paid)) : '',
     ].filter(Boolean).join(' · ')
   }
@@ -218,7 +225,7 @@ export function PartyHistoryView({
                       <span className="flex items-center justify-between gap-2 text-xs">
                         <span className="inline-flex items-center gap-1 font-semibold text-foreground min-w-0">
                           <TypeIcon kind={kind} className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-                          <span className="truncate">{kind ? label(kind) : e.type}</span>
+                          <span className="truncate">{entryLabel(e, kind)}</span>
                         </span>
                         <span className="text-muted-foreground tabular-nums shrink-0">{timeOf(e)}</span>
                       </span>
@@ -231,7 +238,7 @@ export function PartyHistoryView({
                         </span>
                         {!e.isPayment && (
                           <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold', due ? 'bg-check-soft text-check' : 'bg-card/80 text-good')}>
-                            {due ? t('bahi.due').replace('{v}', formatINR(e.due!)) : `✓ ${t('bahi.paid')}`}
+                            {due ? t('bahi.due').replace('{v}', formatINR(e.due!)) : e.onBill ? t('bahi.adjusted') : `✓ ${t('bahi.paid')}`}
                           </span>
                         )}
                       </span>
@@ -282,7 +289,7 @@ export function PartyHistoryView({
                       <span className="min-w-0 text-left">
                         <span className="flex items-center gap-1.5 text-sm font-semibold">
                           <TypeIcon kind={kind} className={cn('w-4 h-4 shrink-0', gave ? 'text-bad' : 'text-good')} />
-                          <span className="truncate">{kind ? label(kind) : e.type}</span>
+                          <span className="truncate">{entryLabel(e, kind)}</span>
                         </span>
                         {/* Wraps rather than cuts: at 375 px a cut line hid the entry's time (live, 31 Oct). */}
                         <span className="block text-xs text-muted-foreground break-words">{[detailOf(e, false), timeOf(e)].filter(Boolean).join(' · ')}</span>

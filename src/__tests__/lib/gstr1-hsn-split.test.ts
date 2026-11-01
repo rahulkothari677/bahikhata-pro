@@ -28,6 +28,7 @@ function doc(type: Gstr1Transaction['type'], gstin: string | null, items: Gstr1I
   n++
   return {
     id: `t${n}`, type, invoiceNo: `D-${n}`, date: new Date('2026-07-15'),
+    affectsStock: true, // notes here are returns (8f: only those reduce Table 12's quantity)
     totalAmount: 525, subtotal: 500, discountAmount: 0, cgst: 12.5, sgst: 12.5, igst: 0,
     isInterState: false, isReverseCharge: false,
     partyId: gstin ? 'p' : null, partyName: gstin ? 'Rahul Traders' : null, partyGstin: gstin, partyState: 'Maharashtra',
@@ -114,6 +115,17 @@ describe('notes land in their buyer\'s tab with the right sign', () => {
     ])
     expect(r.hsn_b2c[0].qty).toBe(9)
     expect(r.hsn_b2b[0].qty).toBe(5)
+  })
+
+  test('8f: a discount note (no goods back) lowers value and tax, never the quantity', () => {
+    // 10 sold for ₹500; a ₹50 discount note (affectsStock false) on 1 unit-line.
+    // Before 8f the quantity read 9 — as if one had come back.
+    const r = buildHSN([
+      doc('sale', REG, [item({ quantity: 10 })]),
+      { ...doc('credit-note', REG, [item({ quantity: 1, unitPrice: 50 })]), affectsStock: false },
+    ])
+    expect(r.hsn_b2b[0].qty).toBe(10)
+    expect(r.hsn_b2b[0].txval).toBe(450)
   })
 })
 

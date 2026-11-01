@@ -42,6 +42,25 @@ export interface DueInput {
   paidAmount?: number | null
   /** Σ of Payment allocations pointing at this bill. */
   allocatedAmount?: number | null
+  /**
+   * 8f-2: Σ of credit/debit notes against this bill, less any refunded in cash
+   * when made (lib/invoice-credits.ts). A discount or return lowers what is
+   * still owed on the bill, exactly as it lowers the khata.
+   */
+  creditedAmount?: number | null
+  /**
+   * 8f-2 (#332, part): a credit/debit note tied to a bill owes nothing by
+   * itself — its value already sits in that bill's due (creditedAmount above),
+   * and showing it as "₹165 due" as well counted it twice. A note tied to no
+   * bill keeps total − paid.
+   */
+  type?: string | null
+  originalTransactionId?: string | null
+}
+
+/** A note whose value is carried by its bill's due (see DueInput.type). */
+function appliedToItsBill(input: DueInput): boolean {
+  return (input.type === 'credit-note' || input.type === 'debit-note') && !!input.originalTransactionId
 }
 
 export interface DueBreakdown {
@@ -52,6 +71,8 @@ export interface DueBreakdown {
   settledLater: number
   /** paidAtBilling + settledLater. */
   totalPaid: number
+  /** 8f-2: taken off by credit/debit notes against the bill. */
+  credited: number
   /** What remains. Never negative — see computeInvoiceDue. */
   due: number
   isFullyPaid: boolean
@@ -60,7 +81,10 @@ export interface DueBreakdown {
 /**
  * How much is still owed on one bill.
  *
- *     due = totalAmount − paidAmount − Σ(allocations)
+ *     due = totalAmount − paidAmount − Σ(allocations) − Σ(notes against it, less refunds)
+ *
+ * The notes term (8f-2, 1 Nov 2026): a discount or return credited to the
+ * customer lowers this bill's due, as it already lowered the khata.
  *
  * CLAMPED AT ZERO, deliberately. A negative due would mean the bill collected
  * more than its own value, and it would then subtract from OTHER bills if
@@ -73,10 +97,12 @@ export interface DueBreakdown {
  * "never happens to money" are not the same claim.
  */
 export function computeInvoiceDue(input: DueInput): number {
+  if (appliedToItsBill(input)) return 0
   const total = roundMoney(input.totalAmount || 0)
   const paid = roundMoney(input.paidAmount || 0)
   const allocated = roundMoney(input.allocatedAmount || 0)
-  return Math.max(0, roundMoney(total - paid - allocated))
+  const credited = roundMoney(input.creditedAmount || 0)
+  return Math.max(0, roundMoney(total - paid - allocated - credited))
 }
 
 /**
@@ -96,12 +122,14 @@ export function computeDueBreakdown(input: DueInput): DueBreakdown {
   const paidAtBilling = roundMoney(input.paidAmount || 0)
   const settledLater = roundMoney(input.allocatedAmount || 0)
   const totalPaid = roundMoney(paidAtBilling + settledLater)
-  const due = Math.max(0, roundMoney(totalAmount - totalPaid))
+  const credited = roundMoney(input.creditedAmount || 0)
+  const due = appliedToItsBill(input) ? 0 : Math.max(0, roundMoney(totalAmount - totalPaid - credited))
   return {
     totalAmount,
     paidAtBilling,
     settledLater,
     totalPaid,
+    credited,
     due,
     isFullyPaid: due === 0,
   }
@@ -114,6 +142,8 @@ export interface AllocatableBill {
   totalAmount: number
   paidAmount?: number | null
   allocatedAmount?: number | null
+  /** 8f-2: notes against the bill (see DueInput). */
+  creditedAmount?: number | null
 }
 
 export interface Allocation {

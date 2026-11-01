@@ -8,6 +8,7 @@ import { parseAsk, mustRefuse, ASK_EXAMPLES, type AskPeriod } from '@/lib/ask-pa
 import { escapeLikeWildcards } from '@/lib/escape-like'
 import { computePartyBalance, getReceivablePayable } from '@/lib/party-balance'
 import { computeInvoiceDue, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
+import { creditedByBill } from '@/lib/invoice-credits'
 import { shouldHideProfit } from '@/lib/profit-visibility'
 import { buildBalanceActions } from '@/lib/ask-actions'
 import { COUNTER_RETURNS_LABEL, describeOwing } from '@/lib/describe-parties'
@@ -629,12 +630,14 @@ export async function POST(req: NextRequest) {
           orderBy: { date: 'desc' },
           take: 20,
         })
+        const billCredits = await creditedByBill(db, userId, bills.map(b => b.id))
         const withDue = bills.map(b => ({
           ...b,
           due: computeInvoiceDue({
             totalAmount: b.totalAmount,
             paidAmount: b.paidAmount,
             allocatedAmount: b.paymentAllocations.reduce((s, a) => s + a.amount, 0),
+            creditedAmount: billCredits.get(b.id) || 0,
           }),
         }))
         const unpaid = withDue.filter(b => b.due > 0.005)

@@ -5,6 +5,7 @@ import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { computePartyBalance } from '@/lib/party-balance'
 import { computeInvoiceDue, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
+import { creditsFromNotes } from '@/lib/invoice-credits'
 import { generateUpiLink } from '@/lib/upi-link'
 
 // POST /api/whatsapp-reminder - generate WhatsApp reminder link for outstanding dues
@@ -73,6 +74,10 @@ export async function POST(req: NextRequest) {
     // was paid at billing. Without this a bill settled through "Settle" still
     // looked unpaid here, and the customer received a reminder for money they
     // had already handed over.
+    // 8f-2: a note against a bill (a discount, a return) is netted into THAT
+    // bill's due, so it is not listed again below — only notes tied to no bill
+    // are. Either way the listed figures add up to the balance asked for.
+    const credits = creditsFromNotes(party.transactions)
     const dueOf = (t: any) =>
       computeInvoiceDue({
         totalAmount: t.totalAmount,
@@ -80,13 +85,14 @@ export async function POST(req: NextRequest) {
         allocatedAmount: (t.paymentAllocations || []).reduce(
           (s: number, a: any) => s + (a.amount || 0), 0,
         ),
+        creditedAmount: credits.get(t.id) || 0,
       })
 
     const unpaidSales = party.transactions
       .filter(t => t.type === 'sale' && dueOf(t) > 0.01)
       .sort((a, b) => a.date.getTime() - b.date.getTime())
     const creditNotes = party.transactions
-      .filter(t => t.type === 'credit-note')
+      .filter(t => t.type === 'credit-note' && !t.originalTransactionId)
       .sort((a, b) => a.date.getTime() - b.date.getTime())
 
     const oldestUnpaid = unpaidSales[0]

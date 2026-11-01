@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { LIVE_ALLOCATIONS } from '@/lib/invoice-due'
+import { creditedByBill } from '@/lib/invoice-credits'
 import { findDuplicateParty, duplicatePartyMessage, duplicatePartyFieldError } from '@/lib/party-duplicate'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
@@ -217,6 +218,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Paginated transaction list: trim the extra row used for hasMore detection.
     const hasMore = transactions.length > PAGE_SIZE
     const pagedTransactions = hasMore ? transactions.slice(0, PAGE_SIZE) : transactions
+    const partyCredits = await creditedByBill(db, userId, pagedTransactions.filter((t: any) => t.type === 'sale' || t.type === 'purchase').map((t: any) => t.id))
     // 🔒 V17-Ext §1: Composite cursor "date|id" via the shared helper.
     const lastTxn = pagedTransactions[pagedTransactions.length - 1]
     const nextCursor = hasMore && lastTxn
@@ -297,6 +299,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           allocatedAmount: roundMoney(
             (paymentAllocations || []).reduce((s: number, a: any) => s + (a.amount || 0), 0),
           ),
+          // 8f-2: notes against the bill lower its due (lib/invoice-credits.ts).
+          creditedAmount: partyCredits.get(t.id) || 0,
         }
       }),
       pagination: {

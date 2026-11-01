@@ -12,6 +12,7 @@ import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 // 🔒 AUDIT C5: oldest-first allocation + the guard that stops a payment being
 // applied to an already-settled bill.
 import { planAllocationOldestFirst, validateAllocations, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
+import { creditedByBill } from '@/lib/invoice-credits'
 import { billKey } from '@/lib/backup-keys'
 
 /**
@@ -379,6 +380,8 @@ export async function POST(req: NextRequest) {
         take: 500,
       })
 
+      // 8f-2: a bill's notes (discount, return) lower what a payment can settle on it.
+      const billCredits = await creditedByBill(db, userId, openBills.map(b => b.id))
       const allocatable = openBills.map(b => ({
         id: b.id,
         date: b.date,
@@ -387,6 +390,7 @@ export async function POST(req: NextRequest) {
         allocatedAmount: roundMoney(
           b.paymentAllocations.reduce((s, a) => s + (a.amount || 0), 0),
         ),
+        creditedAmount: billCredits.get(b.id) || 0,
       }))
 
       const billsById = new Map(allocatable.map(b => [b.id, b]))

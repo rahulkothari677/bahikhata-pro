@@ -43,6 +43,8 @@ export interface StatementTransaction {
    * caller can see it exists and is expected to supply it.
    */
   allocatedAmount?: number | null
+  /** 8f-2: notes against this bill (the party route supplies it); absent = 0. */
+  creditedAmount?: number | null
   invoiceNo?: string | null
   _count?: { items: number }
 }
@@ -125,6 +127,7 @@ export function computeStatementRunningBalance(
       totalAmount: t.totalAmount,
       paidAmount: t.paidAmount,
       allocatedAmount: t.allocatedAmount || 0,
+      creditedAmount: t.creditedAmount || 0,
     }),
     invoiceNo: t.invoiceNo ?? null,
     itemCount: t._count?.items ?? 0,

@@ -74,6 +74,7 @@ const B2C_SALE: Gstr1Transaction = {
 
 const CREDIT_NOTE: Gstr1Transaction = {
   id: 't3', type: 'credit-note', invoiceNo: 'CN-001', date: new Date('2026-07-17'),
+  affectsStock: true, // a return: the goods came back (8f — only these reduce Table 12's quantity)
   totalAmount: 354, subtotal: 300, discountAmount: 0,
   cgst: 27, sgst: 27, igst: 0, isInterState: false, isReverseCharge: false,
   partyId: 'party1', partyName: 'Rahul Traders', partyGstin: '27AAAPL1234C1Z5', partyState: 'Maharashtra',

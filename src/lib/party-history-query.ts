@@ -116,6 +116,7 @@ export async function fetchPartyHistory(input: HistoryPageInput): Promise<Histor
   const rows = await db.$queryRaw<Array<{
     id: string; date: Date; type: string; isPayment: boolean; amount: bigint; due: bigint
     invoiceNo: string | null; mode: string | null; notes: string | null; delta: bigint
+    noteReason: string | null; originalTransactionId: string | null
     runningBalance: bigint; itemCount: number; total: bigint
     dayGave: bigint; dayGot: bigint; monthGave: bigint; monthGot: bigint
   }>>`
@@ -124,6 +125,7 @@ export async function fetchPartyHistory(input: HistoryPageInput): Promise<Histor
         t."totalAmount"::bigint AS "amount",
         GREATEST(0, ${DUE_SQL})::bigint AS "due",
         t."invoiceNo", NULL::text AS "mode", t."notes",
+        t."noteReason", t."originalTransactionId",
         (t."totalAmount" - t."paidAmount")::bigint AS "owed"
       FROM "Transaction" t
       ${allocatedLateral(userId)}
@@ -132,7 +134,7 @@ export async function fetchPartyHistory(input: HistoryPageInput): Promise<Histor
       UNION ALL
       SELECT p."id", p."date",
         CASE WHEN p."type" = 'received' THEN 'payment-received' ELSE 'payment-paid' END,
-        TRUE, p."amount"::bigint, 0::bigint, NULL::text, p."mode", p."notes", p."amount"::bigint
+        TRUE, p."amount"::bigint, 0::bigint, NULL::text, p."mode", p."notes", NULL::text, NULL::text, p."amount"::bigint
       FROM "Payment" p
       WHERE p."userId" = ${userId} AND p."partyId" = ${partyId} AND p."deletedAt" IS NULL
     ),
@@ -163,7 +165,7 @@ export async function fetchPartyHistory(input: HistoryPageInput): Promise<Histor
       FROM f
     )
     SELECT w."id", w."date", w."type", w."isPayment", w."amount", w."due", w."invoiceNo", w."mode",
-      w."notes", w."delta", w."runningBalance", w."total", w."dayGave"::bigint AS "dayGave",
+      w."notes", w."noteReason", w."originalTransactionId", w."delta", w."runningBalance", w."total", w."dayGave"::bigint AS "dayGave",
       w."dayGot"::bigint AS "dayGot", w."monthGave"::bigint AS "monthGave", w."monthGot"::bigint AS "monthGot",
       CASE WHEN w."isPayment" THEN 0 ELSE (
         SELECT COUNT(*) FROM "TransactionItem" ti WHERE ti."transactionId" = w."id"
@@ -194,6 +196,9 @@ export async function fetchPartyHistory(input: HistoryPageInput): Promise<Histor
       itemCount: Number(r.itemCount ?? 0),
       paymentMode: r.mode,
       notes: r.notes,
+      // 8f: a note's reason (a discount is not a return) and whether it is tied to a bill.
+      noteReason: r.noteReason,
+      onBill: !!r.originalTransactionId,
       delta: money(r.delta),
       runningBalance: money(r.runningBalance),
     }

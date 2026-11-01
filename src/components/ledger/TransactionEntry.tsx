@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { InfoHint, SettingLabel } from '@/components/common/InfoHint'
+import { NOTE_REASONS } from '@/lib/note-reasons'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { toast as sonnerToast } from 'sonner'
 import { resolveName } from '@/lib/resolve-name'
@@ -2675,11 +2676,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="">Select a reason...</option>
-                      <option value="post-sale-discount">Post-sale discount</option>
-                      <option value="deficiency">Deficiency in goods</option>
-                      <option value="return">Goods returned</option>
-                      <option value="price-revision">Price revision</option>
-                      <option value="other">Other</option>
+                      {NOTE_REASONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
                     </select>
                   </div>
                   <div className="flex items-center gap-2">

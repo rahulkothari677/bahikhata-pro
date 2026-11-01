@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { billWhere, billWhereSql, parseBillFilters } from '@/lib/bill-filters'
 import { ALLOCATED_JOIN } from '@/lib/invoice-due-sql'
+import { creditedByBill } from '@/lib/invoice-credits'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
@@ -171,6 +172,8 @@ export async function GET(req: NextRequest) {
     // client so every consumer gets the same number without each re-deriving it
     // — the drift that produced three different party balances (V7) and stock
     // value computed four ways (N6).
+    // 8f-2: and the notes against each bill (lib/invoice-credits.ts), so its due nets a discount or return.
+    const credited = await creditedByBill(db, userId, trimmed.filter((t: any) => t.type === 'sale' || t.type === 'purchase').map((t: any) => t.id))
     const withAllocations = trimmed.map((t: any) => {
       const { paymentAllocations, ...rest } = t
       return {
@@ -178,6 +181,7 @@ export async function GET(req: NextRequest) {
         allocatedAmount: roundMoney(
           (paymentAllocations || []).reduce((s: number, a: any) => s + (a.amount || 0), 0),
         ),
+        creditedAmount: credited.get(t.id) || 0,
       }
     })
 
@@ -874,6 +878,10 @@ export async function POST(req: NextRequest) {
           partyId: partyId || null,
           originalTransactionId,
           noteTotal: totalAmount,
+          // 8f: a post-sale discount on a GST shop carries the s.34(2) date limit.
+          noteReason: noteReason ?? null,
+          chargesGst: chargesGstOnSales(gstStatus(setting)),
+          noteDate: date || null,
         })
         if (!noteCheck.ok) {
           const err: any = new Error('NOTE_VALIDATION_FAILED')

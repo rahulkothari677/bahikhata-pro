@@ -82,6 +82,7 @@ describe('C5 — the breakdown shown on the bill', () => {
       paidAtBilling: 0,
       settledLater: 1000,
       totalPaid: 1000,
+      credited: 0, // 8f-2: no notes against this bill
       due: 1992.5,
       isFullyPaid: false,
     })

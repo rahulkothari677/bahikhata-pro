@@ -273,6 +273,17 @@ describe('#327 Step B — the card asks the database for its pages', () => {
     await waitFor(() => expect(urls().some((u) => u.searchParams.get('q') === 'diwali')).toBe(true))
     expect(JSON.parse(urls()[0].searchParams.get('labels')!)).toMatchObject({ sale: 'Sale', got: 'Got payment' })
   })
+  it('8f: a discount note reads as a discount, "adjusted in bill", with no item count', () => {
+    // Live on the local copy 1 Nov: "Return from them ₹165 · ✓ paid · CN-0001 · 2 items" for a discount.
+    const disc: HistoryEntry = { id: 'c1', type: 'credit-note', date: new Date(2026, 10, 1, 11).toISOString(), amount: 165, due: 0, invoiceNo: 'CN-0001', itemCount: 2, noteReason: 'post-sale-discount', onBill: true, runningBalance: 1485 }
+    const tw = (k: string) => ({ ...words, 'bahi.discount_given': 'Discount given', 'bahi.adjusted': 'adjusted in bill', 'bahi.return_in': 'Return from them' } as Record<string, string>)[k] ?? k
+    render(<LocalHistory entries={[disc]} t={tw} balWords={() => ''} onOpenBill={() => {}} />)
+    expect(screen.getAllByText('Discount given').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Return from them')).toBeNull()
+    expect(screen.getAllByText('adjusted in bill').length).toBeGreaterThan(0)
+    expect(document.body.textContent).not.toMatch(/2 items/)
+    expect(document.body.textContent).not.toMatch(/✓ paid/)
+  })
   it('a failed load says so and offers to try again', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({}) }).mockResolvedValueOnce(page([sale(1, 100)], null, 1))
     mount()

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { LIVE_ALLOCATIONS } from '@/lib/invoice-due'
+import { creditedByBill } from '@/lib/invoice-credits'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
@@ -157,6 +158,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           (s: number, a: any) => s + (a.amount || 0), 0,
         ) || 0,
       ),
+      // 8f-2: notes against this bill lower its due (lib/invoice-credits.ts).
+      creditedAmount: (await creditedByBill(db, userId, [transaction.id])).get(transaction.id) || 0,
     }
 
     /*
@@ -675,6 +678,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         originalTransactionId,
         noteTotal: totalAmount,
         excludeNoteId: id,
+        // 8f: editing a post-sale discount note is held to the same s.34(2) date.
+        noteReason: resolvedNoteReason ?? null,
+        chargesGst: chargesGstOnSales(gstStatus(setting)),
+        noteDate: date || existing.date,
       })
       if (!noteCheck.ok) {
         return NextResponse.json({ error: noteCheck.error, message: noteCheck.message }, { status: noteCheck.status })
@@ -742,6 +749,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           originalTransactionId,
           noteTotal: totalAmount,
           excludeNoteId: id,
+          noteReason: resolvedNoteReason ?? null,
+          chargesGst: chargesGstOnSales(gstStatus(setting)),
+          noteDate: date || existing.date,
         })
         if (!noteCheck.ok) {
           const err: any = new Error('NOTE_VALIDATION_FAILED')

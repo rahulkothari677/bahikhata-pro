@@ -326,6 +326,8 @@ export interface InvoiceSource {
    * original amount, and the status stamp contradicted the shop's own ledger.
    */
   allocatedAmount?: number
+  /** 8f-2: credit notes against this bill (a discount, a return) — lower its due. */
+  creditedAmount?: number
 }
 
 function formatDate(date: string | Date): string {
@@ -423,6 +425,7 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
     totalAmount: src.totalAmount,
     paidAmount: src.paidAmount,
     allocatedAmount: src.allocatedAmount || 0,
+    creditedAmount: src.creditedAmount || 0,
   })
 
   const total = roundMoney(src.totalAmount)

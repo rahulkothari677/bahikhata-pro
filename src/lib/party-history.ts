@@ -25,6 +25,10 @@ export interface HistoryEntry {
   itemCount?: number
   paymentMode?: string | null
   notes?: string | null
+  /** 8f: a credit/debit note's reason ('post-sale-discount' is a discount, not a return). */
+  noteReason?: string | null
+  /** 8f: a note tied to a bill — its value is in that bill's due, so it shows "adjusted", not "paid". */
+  onBill?: boolean
   runningBalance: number
   /** What the entry did to the balance (lib/statement-balance.ts — the one rule). */
   delta?: number

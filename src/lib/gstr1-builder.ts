@@ -87,6 +87,8 @@ export interface Gstr1Transaction {
   // but if the original is later edited, the note's stale values would
   // produce wrong classification. Looking up the original is strictly correct.)
   originalTransactionId?: string | null
+  /** A credit note where goods came back (8f): only these reduce Table 12's quantity. */
+  affectsStock?: boolean
 }
 
 export interface Gstr1Item {
@@ -802,9 +804,13 @@ function buildHsnTab(txns: Gstr1Transaction[]): Gstr1HsnEntry[] {
         hsn, desc: item.productName, qty: 0, uqc,
         txval: 0, iamt: 0, camt: 0, samt: 0, csamt: 0, rt: item.gstRate,
       }
-      // Credit notes REDUCE the HSN totals (they're returns).
+      // Credit notes REDUCE the HSN totals.
       const sign = txn.type === 'credit-note' ? -1 : 1
-      existing.qty = roundMoney(existing.qty + sign * item.quantity)
+      // 8f: but only goods that came BACK reduce the quantity. A discount or
+      // price-revision note (affectsStock false) lowers the value and tax;
+      // nothing was un-sold, so Table 12's quantity stays.
+      const qtySign = txn.type === 'credit-note' && !txn.affectsStock ? 0 : sign
+      existing.qty = roundMoney(existing.qty + qtySign * item.quantity)
       existing.txval = roundMoney(existing.txval + sign * itemTaxable(item))
       existing.iamt = roundMoney(existing.iamt + sign * item.igst)
       existing.camt = roundMoney(existing.camt + sign * item.cgst)

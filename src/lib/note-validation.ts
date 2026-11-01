@@ -24,6 +24,7 @@
 
 import { roundMoney } from './money'
 import { findWalkInPartyId } from './walk-in-party'
+import { discountDeadline, POST_SALE_DISCOUNT_REASON } from './post-sale-discount'
 
 export interface NoteValidationInput {
   userId: string
@@ -32,6 +33,12 @@ export interface NoteValidationInput {
   originalTransactionId: string
   noteTotal: number                  // this note's computed totalAmount (₹)
   excludeNoteId?: string             // on PUT: exclude the note being edited
+  /** 8f: the note's reason — a post-sale discount carries the s.34(2) date limit. */
+  noteReason?: string | null
+  /** 8f: does the shop charge GST on sales? Without GST there is no tax to reduce, so no limit. */
+  chargesGst?: boolean
+  /** 8f: the note's own date (defaults to now). */
+  noteDate?: Date | string | null
 }
 
 export type NoteValidationResult =
@@ -100,7 +107,7 @@ export async function validateNoteAgainstOriginal(
   // Rule 1: exists + owned by this user + not voided.
   const original = await db.transaction.findFirst({
     where: { id: originalTransactionId, userId, deletedAt: null },
-    select: { id: true, type: true, partyId: true, totalAmount: true, invoiceNo: true },
+    select: { id: true, type: true, partyId: true, totalAmount: true, invoiceNo: true, date: true },
   })
   if (!original) {
     return {
@@ -118,6 +125,27 @@ export async function validateNoteAgainstOriginal(
       status: 400,
       error: 'Invalid original transaction type',
       message: `A ${type === 'credit-note' ? 'credit note' : 'debit note'} can only be issued against a ${expectedType} invoice — ${original.invoiceNo || 'this document'} is a ${original.type}.`,
+    }
+  }
+
+  /*
+   * Rule 2b (8f): a post-sale DISCOUNT on a GST shop's sale is a credit note
+   * only until the s.34(2) date — 30 November after the sale's financial year.
+   * After it the GST can no longer be reduced, so the note is refused here
+   * rather than filed into a return that may not carry it. (A goods return
+   * is not refused: the goods did come back and the khata must show it.)
+   */
+  if (type === 'credit-note' && input.noteReason === POST_SALE_DISCOUNT_REASON && input.chargesGst && original.date) {
+    const asOn = input.noteDate ? new Date(input.noteDate) : new Date()
+    const dl = discountDeadline(original.date, asOn)
+    if (!dl.open) {
+      const last = dl.effectiveDeadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+      return {
+        ok: false,
+        status: 400,
+        error: 'Discount note too late',
+        message: `The last date for a GST credit note on ${original.invoiceNo || 'this bill'} was ${last} (section 34(2)), so the GST on it can no longer be reduced.`,
+      }
     }
   }
 

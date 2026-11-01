@@ -31,8 +31,10 @@ import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
   ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, ArrowRight, X, Plus,
   IndianRupee, FileText, FileCheck, Phone, Building2, MapPin, TrendingUp,
-  MessageCircle, AlertCircle, ArrowLeft, History, Loader2, HandCoins,
+  MessageCircle, AlertCircle, ArrowLeft, History, Loader2, HandCoins, BadgePercent,
 } from 'lucide-react'
+import { DiscountAfterSaleSheet } from '@/components/ledger/DiscountAfterSaleSheet'
+import { noteReasonLabel } from '@/lib/note-reasons'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
 import { resolveInvoiceDesign } from '@/lib/invoice-presets'
@@ -78,6 +80,8 @@ export function TransactionDetail() {
   const { selectedTransactionId, setSelectedTransactionId, setView, triggerRefresh, previousView, setPreviousView, selectedTransactionType, setSelectedTransactionType, setSelectedPartyId, setPendingSettle } = useAppStore()
   const { hideProfit } = useSetting()
   const [editOpen, setEditOpen] = useState(false)
+  // 8f: "Discount after sale" sheet.
+  const [discountOpen, setDiscountOpen] = useState(false)
   const [printing, setPrinting] = useState(false)
   const queryClient = useQueryClient()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
@@ -454,6 +458,12 @@ export function TransactionDetail() {
             <HandCoins className="w-4 h-4" /> Settle {formatINR(due)}
           </Button>
         )}
+        {/* 8f: a discount after the sale — one sheet, a credit note behind it (Finance Act 2026 s.153). */}
+        {isSale && (
+          <Button variant="outline" size="touch" className="gap-2" onClick={() => setDiscountOpen(true)}>
+            <BadgePercent className="w-4 h-4" /> Discount
+          </Button>
+        )}
         {/* V17-Ext Tier 3: Create Credit Note button (sales only) */}
         {isSale && (
           <Button
@@ -575,10 +585,14 @@ export function TransactionDetail() {
           </Button>
         )}
         <div className="hidden sm:block flex-1" />
-        <Button variant="outline" size="touch" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
+        {/* 8f: a sale has seven actions; on a phone Delete takes its own full row rather than sitting alone in a column. */}
+        <Button variant="outline" size="touch" onClick={handleDelete} className={cn('gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50', isSale && 'col-span-3 sm:col-span-1')}>
           <Trash2 className="w-4 h-4" /> Delete
         </Button>
       </div>
+      {discountOpen && isSale && (
+        <DiscountAfterSaleSheet sale={txn} chargesGst={chargesGstOnSales(gstStatus(setting))} due={due} onClose={() => setDiscountOpen(false)} />
+      )}
 
       {/* Income/Expense simple view */}
       {(isIncome || isExpense) ? (
@@ -634,7 +648,7 @@ export function TransactionDetail() {
                     <h2 className="text-xl font-bold font-heading tracking-tight">{txn.invoiceNo || `TXN-${txn.id.slice(-6)}`}</h2>
                     {/* V17-Ext Tier 3: Show note reason if present */}
                     {isNote && txn.noteReason && (
-                      <p className="text-white/60 text-xs mt-0.5 capitalize">{txn.noteReason.replace(/-/g, ' ')}</p>
+                      <p className="text-white/60 text-xs mt-0.5">{noteReasonLabel(txn.noteReason)}</p>
                     )}
                   </div>
                 </div>
@@ -963,6 +977,13 @@ export function TransactionDetail() {
                             </div>
                           </>
                         )}
+                        {/* 8f-2: a discount or return against this bill lowers what is still owed on it. */}
+                        {breakdown.credited > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Credit notes</span>
+                            <span className="font-medium tabular-nums">{formatINR(breakdown.credited)}</span>
+                          </div>
+                        )}
                       </>
                     )
                   })()}
@@ -1022,7 +1043,7 @@ export function TransactionDetail() {
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {formatDateMaybeTime(rev.date)}
-                      {rev.noteReason && ` • ${rev.noteReason.replace(/-/g, ' ')}`}
+                      {rev.noteReason && ` • ${noteReasonLabel(rev.noteReason)}`}
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0 ml-2">

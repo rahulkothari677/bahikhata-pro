@@ -16,14 +16,31 @@
  */
 import { Prisma } from '@prisma/client'
 
+/*
+ * 8f-2: credit/debit notes against each bill (their total less any cash
+ * refunded when made) — the SQL twin of lib/invoice-credits.ts. Joined as
+ * `cr`; ALLOCATED_JOIN and allocatedLateral carry it, so every DUE_SQL query
+ * gets it without a second join to remember.
+ */
+const CREDITED_SUBQUERY = Prisma.sql`SELECT n."originalTransactionId", SUM(n."totalAmount" - COALESCE(n."paidAmount", 0)) AS credited
+    FROM "Transaction" n
+    WHERE n."deletedAt" IS NULL AND n."type" IN ('credit-note', 'debit-note') AND n."originalTransactionId" IS NOT NULL
+      AND n."totalAmount" > COALESCE(n."paidAmount", 0)`
+
 export const ALLOCATED_JOIN = Prisma.sql`LEFT JOIN (
     SELECT pa."transactionId", SUM(pa."amount") AS alloc
     FROM "PaymentAllocation" pa
     JOIN "Payment" py ON py."id" = pa."paymentId" AND py."deletedAt" IS NULL
     GROUP BY pa."transactionId"
-  ) a ON a."transactionId" = t."id"`
+  ) a ON a."transactionId" = t."id"
+  LEFT JOIN (
+    ${CREDITED_SUBQUERY}
+    GROUP BY n."originalTransactionId"
+  ) cr ON cr."originalTransactionId" = t."id"`
 
-export const DUE_SQL = Prisma.sql`(t."totalAmount" - t."paidAmount" - COALESCE(a.alloc, 0))`
+/* 8f-2 (#332, part): a note tied to a bill owes nothing by itself — its value is in that bill's due. */
+export const DUE_SQL = Prisma.sql`(CASE WHEN t."type" IN ('credit-note', 'debit-note') AND t."originalTransactionId" IS NOT NULL THEN 0
+  ELSE t."totalAmount" - t."paidAmount" - COALESCE(a.alloc, 0) - COALESCE(cr.credited, 0) END)`
 
 /**
  * The same allocations as ALLOCATED_JOIN, read per bill through the
@@ -37,7 +54,11 @@ export function allocatedLateral(userId: string): Prisma.Sql {
     FROM "PaymentAllocation" pa
     JOIN "Payment" py ON py."id" = pa."paymentId" AND py."deletedAt" IS NULL
     WHERE pa."userId" = ${userId} AND pa."transactionId" = t."id"
-  ) a ON TRUE`
+  ) a ON TRUE
+  LEFT JOIN LATERAL (
+    ${CREDITED_SUBQUERY} AND n."userId" = ${userId} AND n."originalTransactionId" = t."id"
+    GROUP BY n."originalTransactionId"
+  ) cr ON TRUE`
 }
 
 /** Each customer's oldest sale bill that still has something due (alias t / a inside). */

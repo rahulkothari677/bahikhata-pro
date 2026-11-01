@@ -103,7 +103,7 @@ describe('G2 — HSN summary splits rows by unit of measure', () => {
         item({ quantity: 10, unit: 'kg' }),
         item({ quantity: 10, unit: 'packet' }),
       ]),
-      txn([item({ quantity: 4, unit: 'kg' })], { id: 't2', type: 'credit-note' }),
+      txn([item({ quantity: 4, unit: 'kg' })], { id: 't2', type: 'credit-note', affectsStock: true }),
     ])
 
     const kgs = data.find(d => d.uqc === 'KGS')

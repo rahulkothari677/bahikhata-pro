@@ -4,6 +4,7 @@ import { getAuthContextForWrite } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { computeInvoiceDue, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
+import { creditedByBill } from '@/lib/invoice-credits'
 
 // POST /api/whatsapp-invoice - generate WhatsApp share link for an invoice
 export async function POST(req: NextRequest) {
@@ -73,11 +74,15 @@ export async function POST(req: NextRequest) {
     lines.push(`Paid: ₹${paidOnBill.toFixed(2)}`)
 
     // 💰 MONEY (Audit fix Phase 8): roundMoney on the due calculation
+    // 8f-2: a discount or return against the bill lowers its balance too.
+    const creditedOnBill = (await creditedByBill(db, userId, [transaction.id])).get(transaction.id) || 0
     const due = computeInvoiceDue({
       totalAmount: transaction.totalAmount,
       paidAmount: transaction.paidAmount,
       allocatedAmount: allocatedOnBill,
+      creditedAmount: creditedOnBill,
     })
+    if (creditedOnBill > 0) lines.push(`Credit notes: ₹${creditedOnBill.toFixed(2)}`)
     if (due > 0) {
       lines.push(`*Balance Due: ₹${due.toFixed(2)}*`)
     }

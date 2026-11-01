@@ -71,6 +71,8 @@ function toBuilderTxn(t: any): Gstr1Transaction {
     // the original invoice's isInterState + totalAmount for B2CS-vs-CDNUR
     // classification (instead of using the note's own potentially-stale values).
     originalTransactionId: t.originalTransactionId || null,
+    // 8f: a note that brought goods back; value-only notes leave Table 12's quantity alone.
+    affectsStock: !!t.affectsStock,
     items: (t.items || []).map((item: any) => ({
       productId: item.productId,
       productName: item.productName,

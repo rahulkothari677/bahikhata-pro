@@ -32,6 +32,11 @@ const SCAN_DIRS = [path.join(SRC, 'app', 'api'), path.join(SRC, 'lib')]
  * is safe. Keyed by "<relative path>:<model>".
  */
 const ACCEPTED: Record<string, string> = {
+  // — Bill dues (8f-2) ——————————————————————————————————————————————————
+  'lib/invoice-credits.ts:transaction':
+    'Notes against the bills the caller passes (originalTransactionId IN ids) — bounded by that list, which is '
+    + 'always one page of bills, one bill, or Settle\'s capped open-bill list. A cap here would drop a note and '
+    + 'show a bill as owing more than it does. Narrow select, three columns.',
   // — Khata (Phase 5e-1) ————————————————————————————————————————————————
   'app/api/parties/list/route.ts:party':
     'Khata counts every chip and totals the side over ALL parties (a cap would make "from 4 of 7 customers" '
