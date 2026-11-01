@@ -908,8 +908,10 @@ model Setting {
    * REGISTERED in MONEY_COLUMNS (prisma-money-extension): an unregistered money
    * column reads back as raw paise and is exactly the 100x class of bug that
    * file exists to prevent.
+   * BigInt (#335): a year of sales in paise passes INTEGER's ₹2.15 crore limit.
+   * The money extension turns the BigInt into rupees on read.
    */
-  priorFyTurnover    Int?
+  priorFyTurnover    BigInt?
   /**
    * Has this shop's turnover ever crossed ₹5 crore in a year since 2017-18?
    * Three-valued on purpose. NULL means "never asked" and is not the same as

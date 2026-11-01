@@ -184,6 +184,10 @@ function convertRowOnRead(model: string, row: any, depth: number = 0): any {
   for (const col of cols) {
     if (col in converted && converted[col] != null && typeof converted[col] === 'number') {
       converted[col] = fromPaise(converted[col])
+    } else if (col in converted && typeof converted[col] === 'bigint') {
+      // #335: a BIGINT paise column (Setting.priorFyTurnover). Number() is exact
+      // up to 2^53 paise (₹90 lakh crore), and a bigint would also break JSON.
+      converted[col] = fromPaise(Number(converted[col]))
     }
   }
 

@@ -15,6 +15,7 @@
  */
 import fs from 'fs'
 import path from 'path'
+import { __testing } from '@/lib/prisma-money-extension'
 
 const EXTENSION = fs.readFileSync(
   path.join(process.cwd(), 'src/lib/prisma-money-extension.ts'), 'utf8',
@@ -22,9 +23,9 @@ const EXTENSION = fs.readFileSync(
 const SCHEMA = fs.readFileSync(path.join(process.cwd(), 'prisma/schema.prisma'), 'utf8')
 
 describe('priorFyTurnover is wired as a money column', () => {
-  it('exists on Setting as an Int', () => {
+  it('exists on Setting as a BigInt — a year of paise passes the ₹2.15 crore INTEGER limit (#335)', () => {
     const setting = /model Setting \{([\s\S]*?)\n\}/.exec(SCHEMA)![1]
-    expect(setting).toMatch(/priorFyTurnover\s+Int\?/)
+    expect(setting).toMatch(/priorFyTurnover\s+BigInt\?/)
   })
 
   it('is registered in MONEY_COLUMNS, so it converts paise to rupees on read', () => {
@@ -39,7 +40,36 @@ describe('priorFyTurnover is wired as a money column', () => {
     // 0    → the shopkeeper states they turned over nothing last year.
     // Collapsing them would silently overwrite a genuine zero.
     const setting = /model Setting \{([\s\S]*?)\n\}/.exec(SCHEMA)![1]
-    expect(setting).toMatch(/priorFyTurnover\s+Int\?/)
-    expect(setting).not.toMatch(/priorFyTurnover\s+Int\s+@default/)
+    expect(setting).toMatch(/priorFyTurnover\s+BigInt\?/)
+    expect(setting).not.toMatch(/priorFyTurnover\s+BigInt\s+@default/)
+  })
+})
+
+describe('#335: a turnover above ₹2.15 crore survives the round trip', () => {
+  const { convertDataOnWrite, convertRowOnRead } = __testing
+
+  it('₹6 crore is written as 6,00,00,00,000 paise — past INTEGER, inside BIGINT', () => {
+    const paise = convertDataOnWrite('Setting', { priorFyTurnover: 6_00_00_000 }).priorFyTurnover
+    expect(paise).toBe(6_000_000_000)
+    expect(paise).toBeGreaterThan(2_147_483_647)
+  })
+
+  it('reads a BIGINT back as rupees, a plain number (JSON-safe)', () => {
+    const row = convertRowOnRead('Setting', { priorFyTurnover: BigInt(6_000_000_000) })
+    expect(row.priorFyTurnover).toBe(6_00_00_000)
+    expect(typeof row.priorFyTurnover).toBe('number')
+    expect(() => JSON.stringify(row)).not.toThrow()
+  })
+
+  it('null stays null — "not declared" is not zero', () => {
+    expect(convertRowOnRead('Setting', { priorFyTurnover: null }).priorFyTurnover).toBeNull()
+  })
+
+  it('the migration widens the column without touching values', () => {
+    const dir = path.join(process.cwd(), 'prisma/migrations')
+    const sql = fs.readdirSync(dir).filter((d) => d.includes('prior_fy_turnover_bigint'))
+      .map((d) => fs.readFileSync(path.join(dir, d, 'migration.sql'), 'utf8')).join('\n')
+    expect(sql).toMatch(/ALTER COLUMN "priorFyTurnover" SET DATA TYPE BIGINT/)
+    expect(sql).not.toMatch(/DROP|UPDATE/i)
   })
 })

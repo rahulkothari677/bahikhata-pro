@@ -230,7 +230,8 @@ async function computeReturn(userId: string, monthParam: string) {
    * `|| computed`: null means "I have not said"; zero means "I have said, and
    * it is zero" — a declared zero must not be overwritten.
    */
-  const priorFyTurnover = setting?.priorFyTurnover ?? computedPriorFy
+  // BigInt in the schema (#335); the money extension has already made it rupees — Number() only settles the type.
+  const priorFyTurnover = setting?.priorFyTurnover != null ? Number(setting.priorFyTurnover) : computedPriorFy
 
   const originalInvoices = await originalsFor(userId, txns)
   const builderTxns: Gstr1Transaction[] = txns.map(toBuilderTxn)
