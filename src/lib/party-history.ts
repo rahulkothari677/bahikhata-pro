@@ -112,11 +112,18 @@ export function periodTotals(entries: HistoryEntry[], keyOf: (e: HistoryEntry) =
   return new Map([...groups].map(([k, g]) => [k, dayTotals(g)]))
 }
 
+/**
+ * #332: only a sale or a purchase is a bill to collect or pay. A return's unrefunded
+ * part already sits in the khata balance (party-balance.ts: total − paid), so it is
+ * never "unpaid". The SQL filter (party-history-query.ts) uses this same list.
+ */
+export const UNPAID_BILL_TYPES = ['sale', 'purchase'] as const
+
 export function matchesFilter(e: HistoryEntry, f: HistoryFilter): boolean {
   if (f === 'all') return true
   if (f === 'payments') return !!e.isPayment
   if (f === 'bills') return !e.isPayment
-  return !e.isPayment && (e.due ?? 0) > 0.004
+  return !e.isPayment && (UNPAID_BILL_TYPES as readonly string[]).includes(e.type) && (e.due ?? 0) > 0.004
 }
 
 const digitsOnly = (s: string) => s.replace(/[^\d.]/g, '')

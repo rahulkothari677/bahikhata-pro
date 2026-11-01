@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NumberField } from '@/components/ui/number-field'
 import { Label } from '@/components/ui/label'
-import { ScanLine } from 'lucide-react'
+import { ScanLine, ChevronDown } from 'lucide-react'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast as sonnerToast } from 'sonner'
@@ -78,6 +78,8 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
   // Has the shopkeeper answered the goods/service question themselves? Once
   // they have, typing an HSN must stop re-deciding it for them.
   const [serviceTouched, setServiceTouched] = useState(false)
+  /** #338: GST details open? Closed by default; only a shop that is not registered sees the row. */
+  const [gstOpen, setGstOpen] = useState(false)
   const [barcodeOpen, setBarcodeOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   // 🔒 R15-5 (Round 15): Read hideProfit so the margin preview box is hidden
@@ -205,6 +207,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
   // Sync form when dialog opens or product changes
   useEffect(() => {
     if (open) {
+      setGstOpen(false) // #338: closed each time, with what is set shown on the row
       if (product) {
         setForm({
           name: product.name || '',
@@ -259,7 +262,9 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
     // #129: a code GSTR-1 cannot take is stopped here, with the fix beside the field — not at filing.
     if (hsnFormat.problem) {
       sonnerToast.error(hsnFormat.problem, { description: hsnFormat.fix ? `Tap "Use ${hsnFormat.fix}" under the HSN, or correct it.` : 'Correct the HSN, or leave it empty.' })
-      document.getElementById('field-hsn-sac-code')?.focus()
+      // #338: the field may sit in the closed GST details — open it, then focus.
+      setGstOpen(true)
+      setTimeout(() => document.getElementById('field-hsn-sac-code')?.focus(), 0)
       return
     }
     // 🔒 V17 Audit Phase 1 P1.5: Client-side check for contradictory gstRate + gstTreatment.
@@ -516,6 +521,43 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
             </datalist>
           </div>
           <div>
+            <Label htmlFor="field-unit">Unit</Label>
+            <Select value={form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {/*
+            * #338 (D-21): a shop that is not registered charges no GST, so HSN and the
+            * rate wait behind one row, closed. Not removed: the rate still prices a
+            * registered supplier's GST into a purchase (line-items.ts taxes only
+            * outward bills), and the HSN is ready the day the shop registers. The
+            * row shows what is set, so nothing is hidden silently.
+            */}
+          {!gstShop && (
+            // Beside Unit on a wide screen (its bottom on the dropdown's), full width on a phone.
+            <div className="sm:self-end flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setGstOpen((o) => !o)}
+                aria-expanded={gstOpen}
+                aria-controls={gstOpen ? 'item-gst-details' : undefined}
+                className="flex-1 min-h-12 flex items-center justify-between gap-2 rounded-lg border border-border/60 px-3 text-left hover:bg-muted/40"
+              >
+                <span className="text-sm font-medium">GST details</span>
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {!gstOpen && [form.hsn.trim() && `HSN ${form.hsn.trim()}`, (parseFloat(form.gstRate) || 0) > 0 && `${form.gstRate}%`].filter(Boolean).join(' · ')}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${gstOpen ? 'rotate-180' : ''}`} aria-hidden />
+                </span>
+              </button>
+              <InfoHint text="You don't charge GST on your sales. The rate is used when a GST-registered supplier bills you; the HSN is ready for the day you register." label="GST details" />
+            </div>
+          )}
+          {(gstShop || gstOpen) && (
+          <div id="item-gst-details" className="contents">
+          <div>
             <Label htmlFor="field-hsn-sac-code">HSN/SAC Code</Label>
             <Input
               id="field-hsn-sac-code"
@@ -551,15 +593,6 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
             />
           </div>
           <div>
-            <Label htmlFor="field-unit">Unit</Label>
-            <Select value={form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
             <Label htmlFor="field-gst-rate">GST Rate (%)</Label>
             <Select value={form.gstRate} onValueChange={(v) => setForm({ ...form, gstRate: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -576,6 +609,8 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
               </SelectContent>
             </Select>
           </div>
+          </div>
+          )}
           {/*
             * #93 — THE QUESTION THE APP MUST ASK INSTEAD OF GUESSING.
             *
@@ -710,7 +745,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
               taxable value is back-calculated at sale time. */}
           {/* Only a shop that charges GST has an MRP to take GST out of. */}
           {shopGst === 'regular' && (
-          <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 p-3">
+          <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-border/60 min-h-12 pl-3">
             <input
               id="priceIncludesGst"
               type="checkbox"
@@ -718,19 +753,16 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
               checked={form.priceIncludesGst}
               onChange={(e) => setForm({ ...form, priceIncludesGst: e.target.checked })}
             />
-            <label htmlFor="priceIncludesGst" className="text-sm cursor-pointer">
-              <span className="font-medium">Sale price includes GST (MRP)</span>
-              <span className="block text-xs text-muted-foreground">
-                Turn on for MRP-priced goods (packaged items). GST is taken out of the price instead of added on top.
-              </span>
-            </label>
+            {/* #201: the explanation behind ⓘ — app, not notebook. */}
+            <label htmlFor="priceIncludesGst" className="flex-1 min-h-12 flex items-center text-sm font-medium cursor-pointer">Sale price includes GST (MRP)</label>
+            <InfoHint text="Turn on for MRP-priced goods (packaged items). GST is taken out of the price instead of added on top." label="Sale price includes GST" />
           </div>
           )}
           {/* Goods or a service? The single question that decides whether this
               product is counted at all. Placed directly above the stock fields
               it controls, so the two boxes disappearing is an obvious
               consequence of the tick rather than a mystery. */}
-          <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 p-3">
+          <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-border/60 min-h-12 pl-3">
             <input
               id="isService"
               type="checkbox"
@@ -741,13 +773,8 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess, focusFie
                 setForm({ ...form, tracksInventory: !e.target.checked, openingStock: e.target.checked ? '' : form.openingStock })
               }}
             />
-            <label htmlFor="isService" className="text-sm cursor-pointer">
-              <span className="font-medium">This is a service — don&apos;t track stock</span>
-              <span className="block text-xs text-muted-foreground">
-                For work you do rather than goods you keep: stitching, repairs, haircuts, consulting.
-                No stock count, no low-stock alerts, and it never blocks a bill.
-              </span>
-            </label>
+            <label htmlFor="isService" className="flex-1 min-h-12 flex items-center text-sm font-medium cursor-pointer">This is a service — don&apos;t track stock</label>
+            <InfoHint text="For work you do rather than goods you keep: stitching, repairs, haircuts, consulting. No stock count, no low-stock alerts, and it never blocks a bill." label="service" />
           </div>
           {/* Hidden, not disabled, for a service. A greyed-out "Opening Stock: 0"
               still asks the shopkeeper to think about a number that does not

@@ -28,7 +28,7 @@ import { adHocWarningBoxCount } from '@/test-support/design-rules'
 import { stripComments } from '@/test-support/read-source'
 
 const SRC = path.resolve(process.cwd(), 'src')
-const PROSE_CEILING = 2117 // 8c: the old "needs amending" card (and its prose) became the Corrections list (was 2176; 2219 before 7g-1)
+const PROSE_CEILING = 2073 // 8h (#201): the item form's two checkbox explanations went behind ⓘ (was 2117; 2176 before 8c)
 const BOX_CEILING = 63 // 8c: the amber "needs amending" card went (8b: 65, the item form's two boxes; was 76)
 /** Legal and marketing pages: long text is their job. */
 const NOT_SCREENS = ['app/terms', 'app/privacy', 'app/landing', 'app/dev']

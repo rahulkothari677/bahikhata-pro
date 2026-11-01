@@ -284,6 +284,21 @@ describe('#327 Step B — the card asks the database for its pages', () => {
     expect(document.body.textContent).not.toMatch(/2 items/)
     expect(document.body.textContent).not.toMatch(/✓ paid/)
   })
+  it('#332: a return not tied to a bill is never "due" and never "unpaid" — in khata, refunded, or part of each', () => {
+    const tw = (k: string) => ({ ...words, 'bahi.in_khata': 'adjusted in khata', 'bahi.in_khata_v': '{v} in khata', 'bahi.refunded': 'refunded', 'bahi.refunded_v': '{v} refunded', 'bahi.return_in': 'Return from them' } as Record<string, string>)[k] ?? k
+    const note = (id: string, amount: number, due: number): HistoryEntry => ({ id, type: 'credit-note', date: new Date(2026, 9, 5, 11).toISOString(), amount, due, invoiceNo: `CN-${id}`, itemCount: 1, onBill: false, runningBalance: 0, delta: -due })
+    const rows = [note('1', 300, 300), note('2', 200, 0), note('3', 500, 350), sale(9, 400, 400)]
+    render(<LocalHistory entries={rows} t={tw} balWords={() => ''} onOpenBill={() => {}} />)
+    const text = document.body.textContent ?? ''
+    expect(text).toMatch(/adjusted in khata/)          // nothing refunded: all of it lowered the khata
+    expect(text).toMatch(/✓ refunded/)                 // all given back in cash
+    expect(text).toMatch(/₹350(\.00)? in khata/)       // part: ₹350 in khata …
+    expect(text).toMatch(/₹150(\.00)? refunded/)       // … and ₹150 refunded, on the detail line
+    expect(text).not.toMatch(/₹(300|350|500)(\.00)? due/)
+    fireEvent.click(screen.getByRole('button', { name: 'Unpaid' }))
+    expect(screen.queryByText(/CN-\d/)).toBeNull()      // returns are not bills to collect
+    expect(screen.getAllByText(/INV-0009/).length).toBeGreaterThan(0)
+  })
   it('a failed load says so and offers to try again', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({}) }).mockResolvedValueOnce(page([sale(1, 100)], null, 1))
     mount()

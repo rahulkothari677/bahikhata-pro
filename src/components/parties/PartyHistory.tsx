@@ -30,6 +30,7 @@ import { SegmentedSwitch } from '@/components/common/SegmentedSwitch'
 import { cn, formatINR, hasRecordedTime } from '@/lib/utils'
 import { billDayKey, billDayLabel, groupByDay } from '@/lib/bill-days'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { isNoteType } from '@/lib/paid-amount'
 import {
   HISTORY_FILTERS, HISTORY_PAGE, historyKind, direction, paidOnBill,
   type HistoryEntry, type HistoryFilter, type HistoryKind,
@@ -43,6 +44,7 @@ const VIEW_KEY = 'bahikhata:party-history-view'
 // Day headers stick just under the app's top bar (Header.tsx: 3.5rem + the phone's safe area).
 const STICKY_TOP = { top: 'calc(3.5rem + var(--safe-top, 0px))' }
 const monthOf = (dayKey: string) => dayKey.slice(0, 7)
+const isNote = (e: HistoryEntry) => isNoteType(e.type)
 
 function readView(): View {
   try { return localStorage.getItem(VIEW_KEY) === 'ledger' ? 'ledger' : 'chat' } catch { return 'chat' }
@@ -151,8 +153,25 @@ export function PartyHistoryView({
       e.invoiceNo,
       // 8f: a discount note's lines are its GST rates, not items anyone bought or returned.
       e.noteReason === 'post-sale-discount' ? '' : (e.itemCount === 1 ? t('items.count_1') : t('bahi.items_n')).replace('{n}', String(e.itemCount ?? 0)),
-      paid > 0 && (e.due ?? 0) > 0.004 ? t('bahi.paid_v').replace('{v}', formatINR(paid)) : '',
+      // #332: money paid on a return is a refund, not a payment.
+      paid > 0 && (e.due ?? 0) > 0.004 ? t(isNote(e) ? 'bahi.refunded_v' : 'bahi.paid_v').replace('{v}', formatINR(paid)) : '',
     ].filter(Boolean).join(' · ')
+  }
+
+  /**
+   * The chip on a bill or return. #332: a return is never "due" — what was not refunded
+   * already lowered the khata balance (party-balance.ts), so it reads "adjusted in khata";
+   * refunded in full, "✓ refunded"; part refunded, "₹… in khata" (the refund is in the detail).
+   */
+  const chipOf = (e: HistoryEntry): { text: string; tone: 'check' | 'good' | 'quiet' } => {
+    const due = e.due ?? 0
+    if (!isNote(e)) {
+      return due > 0.004 ? { text: t('bahi.due').replace('{v}', formatINR(due)), tone: 'check' } : { text: `✓ ${t('bahi.paid')}`, tone: 'good' }
+    }
+    if (e.onBill) return { text: t('bahi.adjusted'), tone: 'quiet' }
+    if (due <= 0.004) return { text: `✓ ${t('bahi.refunded')}`, tone: 'good' }
+    if (due >= e.amount - 0.004) return { text: t('bahi.in_khata'), tone: 'quiet' }
+    return { text: t('bahi.in_khata_v').replace('{v}', formatINR(due)), tone: 'quiet' }
   }
 
   /** A month opens with its totals and the balance it closed on (the newest entry's). */
@@ -260,7 +279,7 @@ export function PartyHistoryView({
                 {day.rows.map((e) => {
                   const kind = historyKind(e)
                   const gave = direction(kind) === 'gave'
-                  const due = !e.isPayment && (e.due ?? 0) > 0.004
+                  const chip = e.isPayment ? null : chipOf(e)
                   const bubble = (
                     <span className={cn(
                       'block w-[84%] max-w-sm rounded-2xl px-3 py-2 text-left shadow-sm ring-1',
@@ -280,9 +299,12 @@ export function PartyHistoryView({
                           </span>
                           {formatINR(e.amount)}
                         </span>
-                        {!e.isPayment && (
-                          <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold', due ? 'bg-check-soft text-check' : 'bg-card/80 text-good')}>
-                            {due ? t('bahi.due').replace('{v}', formatINR(e.due!)) : e.onBill ? t('bahi.adjusted') : `✓ ${t('bahi.paid')}`}
+                        {chip && (
+                          <span className={cn(
+                            'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
+                            chip.tone === 'check' ? 'bg-check-soft text-check' : chip.tone === 'good' ? 'bg-card/80 text-good' : 'bg-card/80 text-muted-foreground',
+                          )} data-chip-tone={chip.tone}>
+                            {chip.text}
                           </span>
                         )}
                       </span>

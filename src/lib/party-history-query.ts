@@ -34,7 +34,7 @@ import { allocatedLateral, DUE_SQL } from '@/lib/invoice-due-sql'
 import { encodeKeysetCursor, parseKeysetCursor } from '@/lib/pagination'
 import { billDayKey } from '@/lib/bill-days'
 import {
-  GAVE_ENTRY_TYPES, LEDGER_BILL_TYPES,
+  GAVE_ENTRY_TYPES, LEDGER_BILL_TYPES, UNPAID_BILL_TYPES,
   type HistoryEntry, type HistoryFilter, type HistoryKind,
 } from '@/lib/party-history'
 
@@ -103,7 +103,7 @@ function searchSql(q: string, labels: Partial<Record<HistoryKind, string>>): Pri
 function filterSql(f: HistoryFilter): Prisma.Sql {
   if (f === 'payments') return Prisma.sql`b."isPayment"`
   if (f === 'bills') return Prisma.sql`NOT b."isPayment"`
-  if (f === 'unpaid') return Prisma.sql`(NOT b."isPayment" AND b."due" > 0)`
+  if (f === 'unpaid') return Prisma.sql`(NOT b."isPayment" AND b."type" IN (${Prisma.join(UNPAID_BILL_TYPES as unknown as string[])}) AND b."due" > 0)`
   return Prisma.sql`TRUE`
 }
 
