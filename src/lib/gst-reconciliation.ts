@@ -21,6 +21,18 @@
  *   3. ROUNDING. Both are rupee-rounded from paise, so a few paise of drift
  *      across hundreds of invoices is arithmetic, not error.
  *
+ * Two more were suspected (#110, CA review Q2.1) and checked on 1 Nov 2026 —
+ * neither can open a gap here, so neither is a reconciling line:
+ *
+ *   - REVERSE CHARGE. Inward RCM tax is 3B Table 3.1(d), outside the 3.1(a)
+ *     figure compared, and GSTR-1 never holds it. An outward RCM sale cannot
+ *     exist: /api/transactions forces isReverseCharge to false on a sale.
+ *   - CREDIT NOTES ON ANOTHER PERIOD'S BILL. Both sides compared are GROSS of
+ *     credit notes (GSTR-1's summary sums sales only; 3B's totalOutputTax is
+ *     sales + advances). A note, whatever bill it is on, moves neither side.
+ *     Pinned by returns-agree-differences.test.ts, so a change that nets notes
+ *     on one side only fails loudly instead of showing a false mismatch.
+ *
  * So this reconciles rather than compares: it starts from GSTR-1, applies each
  * known and explainable difference, and reports whatever is left. Anything
  * still unexplained is a real problem and is named as one.
