@@ -82,6 +82,22 @@ export interface PurchaseForItc {
   isReverseCharge?: boolean | null
   /** Section 17(5): credit was never claimed, so there is nothing to reverse. */
   itcBlockedReason?: string | null
+  /**
+   * #349: debit notes against this purchase (goods returned to the supplier).
+   * The credit on returned goods is reversed by the note itself, so it is not
+   * also "at risk" here; and a return lowers what is owed, like a payment.
+   */
+  notes?: Array<{ date: Date | string; totalAmount: number; paidAmount?: number | null; taxAmount: number }>
+}
+
+/** #349: debit-note rows (as both callers select them) in the shape `notes` takes. One mapping, two callers. */
+export function debitNotesForItc(rows: Array<{ date: Date | string; totalAmount: number; paidAmount: number | null; cgst: number; sgst: number; igst: number }> | null | undefined): NonNullable<PurchaseForItc['notes']> {
+  return (rows || []).map((n) => ({
+    date: n.date,
+    totalAmount: roundMoney(n.totalAmount),
+    paidAmount: roundMoney(n.paidAmount || 0),
+    taxAmount: roundMoney((n.cgst || 0) + (n.sgst || 0) + (n.igst || 0)),
+  }))
 }
 
 export type ItcReversalStatus =
@@ -183,6 +199,21 @@ export function assessItcReversal(
   const allocatedTotal = roundMoney(allocations.reduce((s, a) => s + roundMoney(a.amount || 0), 0))
 
   /*
+   * #349: the purchase net of its returns. A return's credit is reversed by
+   * its debit note, so the credit still exposed here is the net tax on the net
+   * value; and the return lowers what is owed by its value less any cash the
+   * supplier refunded (the rule computeInvoiceDue uses — lib/invoice-credits).
+   */
+  const notes = p.notes ?? []
+  const noteCredit = (n: { totalAmount: number; paidAmount?: number | null }) => Math.max(0, roundMoney((n.totalAmount || 0) - (n.paidAmount || 0)))
+  const credited = roundMoney(notes.reduce((s, n) => s + noteCredit(n), 0))
+  const netTotal = roundMoney(totalAmount - notes.reduce((s, n) => s + roundMoney(n.totalAmount || 0), 0))
+  const netTax = roundMoney(taxAmount - notes.reduce((s, n) => s + roundMoney(n.taxAmount || 0), 0))
+  if (netTax <= 0) {
+    return NOT_APPLICABLE('Every taxed item on this bill went back to the supplier, so its credit was reversed by the debit note.')
+  }
+
+  /*
    * ONE definition of what is still owed — see lib/invoice-due.ts. Written
    * locally it would be a second subtraction that can drift from the party
    * balance, the bill screen and the statement, which is the exact class of
@@ -192,6 +223,7 @@ export function assessItcReversal(
     totalAmount,
     paidAmount: p.paidAmount,
     allocatedAmount: allocatedTotal,
+    creditedAmount: credited,
   })
 
   const invoiceDate = asDate(p.invoiceDate)
@@ -211,11 +243,15 @@ export function assessItcReversal(
      * so it is paid on the invoice date by construction and always inside the
      * window. Only allocations can arrive late.
      */
+    // #349: a return made by day 180 settled its part in time, like a payment.
     const paidByDeadline = roundMoney(
       roundMoney(p.paidAmount || 0) +
       allocations
         .filter(a => asDate(a.date) <= deadline)
-        .reduce((s, a) => s + roundMoney(a.amount || 0), 0),
+        .reduce((s, a) => s + roundMoney(a.amount || 0), 0) +
+      notes
+        .filter(n => asDate(n.date) <= deadline)
+        .reduce((s, n) => s + noteCredit(n), 0),
     )
     const shortAtDeadline = roundMoney(totalAmount - paidByDeadline)
 
@@ -253,8 +289,9 @@ export function assessItcReversal(
    * reverses 40% of its tax. Part-payment to a supplier is ordinary trade,
    * which makes this the normal case rather than the exception.
    */
-  const itcAtRisk = totalAmount > 0
-    ? roundMoney((taxAmount * unpaidAmount) / totalAmount)
+  // #349: on the value left after returns — their credit went back with the debit note.
+  const itcAtRisk = netTotal > 0
+    ? roundMoney(Math.min(netTax, (netTax * unpaidAmount) / netTotal))
     : 0
 
   if (daysLeft < 0) {

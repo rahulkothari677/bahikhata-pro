@@ -276,6 +276,7 @@ export async function GET(req: NextRequest) {
       db.transaction.findMany({
         where: activeTransactionWhere(userId, {
           type: { in: ['credit-note', 'debit-note'] },
+          outsideGst: false, // #351
           date: { gte: from, lte: to },
         }),
         include: {
@@ -307,6 +308,7 @@ export async function GET(req: NextRequest) {
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
           AND t."type" IN ('credit-note', 'debit-note')
+          AND t."outsideGst" = false
           AND t."date" >= ${from}
           AND t."date" <= ${to}
         GROUP BY ti."transactionId", ti."gstRate"

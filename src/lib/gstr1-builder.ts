@@ -751,6 +751,7 @@ export function buildHSN(txns: Gstr1Transaction[]): { hsn_b2b: Gstr1HsnEntry[]; 
 function buildHsnTab(txns: Gstr1Transaction[]): Gstr1HsnEntry[] {
   const outward = txns.filter(t => t.type === 'sale' || t.type === 'credit-note')
   const agg = new Map<string, { hsn: string; desc: string; qty: number; uqc: string; txval: number; iamt: number; camt: number; samt: number; csamt: number; rt: number }>()
+  const descFromSale = new Set<string>()
 
   for (const txn of outward) {
     for (const item of txn.items) {
@@ -804,6 +805,9 @@ function buildHsnTab(txns: Gstr1Transaction[]): Gstr1HsnEntry[] {
         hsn, desc: item.productName, qty: 0, uqc,
         txval: 0, iamt: 0, camt: 0, samt: 0, csamt: 0, rt: item.gstRate,
       }
+      // The description names the GOODS: a sale line's name wins over a note's
+      // ("Discount on INV-0012" filed as the description, live 1 Nov, #352).
+      if (txn.type === 'sale' && !descFromSale.has(key)) { existing.desc = item.productName; descFromSale.add(key) }
       // Credit notes REDUCE the HSN totals.
       const sign = txn.type === 'credit-note' ? -1 : 1
       // 8f: but only goods that came BACK reduce the quantity. A discount or

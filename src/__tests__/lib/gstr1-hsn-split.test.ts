@@ -127,6 +127,14 @@ describe('notes land in their buyer\'s tab with the right sign', () => {
     expect(r.hsn_b2b[0].qty).toBe(10)
     expect(r.hsn_b2b[0].txval).toBe(450)
   })
+
+  test('#352: the description names the goods even when the note comes first', () => {
+    const r = buildHSN([
+      { ...doc('credit-note', REG, [item({ quantity: 1, unitPrice: 50, productName: 'Discount on INV-0012' })]), affectsStock: false },
+      doc('sale', REG, [item({ quantity: 10, productName: 'Aashirvaad Atta' })]),
+    ])
+    expect(r.hsn_b2b[0].desc).toBe('Aashirvaad Atta')
+  })
 })
 
 describe('one rule for "registered buyer"', () => {

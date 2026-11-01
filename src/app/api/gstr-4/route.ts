@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
         _sum: { totalAmount: true }, _count: { _all: true },
       }),
       db.transaction.aggregate({
-        where: { userId, type: 'credit-note', deletedAt: null, date: { gte: yearFrom, lt: yearTo } },
+        where: { userId, type: 'credit-note', deletedAt: null, outsideGst: false, date: { gte: yearFrom, lt: yearTo } },
         _sum: { totalAmount: true },
       }),
       /*
@@ -143,7 +143,7 @@ export async function GET(req: NextRequest) {
           _sum: { totalAmount: true },
         }),
         db.transaction.aggregate({
-          where: { userId, type: 'credit-note', deletedAt: null, date: { gte: qSlice.compositionStart, lt: qSlice.compositionEnd } },
+          where: { userId, type: 'credit-note', deletedAt: null, outsideGst: false, date: { gte: qSlice.compositionStart, lt: qSlice.compositionEnd } },
           _sum: { totalAmount: true },
         }),
       ])

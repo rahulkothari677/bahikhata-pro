@@ -13,6 +13,7 @@ import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 // applied to an already-settled bill.
 import { planAllocationOldestFirst, validateAllocations, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { creditedByBill } from '@/lib/invoice-credits'
+import { ALLOCATED_JOIN, DUE_SQL } from '@/lib/invoice-due-sql'
 import { billKey } from '@/lib/backup-keys'
 
 /**
@@ -362,12 +363,24 @@ export async function POST(req: NextRequest) {
       // Oldest first is both the allocation order and the useful bound: if a
       // party somehow has more than 500 unsettled bills, the oldest are the
       // ones a payment should reach first anyway.
+      //
+      // #348 (1 Nov): "open" is decided BEFORE the cap, in SQL (DUE_SQL — the
+      // same rule as every bill's due). It took the party's oldest 500 bills
+      // paid or not, so for a customer with 500+ bills a payment could never
+      // reach a newer unpaid one and went unallocated.
+      const openIds = await db.$queryRaw<Array<{ id: string }>>`
+        SELECT t."id" FROM "Transaction" t ${ALLOCATED_JOIN}
+        WHERE t."userId" = ${userId} AND t."partyId" = ${partyId} AND t."type" = ${settlesDocumentType}
+          AND t."deletedAt" IS NULL AND ${DUE_SQL} > 0
+        ORDER BY t."date" ASC, t."id" ASC
+        LIMIT 500`
       const openBills = await db.transaction.findMany({
         where: {
           userId,
           partyId,
           type: settlesDocumentType,
           deletedAt: null,
+          id: { in: openIds.map((r) => r.id) },
         },
         select: {
           id: true,

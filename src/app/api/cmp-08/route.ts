@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
       _count: { _all: true },
     })
     const creditNotes = await db.transaction.aggregate({
-      where: { userId, type: 'credit-note', deletedAt: null, date: { gte: from, lt: to } },
+      where: { userId, type: 'credit-note', deletedAt: null, outsideGst: false, date: { gte: from, lt: to } },
       _sum: { totalAmount: true },
     })
 

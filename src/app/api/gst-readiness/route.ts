@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
       JOIN "Transaction" t ON ti."transactionId" = t."id"
       WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL
         AND t."type" IN ('sale', 'credit-note')
+        AND t."outsideGst" = false
         AND t."date" >= ${periodStart} AND t."date" <= ${periodEnd}
         AND (ti."hsn" IS NULL OR ti."hsn" = '')
     `

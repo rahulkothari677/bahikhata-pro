@@ -9,6 +9,7 @@ import {
   needsAttention,
   RULE_37_DAYS,
   WARN_WITHIN_DAYS,
+  debitNotesForItc,
 } from '@/lib/itc-180-day'
 
 /**
@@ -90,6 +91,11 @@ export async function GET() {
         cgst: true, sgst: true, igst: true, itcBlockedReason: true, isReverseCharge: true,
         party: { select: { id: true, name: true } },
         paymentAllocations: { select: { amount: true, payment: { select: { date: true, deletedAt: true } } } },
+        // #349: returns to the supplier against this bill.
+        reversalTransactions: {
+          where: { type: 'debit-note', deletedAt: null },
+          select: { date: true, totalAmount: true, paidAmount: true, cgst: true, sgst: true, igst: true },
+        },
       },
       orderBy: { date: 'asc' },
       take: SCAN_CAP + 1,
@@ -117,6 +123,7 @@ export async function GET() {
           taxAmount: roundMoney(t.cgst) + roundMoney(t.sgst) + roundMoney(t.igst),
           isReverseCharge: t.isReverseCharge,
           itcBlockedReason: t.itcBlockedReason,
+          notes: debitNotesForItc(t.reversalTransactions),
         }, today)
         return { t, assessment }
       })

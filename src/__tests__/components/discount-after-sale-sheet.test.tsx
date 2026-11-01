@@ -93,12 +93,29 @@ test('more than is left on the bill: says the most, and cannot save', () => {
   expect(screen.getByRole('button', { name: /Give ₹700/ })).toBeDisabled()
 })
 
-test('past the s.34(2) date: a stop notice and no button', () => {
+test('#351 past the s.34(2) date: says so, and still gives it on the khata — no GST', async () => {
   // Sold May 2024 (FY 2024-25) → the last date was 30 Nov 2025.
+  mockOfflineFetch.mockResolvedValue({ ok: true, json: async () => ({}) })
   show({ ...SALE, date: '2024-05-10T06:30:00Z' })
-  expect(screen.getByText('Too late for a GST credit note on this bill')).toBeInTheDocument()
-  expect(screen.getByText(/The last date was 30 Nov 2025/)).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /Give/ })).not.toBeInTheDocument()
+  expect(screen.getByText('Too late to lower the GST on this bill')).toBeInTheDocument()
+  expect(screen.getByText(/Last date was 30 Nov 2025\. Give it on the khata, without GST\./)).toBeInTheDocument()
+  type('165')
+  // No GST rows, no reversal, no "last date" line — none of it applies outside GST.
+  expect(screen.queryByTestId('discount-gst-split')).not.toBeInTheDocument()
+  expect(screen.queryByText(/must reverse/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Last date for this note/)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /Give ₹165(\.00)? discount \(no GST\)/ }))
+  await waitFor(() => expect(mockOfflineFetch).toHaveBeenCalled())
+  expect(JSON.parse(mockOfflineFetch.mock.calls[0][1].body)).toMatchObject({ outsideGst: true, noteReason: 'post-sale-discount', affectsStock: false })
+})
+
+test('inside the date the note is a normal GST note (outsideGst false)', async () => {
+  mockOfflineFetch.mockResolvedValue({ ok: true, json: async () => ({}) })
+  show()
+  type('50')
+  fireEvent.click(screen.getByRole('button', { name: /Give ₹50(\.00)? discount$/ }))
+  await waitFor(() => expect(mockOfflineFetch).toHaveBeenCalled())
+  expect(JSON.parse(mockOfflineFetch.mock.calls[0][1].body).outsideGst).toBe(false)
 })
 
 test('a shop that charges no GST: just the amount — no GST rows, no date, no reversal', () => {

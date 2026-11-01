@@ -124,6 +124,8 @@ export const createTransactionSchema = z.object({
   noteType: z.enum(['C', 'D']).optional(),
   noteReason: z.enum(['post-sale-discount', 'deficiency', 'return', 'price-revision', 'other']).optional(),
   affectsStock: z.coerce.boolean().optional().default(false),
+  /** #351: a discount note after the s.34(2) date — no GST, out of every return. Credit notes with reason post-sale-discount only (the route refuses others). */
+  outsideGst: z.coerce.boolean().optional().default(false),
   /*
    * Reverse charge (RCM) on a PURCHASE: the buyer pays the GST directly to the
    * government instead of the supplier collecting it. Common for transport

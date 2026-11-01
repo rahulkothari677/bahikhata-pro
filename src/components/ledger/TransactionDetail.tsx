@@ -585,9 +585,20 @@ export function TransactionDetail() {
           </Button>
         )}
         <div className="hidden sm:block flex-1" />
-        {/* 8f: a sale has seven actions; on a phone Delete takes its own full row rather than sitting alone in a column. */}
-        <Button variant="outline" size="touch" onClick={handleDelete} className={cn('gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50', isSale && 'col-span-3 sm:col-span-1')}>
-          <Trash2 className="w-4 h-4" /> Delete
+        {/*
+          8f: a sale has seven actions; on a phone Delete takes its own full row rather than sitting alone in a column.
+          #350: on wider screens it is a 48 px icon button (named, with a tooltip). Measured at 1024 px: the row
+          had 891 px and the labelled Delete needed 906, so it wrapped onto a line of its own.
+        */}
+        <Button
+          variant="outline"
+          size="touch"
+          onClick={handleDelete}
+          aria-label="Delete"
+          title="Delete"
+          className={cn('gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 sm:w-12! sm:px-0', isSale && 'col-span-3 sm:col-span-1')}
+        >
+          <Trash2 className="w-4 h-4" /> <span className="sm:sr-only">Delete</span>
         </Button>
       </div>
       {discountOpen && isSale && (

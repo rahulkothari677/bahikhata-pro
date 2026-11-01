@@ -184,6 +184,7 @@ async function computeReturn(userId: string, monthParam: string) {
       userId,
       deletedAt: null,
       type: { in: ['sale', 'credit-note', 'income'] },
+      outsideGst: false, // #351: a discount note after the s.34(2) date is no GST document
       date: { gte: periodStart, lt: periodEnd },
     },
     include: TXN_INCLUDE,
@@ -223,6 +224,7 @@ async function computeReturn(userId: string, monthParam: string) {
     WHERE "userId" = ${userId}
       AND "deletedAt" IS NULL
       AND "type" IN ('sale', 'credit-note')
+      AND "outsideGst" = false
       AND "date" >= ${priorFY.start}
       AND "date" < ${priorFY.end}
   `

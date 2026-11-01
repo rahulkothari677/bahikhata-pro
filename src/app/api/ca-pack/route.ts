@@ -6,7 +6,7 @@ import { apiError } from '@/lib/api-error'
 import { roundMoney } from '@/lib/money'
 import { setOffGst } from '@/lib/gst-setoff'
 import { buildCaPack, type CaPackWarning } from '@/lib/ca-pack'
-import { assessItcReversal, needsAttention, RULE_37_DAYS, WARN_WITHIN_DAYS } from '@/lib/itc-180-day'
+import { assessItcReversal, needsAttention, RULE_37_DAYS, WARN_WITHIN_DAYS, debitNotesForItc } from '@/lib/itc-180-day'
 import { reviewProduct } from '@/lib/exempt-reclassification'
 import { imsWindow } from '@/lib/ims-deadline'
 
@@ -90,6 +90,11 @@ export async function GET(req: NextRequest) {
         date: true, totalAmount: true, paidAmount: true, cgst: true, sgst: true, igst: true,
         itcBlockedReason: true, isReverseCharge: true,
         paymentAllocations: { select: { amount: true, payment: { select: { date: true, deletedAt: true } } } },
+        // #349: returns to the supplier, as the warning screen reads them.
+        reversalTransactions: {
+          where: { type: 'debit-note', deletedAt: null },
+          select: { date: true, totalAmount: true, paidAmount: true, cgst: true, sgst: true, igst: true },
+        },
       },
       take: 1000,
     })
@@ -105,6 +110,7 @@ export async function GET(req: NextRequest) {
         taxAmount: roundMoney(t.cgst) + roundMoney(t.sgst) + roundMoney(t.igst),
         isReverseCharge: t.isReverseCharge,
         itcBlockedReason: t.itcBlockedReason,
+        notes: debitNotesForItc(t.reversalTransactions),
       }, today)
       if (needsAttention(a)) { itcAtRisk = roundMoney(itcAtRisk + a.itcAtRisk); itcCount++ }
     }

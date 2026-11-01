@@ -82,7 +82,8 @@ export function DiscountAfterSaleSheet({ sale, chargesGst, due, onClose }: {
   const closed = !!deadline && !deadline.open
   const gst = preview ? roundMoney(preview.cgst + preview.sgst + preview.igst) : 0
   const buyerRegistered = chargesGst && !!sale.party?.gstin
-  const canSave = amount > 0 && !tooBig && !closed && !saving && lines.length > 0
+  // #351: after the date the discount can still be given — on the khata, outside GST.
+  const canSave = amount > 0 && !tooBig && !saving && lines.length > 0
 
   async function save() {
     if (!canSave) return
@@ -99,6 +100,8 @@ export function DiscountAfterSaleSheet({ sale, chargesGst, due, onClose }: {
           noteType: 'C',
           noteReason: POST_SALE_DISCOUNT_REASON,
           affectsStock: false,
+          // #351: past the s.34(2) date the note carries no GST and stays out of the returns.
+          outsideGst: closed,
           paymentMode: 'cash',
           paidAmount: givenAs === 'cash' ? amount : 0,
           items: lines,
@@ -108,7 +111,7 @@ export function DiscountAfterSaleSheet({ sale, chargesGst, due, onClose }: {
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.message || j.error || 'Could not save the discount')
       invalidateMoneyCaches(queryClient)
-      sonnerToast.success(`${formatINR(amount)} discount given`, {
+      sonnerToast.success(`${formatINR(amount)} discount given${closed ? ' (no GST)' : ''}`, {
         description: `Credit note ${j.transaction?.invoiceNo || j.invoiceNo || ''} on ${sale.invoiceNo || 'this bill'}`.trim(),
       })
       onClose()
@@ -134,15 +137,16 @@ export function DiscountAfterSaleSheet({ sale, chargesGst, due, onClose }: {
         </SheetHeader>
 
         <div className="px-4 space-y-4">
-          {closed ? (
+          {closed && (
             <Notice
-              level="stop"
-              title={`Too late for a GST credit note on this bill`}
-              info={`Section 34(2) of the CGST Act: a credit note for a ${fmtDate(new Date(sale.date))} sale must be declared by ${fmtDate(deadline!.effectiveDeadline)}. After that the GST on it can no longer be reduced.`}
+              level="act"
+              title="Too late to lower the GST on this bill"
+              info={`Section 34(2) of the CGST Act: a credit note for a ${fmtDate(new Date(sale.date))} sale had to be declared by ${fmtDate(deadline!.effectiveDeadline)}. After that the GST on it can no longer be reduced. The discount can still be given: it lowers the customer's khata and your sales, carries no GST, and stays out of GSTR-1 and GSTR-3B.`}
             >
-              The last date was {fmtDate(deadline!.effectiveDeadline)}.
+              Last date was {fmtDate(deadline!.effectiveDeadline)}. Give it on the khata, without GST.
             </Notice>
-          ) : (
+          )}
+          {(
             <>
               {/* Amount, in rupees or a percentage of the bill. */}
               <div className="flex items-stretch gap-2">
@@ -183,7 +187,7 @@ export function DiscountAfterSaleSheet({ sale, chargesGst, due, onClose }: {
               )}
 
               {/* What it does to the GST — only for a shop that charges it. */}
-              {chargesGst && preview && !tooBig && (
+              {chargesGst && !closed && preview && !tooBig && (
                 <div className="rounded-2xl border border-border/60 divide-y divide-border/60" data-testid="discount-gst-split">
                   <Row label="Value before GST" value={preview.subtotal} />
                   {preview.igst > 0 ? (
@@ -198,7 +202,7 @@ export function DiscountAfterSaleSheet({ sale, chargesGst, due, onClose }: {
                 </div>
               )}
 
-              {buyerRegistered && gst > 0 && !tooBig && (
+              {buyerRegistered && !closed && gst > 0 && !tooBig && (
                 <Notice
                   level="note"
                   title={`${sale.party?.name || 'The buyer'} must reverse ${formatINR(gst)} of input credit`}
@@ -224,7 +228,7 @@ export function DiscountAfterSaleSheet({ sale, chargesGst, due, onClose }: {
                 </div>
               )}
 
-              {deadline && (
+              {deadline && !closed && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   Last date for this note: {fmtDate(deadline.effectiveDeadline)}
                   <InfoHint
@@ -235,7 +239,7 @@ export function DiscountAfterSaleSheet({ sale, chargesGst, due, onClose }: {
               )}
 
               <Button size="touch" className="w-full text-base" disabled={!canSave} onClick={save}>
-                {saving ? 'Saving…' : amount > 0 ? `Give ${formatINR(amount)} discount` : 'Give discount'}
+                {saving ? 'Saving…' : amount > 0 ? `Give ${formatINR(amount)} discount${closed ? ' (no GST)' : ''}` : 'Give discount'}
               </Button>
             </>
           )}

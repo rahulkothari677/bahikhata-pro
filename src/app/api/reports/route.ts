@@ -362,6 +362,7 @@ export async function GET(req: NextRequest) {
         db.transaction.aggregate({
           where: activeTransactionWhere(userId, {
             type: 'credit-note',
+            outsideGst: false, // #351: a discount note after the s.34(2) date is not in the GST figures
             date: { gte: from, lte: to },
           }),
           _sum: {

@@ -345,6 +345,8 @@ model Transaction {
   noteType           String? // 'C' (credit) or 'D' (debit) — only for credit-note/debit-note types
   noteReason         String? // GST reason: 'post-sale-discount' | 'deficiency' | 'return' | 'price-revision' | 'other'
   affectsStock       Boolean             @default(false) // true only when goods are physically returned
+  /// #351: a discount credit note given after the s.34(2) date — lowers the khata and sales, carries no GST, and stays out of every GST return.
+  outsideGst         Boolean             @default(false)
 
   // 🔒 V17 Audit Phase 5: e-Invoicing (IRN/QR) + e-Way Bill fields
   // IRN = Invoice Reference Number (64-char hash, issued by NIC portal)

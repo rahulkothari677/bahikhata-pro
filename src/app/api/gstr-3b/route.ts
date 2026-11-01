@@ -82,7 +82,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       _count: true,
     }),
     db.transaction.aggregate({
-      where: { userId, type: 'credit-note', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
+      where: { userId, type: 'credit-note', deletedAt: null, outsideGst: false, date: { gte: periodStart, lt: periodEnd } },
       _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
       _count: true,
     }),

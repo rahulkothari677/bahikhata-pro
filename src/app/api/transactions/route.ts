@@ -279,6 +279,18 @@ export async function POST(req: NextRequest) {
     }
 
     const { type, partyId: requestedPartyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge, updateProductCosts, itcBlockedReason, itcCategory } = validation.data as any
+    /*
+     * #351: a discount note OUTSIDE GST (after the s.34(2) date). Only a credit
+     * note for a post-sale discount, tied to its bill, may be one — anything
+     * else asking for it is refused rather than quietly filed without GST.
+     */
+    const outsideGst = !!(validation.data as any).outsideGst
+    if (outsideGst && !(type === 'credit-note' && noteReason === 'post-sale-discount' && originalTransactionId && !affectsStock)) {
+      return NextResponse.json(
+        { error: 'Invalid outsideGst', message: 'Only a discount credit note on a bill can be recorded outside GST.' },
+        { status: 400 },
+      )
+    }
 
     /*
      * A counter return lands on the shop's reserved "Walk-in Customer".
@@ -653,7 +665,8 @@ export async function POST(req: NextRequest) {
     // A composition dealer collects no GST — forced at the rate, not left to
     // the screen that sent it. See line-items.ts.
     // #165: a shop that may not collect tax puts no GST on its own bills (lib/shop-tax.ts).
-    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, chargesGst: chargesGstOnSales(gstStatus(setting)) })
+    // #351: a note outside GST carries no tax on any line.
+    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, chargesGst: chargesGstOnSales(gstStatus(setting)) && !outsideGst })
     /*
      * 📄 Phase 5 — the shop's own fields, validated and snapshotted.
      *
@@ -880,7 +893,8 @@ export async function POST(req: NextRequest) {
           noteTotal: totalAmount,
           // 8f: a post-sale discount on a GST shop carries the s.34(2) date limit.
           noteReason: noteReason ?? null,
-          chargesGst: chargesGstOnSales(gstStatus(setting)),
+          // #351: outside GST there is no tax to reduce, so the s.34(2) date does not bar it.
+          chargesGst: chargesGstOnSales(gstStatus(setting)) && !outsideGst,
           noteDate: date || null,
         })
         if (!noteCheck.ok) {
@@ -951,6 +965,7 @@ export async function POST(req: NextRequest) {
           noteType: noteType || null,
           noteReason: noteReason || null,
           affectsStock: affectsStock || false,
+          outsideGst,
           // 📄 Phase 5. Null when the shop has defined no fields — not [],
           // which would be ten million empty JSON allocations at scale.
           customFields: billCustomFields as any,

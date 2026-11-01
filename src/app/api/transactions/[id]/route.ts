@@ -589,7 +589,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // A composition dealer collects no GST — forced at the rate, not left to
     // the screen that sent it. See line-items.ts.
     // #165: a shop that may not collect tax puts no GST on its own bills (lib/shop-tax.ts).
-    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, chargesGst: chargesGstOnSales(gstStatus(setting)) })
+    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, chargesGst: chargesGstOnSales(gstStatus(setting)) && !existing.outsideGst })
     /*
      * 📄 Phase 5 — the shop's own fields, on EDIT as well as create.
      *
@@ -680,7 +680,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         excludeNoteId: id,
         // 8f: editing a post-sale discount note is held to the same s.34(2) date.
         noteReason: resolvedNoteReason ?? null,
-        chargesGst: chargesGstOnSales(gstStatus(setting)),
+        chargesGst: chargesGstOnSales(gstStatus(setting)) && !existing.outsideGst,
         noteDate: date || existing.date,
       })
       if (!noteCheck.ok) {
@@ -750,7 +750,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           noteTotal: totalAmount,
           excludeNoteId: id,
           noteReason: resolvedNoteReason ?? null,
-          chargesGst: chargesGstOnSales(gstStatus(setting)),
+          chargesGst: chargesGstOnSales(gstStatus(setting)) && !existing.outsideGst,
           noteDate: date || existing.date,
         })
         if (!noteCheck.ok) {
