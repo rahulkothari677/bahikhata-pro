@@ -11,6 +11,7 @@ import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
+import { claimForPeriod, earliestClaimableBill } from '@/lib/itc-claim'
 
 /**
  * GET /api/gstr-3b?month=2026-07
@@ -338,41 +339,49 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
   let deferredItcSgst = 0
   let deferredItcIgst = 0
 
+  /*
+   * Phase 8d (#116, #117): the claim comes from lib/itc-claim.ts — the lower of
+   * book and 2B per head, and every purchase not yet claimed (inside s.16(4)),
+   * not only those dated this month. claimedIds is what "Mark as filed" stamps.
+   */
+  let itcClaim: ReturnType<typeof claimForPeriod> | null = null
   if (gstr2b) {
-    /*
-     * Matched on supplier GSTIN + invoice number, the same key the
-     * reconciliation screen uses. Both are normalised because a shopkeeper
-     * types "inv-001" where the portal carries "INV-001", and a case
-     * difference must not cost someone their credit.
-     */
-    const key = (gstin: string | null | undefined, no: string | null | undefined) =>
-      `${(gstin || '').trim().toUpperCase()}|${(no || '').trim().toUpperCase()}`
-    const in2b = new Set(gstr2b.invoices.map((i) => key(i.supplierGstin, i.invoiceNumber)))
-
+    const fp = monthYearOf(periodStart)
+    const earliest = earliestClaimableBill(fp)
+    // Bounded by s.16(4): nothing older than last April (April–October) or this April can still be claimed.
+    const from = istMonthStartOffset(new Date(Date.UTC(earliest.year, earliest.month - 1, 15)), 0)
     const purchases = await db.transaction.findMany({
       where: {
         userId, type: 'purchase', deletedAt: null, isReverseCharge: false,
-        date: { gte: periodStart, lt: periodEnd },
+        date: { gte: from, lt: periodEnd },
         // Section 17(5): credit on these is blocked outright, so they never
         // enter the claim — before Rule 36(4) matching is even considered.
         itcBlockedReason: null,
+        // Not claimed by another period's filed 3B (#117).
+        OR: [{ itcClaimedIn: null }, { itcClaimedIn: fp }],
       },
-      select: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true, invoiceNo: true, party: { select: { gstin: true } } },
+      select: { id: true, date: true, subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true, invoiceNo: true, itcClaimedIn: true, party: { select: { gstin: true } } },
     })
-
-    let mT = 0, mC = 0, mS = 0, mI = 0
-    let dT = 0, dC = 0, dS = 0, dI = 0
-    for (const p of purchases) {
-      const taxable = (p.subtotal || 0) - (p.discountAmount || 0)
-      if (in2b.has(key(p.party?.gstin, p.invoiceNo))) {
-        mT += taxable; mC += p.cgst || 0; mS += p.sgst || 0; mI += p.igst || 0
-      } else {
-        dT += taxable; dC += p.cgst || 0; dS += p.sgst || 0; dI += p.igst || 0
-      }
-    }
-    itcTaxableValue = roundMoney(mT); itcCgst = roundMoney(mC); itcSgst = roundMoney(mS); itcIgst = roundMoney(mI)
-    deferredItcTaxableValue = roundMoney(dT); deferredItcCgst = roundMoney(dC)
-    deferredItcSgst = roundMoney(dS); deferredItcIgst = roundMoney(dI)
+    itcClaim = claimForPeriod(
+      fp,
+      purchases.map((p) => ({
+        id: p.id,
+        billFp: monthYearOf(p.date),
+        gstin: p.party?.gstin || null,
+        invoiceNo: p.invoiceNo,
+        taxable: roundMoney((p.subtotal || 0) - (p.discountAmount || 0)),
+        cgst: p.cgst || 0, sgst: p.sgst || 0, igst: p.igst || 0,
+        itcClaimedIn: p.itcClaimedIn,
+      })),
+      gstr2b.invoices.map((i) => ({ supplierGstin: i.supplierGstin, invoiceNumber: i.invoiceNumber, taxableValue: i.taxableValue, cgst: i.cgst, sgst: i.sgst, igst: i.igst })),
+    )
+    const t = itcClaim.totals.claim
+    itcTaxableValue = t.taxable; itcCgst = t.cgst; itcSgst = t.sgst; itcIgst = t.igst
+    const d = itcClaim.deferred
+    deferredItcTaxableValue = roundMoney(d.reduce((s, x) => s + x.taxable, 0))
+    deferredItcCgst = roundMoney(d.reduce((s, x) => s + x.cgst, 0))
+    deferredItcSgst = roundMoney(d.reduce((s, x) => s + x.sgst, 0))
+    deferredItcIgst = roundMoney(d.reduce((s, x) => s + x.igst, 0))
     itcBasis = 'gstr2b'
   }
   const rcmItcTaxableValue = roundMoney((rcmItcAgg._sum.subtotal || 0) - (rcmItcAgg._sum.discountAmount || 0))
@@ -407,6 +416,20 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     // that shows the claim without showing the basis is repeating the fault.
     itcBasis,
     deferredItcTaxableValue, deferredItcCgst, deferredItcSgst, deferredItcIgst,
+    // #116/#117 (8d): what the claim held back and why — and which bills it claimed (stamped on filing).
+    itcDetail: itcClaim ? {
+      shortBy: itcClaim.totals.shortBy,
+      shortCount: itcClaim.claimed.filter((c) => c.shortBy > 0).length,
+      lateCount: itcClaim.totals.lateCount,
+      lateTax: roundMoney(itcClaim.claimed.filter((c) => c.late).reduce((s, c) => s + c.claim.cgst + c.claim.sgst + c.claim.igst, 0)),
+      deferredCount: itcClaim.deferred.length,
+      deferredTax: itcClaim.totals.deferredTax,
+      stillWaitingCount: itcClaim.stillWaiting.length,
+      stillWaitingTax: itcClaim.totals.stillWaitingTax,
+      lapsedCount: itcClaim.lapsed.length,
+      lapsedTax: itcClaim.totals.lapsedTax,
+    } : null,
+    claimedPurchaseIds: itcClaim ? itcClaim.claimed.map((c) => c.id) : [],
     blockedItcTaxableValue, blockedItcCgst, blockedItcSgst, blockedItcIgst, blockedItcCount,
     bookItcTaxableValue: bookItcTaxable, bookItcCgst, bookItcSgst, bookItcIgst,
     rcmItcTaxableValue, rcmItcCgst, rcmItcSgst, rcmItcIgst,
@@ -492,6 +515,7 @@ export async function GET(req: NextRequest) {
        */
       itcBasis,
       deferredItcTaxableValue, deferredItcCgst, deferredItcSgst, deferredItcIgst,
+      itcDetail,
       blockedItcTaxableValue, blockedItcCgst, blockedItcSgst, blockedItcIgst, blockedItcCount,
       bookItcTaxableValue, bookItcCgst, bookItcSgst, bookItcIgst,
       rcmItcTaxableValue, rcmItcCgst, rcmItcSgst, rcmItcIgst,
@@ -538,6 +562,7 @@ export async function GET(req: NextRequest) {
       deferredItcCgst,
       deferredItcSgst,
       deferredItcIgst,
+      itcDetail,
       blockedItcTaxableValue,
       blockedItcCgst,
       blockedItcSgst,
@@ -677,6 +702,7 @@ export async function POST(req: NextRequest) {
       exemptInwardValue,
       netTaxPayable,
       totalOutputTax, totalRcmInward, totalCreditNoteTax, totalItc, totalRcmItc, totalDebitNoteTax,
+      claimedPurchaseIds,
     } = values
 
     // === Upsert the snapshot ===
@@ -721,6 +747,19 @@ export async function POST(req: NextRequest) {
         netTaxPayable,
       },
     })
+
+    /*
+     * #117: filing this 3B claims these purchases' credit, so it is stamped on
+     * them — a later period then never claims them again, and a bill whose
+     * supplier filed late stays claimable until the month it appears in 2B.
+     * Only on "file", and only bills not already stamped by another period.
+     */
+    if (action === 'file' && claimedPurchaseIds.length) {
+      await db.transaction.updateMany({
+        where: { userId, id: { in: claimedPurchaseIds }, itcClaimedIn: null },
+        data: { itcClaimedIn: monthYear },
+      })
+    }
 
     // 🔒 Audit log — record the save/file action
     await logAudit({

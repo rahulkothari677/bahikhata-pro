@@ -383,6 +383,11 @@ model Transaction {
    * | compositionSupplier | other
    */
   itcBlockedReason         String?
+  /// #117 (Phase 8d): the GSTR-3B period (MMYYYY) whose filing claimed this
+  /// purchase's input credit — stamped when that 3B is marked filed. A bill
+  /// whose supplier filed late is claimed in the month it first appears in
+  /// GSTR-2B, never lost and never claimed twice. NULL = not yet claimed.
+  itcClaimedIn             String?
   /// Inputs / Capital Goods / Input Services, for GSTR-9 Table 6 (#36,
   /// migration 20260829000003). NULL = recorded before this column existed.
   ///

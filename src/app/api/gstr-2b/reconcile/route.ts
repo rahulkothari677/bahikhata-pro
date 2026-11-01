@@ -6,6 +6,7 @@ import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { imsWindow, IMS_ACTIONS } from '@/lib/ims-deadline'
+import { itcMatchKey } from '@/lib/itc-claim'
 
 /**
  * GET /api/gstr-2b/reconcile?month=2026-07
@@ -109,7 +110,7 @@ export async function GET(req: NextRequest) {
     const purchaseMap = new Map<string, any>()
     for (const p of purchases) {
       if (p.party?.gstin && p.invoiceNo) {
-        const key = `${p.party.gstin.toUpperCase()}|${p.invoiceNo.toUpperCase()}`
+        const key = itcMatchKey(p.party.gstin, p.invoiceNo) // 8d: the same key GSTR-3B claims by
         purchaseMap.set(key, p)
       }
     }
@@ -122,7 +123,7 @@ export async function GET(req: NextRequest) {
     const twoBOnly: any[] = []
 
     for (const inv of gstr2bImport.invoices) {
-      const key = `${inv.supplierGstin.toUpperCase()}|${inv.invoiceNumber.toUpperCase()}`
+      const key = itcMatchKey(inv.supplierGstin, inv.invoiceNumber)
       const purchase = purchaseMap.get(key)
 
       if (purchase) {

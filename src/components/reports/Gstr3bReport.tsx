@@ -42,6 +42,7 @@ import { formatINR, cn } from '@/lib/utils'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
+import { ItcClaimNotes } from '@/components/reports/ItcClaimNotes'
 import {
   ChevronLeft, ChevronRight, Download, FileCheck, Save,
   Receipt, TrendingDown, TrendingUp, Wallet, Loader2,
@@ -539,6 +540,8 @@ export function Gstr3bReport() {
               </tr>
             </tbody>
           </table>
+          {/* 8d (#116 #117): what the claim held back, and why. */}
+          <ItcClaimNotes detail={data?.itcDetail} />
         </CardContent>
       </Card>
 
