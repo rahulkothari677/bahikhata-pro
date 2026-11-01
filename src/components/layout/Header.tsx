@@ -218,7 +218,7 @@ export function Header({ className }: { className?: string } = {}) {
           {features?.globalSearch && (
             <>
               {/* Desktop: full button with label */}
-              <Button
+              <Button aria-label="Search"
                 size="sm"
                 variant="outline"
                 onClick={() => setSearchOpen(true)}
@@ -349,7 +349,7 @@ export function Header({ className }: { className?: string } = {}) {
           {/* Quick action: AI Scan - desktop only (mobile uses dashboard hero button) */}
           {/* C12: also the shop's own "Scan a bill" switch — off means off on every screen. */}
           {currentView !== 'scanner' && isFlagEnabled('ai_scanner') && features?.aiScanner !== false && (
-            <Button
+            <Button aria-label={t('action.scan_bill')}
               size="sm"
               variant="outline"
               /* Same inherited-state trap as the mobile button above — this one
@@ -376,7 +376,7 @@ export function Header({ className }: { className?: string } = {}) {
           {showNewEntry && (
             <>
               {/* Desktop: full button */}
-              <Button
+              <Button aria-label={newEntryLabel}
                 size="sm"
                 onClick={handleNewEntry}
                 className="hidden lg:flex bg-gradient-saffron gap-2 shadow-md hover:opacity-90"

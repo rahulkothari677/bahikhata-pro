@@ -1965,7 +1965,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         </div>
         <div className="flex items-center gap-1.5">
           {voiceOn && (
-            <Button variant="outline" size="sm" onClick={() => setShowVoiceEntry(!showVoiceEntry)} className="gap-1.5">
+            <Button aria-label="Voice" variant="outline" size="sm" onClick={() => setShowVoiceEntry(!showVoiceEntry)} className="gap-1.5">
               <Mic className="w-4 h-4" /> <span className="hidden sm:inline">Voice</span>
             </Button>
           )}
@@ -1973,7 +1973,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               The scanner always sets preset type to 'sale'/'purchase', which would
               reset actualType and lose the note mode + any non-autosaved fields. */}
           {!isNote && !estimateMode && scanBillOn && (
-            <Button variant="outline" size="sm" onClick={() => { setScannerBillType(type); setView('scanner') }} className="gap-1.5">
+            <Button aria-label="Scan Bill" variant="outline" size="sm" onClick={() => { setScannerBillType(type); setView('scanner') }} className="gap-1.5">
               <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Scan Bill</span>
             </Button>
           )}
@@ -2775,7 +2775,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       )}
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { markDirty(); setPartyId('') }}>
+                  <Button aria-label="Clear party" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { markDirty(); setPartyId('') }}>
                     <X className="w-3.5 h-3.5" />
                   </Button>
                 </div>

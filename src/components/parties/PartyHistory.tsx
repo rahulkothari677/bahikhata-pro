@@ -19,7 +19,7 @@
  * (/api/parties/:id/history); PartyHistory asks it for 30 at a time and
  * PartyHistoryView draws what comes back.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query'
 import { Search, Receipt, Wallet, RotateCcw, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -86,14 +86,29 @@ export interface PartyHistoryViewProps {
   /** The balance after an entry, in words ("they owe ₹1,200"). */
   balWords: (b: number) => string
   onOpenBill: (id: string) => void
+  /** Every month with matching entries, newest first (#330). */
+  monthList?: { key: string; count: number }[]
+  /** The month the list starts at after a jump; null = newest. */
+  jump?: string | null
+  onJump?: (month: string | null) => void
 }
+
+const NEWEST = 'newest'
 
 export function PartyHistoryView({
   entries, dayTotals, monthTotals, total, status, onRetry, onMore, loadingMore,
-  filter, onFilter, q, onQ, t, balWords, onOpenBill,
+  filter, onFilter, q, onQ, t, balWords, onOpenBill, monthList = [], jump = null, onJump,
 }: PartyHistoryViewProps) {
   const [view, setView] = useState<View>('chat')
   useEffect(() => { setView(readView()) }, [])
+  const sectionRef = useRef<HTMLElement>(null)
+  // A month picked from the strip: scrolled to once its band is on screen.
+  const [scrollTo, setScrollTo] = useState<string | null>(null)
+  useEffect(() => {
+    if (!scrollTo) return
+    const band = sectionRef.current?.querySelector(`[data-history-month="${scrollTo}"]`)
+    if (band) { band.scrollIntoView({ block: 'start' }); setScrollTo(null) }
+  }, [scrollTo, entries])
   const pickView = (v: View) => { setView(v); try { localStorage.setItem(VIEW_KEY, v) } catch { /* per device only */ } }
 
   const label = (k: HistoryKind) => t(`bahi.${k}`)
@@ -104,6 +119,20 @@ export function PartyHistoryView({
         : e.noteReason === 'post-sale-discount' && k === 'return_out' ? t('bahi.discount_got')
           : label(k)
   const days = groupByDay(entries)
+  // After a jump the list holds only that month and older: what "Show older" can still reach.
+  const reachable = jump ? monthList.filter((m) => m.key <= jump).reduce((s, m) => s + m.count, 0) : total
+  const loadedMonths = new Set(days.map((d) => monthOf(d.key)))
+  const pickMonth = (key: string) => {
+    if (key === NEWEST) { onJump?.(null); return }
+    if (!loadedMonths.has(key)) onJump?.(key)
+    setScrollTo(key)
+  }
+  const thisYear = String(new Date().getFullYear())
+  const monthChip = (key: string) => {
+    const d = new Date(`${key}-01T00:00:00.000Z`)
+    const m = d.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' })
+    return key.startsWith(thisYear) ? m : `${m} ${key.slice(2, 4)}`
+  }
   // "Closed on" is the balance after the month's last entry — true only when nothing is hidden.
   const unfiltered = filter === 'all' && !q.trim()
   // The search and filters stay once there is anything to search, or a search is on.
@@ -128,7 +157,7 @@ export function PartyHistoryView({
 
   /** A month opens with its totals and the balance it closed on (the newest entry's). */
   const monthBand = (key: string, closing: number) => (
-    <div className="px-4 pt-4 pb-2 border-t border-border/60 bg-card" data-history-month={key}>
+    <div className="px-4 pt-4 pb-2 border-t border-border/60 bg-card" data-history-month={key} style={{ scrollMarginTop: STICKY_TOP.top }}>
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-bold">{monthName(key)}</span>
         <GaveGot tot={monthTotals[key]} className="text-xs font-semibold" />
@@ -146,7 +175,7 @@ export function PartyHistoryView({
     ))
 
   return (
-    <section aria-labelledby="history-title" className="rounded-2xl bg-card border border-border/60 shadow-card overflow-clip" data-party-history>
+    <section ref={sectionRef} aria-labelledby="history-title" className="rounded-2xl bg-card border border-border/60 shadow-card overflow-clip" data-party-history>
       <div className="px-4 pt-4 pb-3 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h3 id="history-title" className="text-base font-semibold">{t('bahi.history')}</h3>
@@ -182,6 +211,21 @@ export function PartyHistoryView({
               value={filter}
               onChange={(f) => onFilter(f as HistoryFilter)}
             />
+            {/* #330: one tap to any month, however many years the khata holds. */}
+            {(monthList.length > 1 || jump) && (
+              <ChipRow
+                ariaLabel={t('bahi.months')}
+                chips={[
+                  ...(jump ? [{ value: NEWEST, label: `↑ ${t('bahi.newest')}` }] : []),
+                  ...monthList.map((m) => ({ value: m.key, label: monthChip(m.key), count: m.count })),
+                ]}
+                value={jump ?? ''}
+                onChange={pickMonth}
+                quiet
+                // A mouse cannot swipe a row sideways: on a computer every month shows.
+                className="lg:flex-wrap"
+              />
+            )}
           </>
         )}
       </div>
@@ -314,7 +358,7 @@ export function PartyHistoryView({
         </div>
       )}
 
-      {total > entries.length && entries.length > 0 && (
+      {reachable > entries.length && entries.length > 0 && (
         <div className="px-4 py-3">
           <button
             type="button"
@@ -323,7 +367,7 @@ export function PartyHistoryView({
             aria-busy={loadingMore}
             className="w-full min-h-12 rounded-xl border border-border text-sm font-semibold hover:bg-muted disabled:opacity-60"
           >
-            {t('bahi.older').replace('{n}', String(Math.min(HISTORY_PAGE, total - entries.length))).replace('{m}', String(total - entries.length))}
+            {t('bahi.older').replace('{n}', String(Math.min(HISTORY_PAGE, reachable - entries.length))).replace('{m}', String(reachable - entries.length))}
           </button>
         </div>
       )}
@@ -337,6 +381,7 @@ interface HistoryPageResponse {
   total: number
   days: Totals
   months: Totals
+  monthList?: { key: string; count: number }[]
 }
 
 /** A value that settles after `ms` without changes — the search waits for a pause in typing. */
@@ -364,14 +409,20 @@ export function PartyHistory({ partyId, version, t, balWords, onOpenBill }: {
   const [filter, setFilter] = useState<HistoryFilter>('all')
   const [q, setQ] = useState('')
   const settledQ = useSettled(q.trim(), 300)
+  // A jump belongs to the filter and search it was made under: a new one starts from
+  // the newest again, with no request for the old month in between.
+  const [jumpAt, setJumpAt] = useState<{ month: string; filter: HistoryFilter; q: string } | null>(null)
+  const jump = jumpAt && jumpAt.filter === filter && jumpAt.q === settledQ ? jumpAt.month : null
+  const setJump = (month: string | null) => setJumpAt(month ? { month, filter, q: settledQ } : null)
   // The shown words, so a search for "got" — or "मिले" — finds payments.
   const labels = JSON.stringify(Object.fromEntries(KINDS.map((k) => [k, t(`bahi.${k}`)])))
 
   const query = useInfiniteQuery({
-    queryKey: ['party-history', partyId, filter, settledQ, labels, version ?? 0],
+    queryKey: ['party-history', partyId, filter, settledQ, labels, jump, version ?? 0],
     queryFn: async ({ pageParam }): Promise<HistoryPageResponse> => {
       const params = new URLSearchParams({ limit: String(HISTORY_PAGE), filter, q: settledQ, labels })
       if (pageParam) params.set('cursor', pageParam)
+      if (jump) params.set('month', jump)
       const r = await offlineFetch(`/api/parties/${partyId}/history?${params}`)
       if (!r.ok) throw new Error(`history ${r.status}`)
       return r.json()
@@ -404,6 +455,9 @@ export function PartyHistory({ partyId, version, t, balWords, onOpenBill }: {
       t={t}
       balWords={balWords}
       onOpenBill={onOpenBill}
+      monthList={pages[0]?.monthList ?? []}
+      jump={jump}
+      onJump={setJump}
     />
   )
 }

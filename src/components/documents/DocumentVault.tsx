@@ -371,7 +371,7 @@ export function DocumentVault() {
           <div className="bg-card rounded-2xl shadow-2xl max-w-md w-full">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h3 className="font-bold text-sm">Upload Document</h3>
-              <button
+              <button aria-label="Close"
                 onClick={() => { setUploadDialogOpen(false); pendingFileRef.current = null; if (fileInputRef.current) fileInputRef.current.value = '' }}
                 className="min-h-12 min-w-12 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted"
               >

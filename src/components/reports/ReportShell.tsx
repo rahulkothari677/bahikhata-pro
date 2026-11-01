@@ -71,7 +71,7 @@ export function ReportShell({
       {/* Title + back button */}
       {onBack && (
         <div className="flex items-center gap-3 no-print">
-          <button
+          <button aria-label="Go back"
             onClick={onBack}
             className="min-h-12 min-w-12 inline-flex items-center justify-center p-2 -ml-2 rounded-lg hover:bg-muted"
           >
@@ -113,7 +113,7 @@ export function ReportShell({
               <div className="flex items-center gap-2 flex-wrap">
                 <DateRangePicker value={dateRange} onChange={onDateChange} preset={datePreset || 'thisMonth'} onPresetChange={onPresetChange || (() => {})} align="right" />
                 {showExport && onExport && (
-                  <Button
+                  <Button aria-label="Download CSV"
                     size="touch"
                     variant="outline"
                     onClick={onExport}

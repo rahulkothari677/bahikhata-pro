@@ -267,11 +267,11 @@ export function Gstr3bReport() {
       {/* Month picker + filing status */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => goToMonth(-1)}>
+          <Button aria-label="Previous month" variant="outline" size="icon" onClick={() => goToMonth(-1)}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
           <span className="font-semibold text-lg min-w-[140px] text-center">{monthLabel}</span>
-          <Button variant="outline" size="icon" onClick={() => goToMonth(1)}>
+          <Button aria-label="Next month" variant="outline" size="icon" onClick={() => goToMonth(1)}>
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>

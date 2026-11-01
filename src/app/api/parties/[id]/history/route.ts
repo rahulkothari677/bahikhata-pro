@@ -4,7 +4,7 @@ import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { computePartyBalance } from '@/lib/party-balance'
 import { parseKeysetCursor } from '@/lib/pagination'
 import { apiError } from '@/lib/api-error'
-import { fetchPartyHistory, HISTORY_MAX_LIMIT } from '@/lib/party-history-query'
+import { fetchPartyHistory, HISTORY_MAX_LIMIT, HISTORY_MONTH } from '@/lib/party-history-query'
 import { HISTORY_FILTERS, HISTORY_PAGE, type HistoryFilter, type HistoryKind } from '@/lib/party-history'
 
 /**
@@ -15,6 +15,7 @@ import { HISTORY_FILTERS, HISTORY_PAGE, type HistoryFilter, type HistoryKind } f
  *   ?cursor=<date|id>  the next page (from the previous page's nextCursor)
  *   ?limit=30          up to 1,000 (the printed statement asks for its rows here)
  *   ?filter=all|bills|payments|unpaid   ?q=search words
+ *   ?month=2025-03     start at the end of that month (the month jump, #330)
  *   ?labels={"sale":"Sale",…}           the shown words, so a search for them works
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -34,6 +35,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     const limitParam = Number(url.searchParams.get('limit') ?? HISTORY_PAGE)
     const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(HISTORY_MAX_LIMIT, Math.floor(limitParam))) : HISTORY_PAGE
+    const month = url.searchParams.get('month')
+    if (month && !HISTORY_MONTH.test(month)) {
+      return NextResponse.json({ error: 'Invalid month' }, { status: 400 })
+    }
     const q = (url.searchParams.get('q') ?? '').slice(0, 100)
     let labels: Partial<Record<HistoryKind, string>> = {}
     try {
@@ -49,7 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { balance } = await computePartyBalance(userId, id)
     const page = await fetchPartyHistory({
-      userId, partyId: id, balance, cursor, limit, filter: rawFilter as HistoryFilter, q, labels,
+      userId, partyId: id, balance, cursor, limit, filter: rawFilter as HistoryFilter, q, labels, month,
     })
     return NextResponse.json({ ...page, balance })
   } catch (error) {

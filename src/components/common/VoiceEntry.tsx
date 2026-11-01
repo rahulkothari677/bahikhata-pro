@@ -435,7 +435,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
           </Button>
         )}
         {accumulatedTranscript && (
-          <Button onClick={handleReset} variant="ghost" size="icon" title="Clear all">
+          <Button aria-label="Clear all" onClick={handleReset} variant="ghost" size="icon" title="Clear all">
             <X className="w-4 h-4" />
           </Button>
         )}
@@ -546,7 +546,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                       <span className="font-bold tabular-nums flex-shrink-0 text-sm text-primary w-20 text-right">
                         {formatINR((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}
                       </span>
-                      <button
+                      <button aria-label="Remove this item"
                         onClick={() => handleDeleteItem(i)}
                         className="min-h-12 min-w-12 inline-flex items-center justify-center p-1 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
                         title="Remove this item"

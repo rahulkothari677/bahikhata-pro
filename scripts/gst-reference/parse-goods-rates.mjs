@@ -41,9 +41,12 @@ const raw = fs.readFileSync(SRC, 'utf8')
 
 // The PDF extractor emits one cell per blank-line-separated block, with soft
 // wrapping inside a cell. Collapse the wrapping, keep the cell boundaries.
+// The file has CRLF line ends: drop the \r with the \n, or it survives as a
+// space inside the wrapped word ("sucr ose", "labell ed" - #337). A wrap at a
+// word's end keeps its trailing space in the source, so joining with '' is right.
 const cells = raw
-  .split(/\n\s*\n/)
-  .map(c => c.replace(/\n/g, '').replace(/\s+/g, ' ').trim())
+  .split(/\r?\n\s*\r?\n/)
+  .map(c => c.replace(/\r?\n/g, '').replace(/\s+/g, ' ').trim())
   .filter(Boolean)
 
 const RATE = /^(\d+(?:\.\d+)?)%$/

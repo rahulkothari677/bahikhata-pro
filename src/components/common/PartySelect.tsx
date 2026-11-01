@@ -107,7 +107,7 @@ export function PartySelect({
               )}
             </div>
           </div>
-          <Button
+          <Button aria-label="Clear party"
             variant="ghost"
             size="sm"
             className="h-7 w-7 p-0"
@@ -128,7 +128,7 @@ export function PartySelect({
             className="pl-9 pr-20"
           />
           <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5">
-            <Button
+            <Button aria-label={`Add new ${partyType}`}
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0"

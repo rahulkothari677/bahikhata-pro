@@ -43,7 +43,7 @@ export interface ShopWordHsn {
   /** The first word of a shop-word group (lib/shop-words.ts). */
   word: string
   hsn: string
-  /** A word the notification's row for `hsn` contains; spaces are ignored (the source wraps words: "fe nnel"). */
+  /** A word the notification's row for `hsn` contains; spaces are ignored (the source once wrapped words: "fe nnel", fixed in #337). */
   statute: string
 }
 

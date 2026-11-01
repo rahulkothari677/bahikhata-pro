@@ -235,11 +235,11 @@ export function Gstr1Report() {
       {/* Month picker + filing status */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handlePrevMonth}>
+          <Button aria-label="Previous month" variant="outline" size="sm" onClick={handlePrevMonth}>
             <ChevronLeft className="w-4 h-4" />
           </Button>
           <span className="text-sm font-semibold min-w-[120px] text-center">{monthLabel}</span>
-          <Button variant="outline" size="sm" onClick={handleNextMonth}>
+          <Button aria-label="Next month" variant="outline" size="sm" onClick={handleNextMonth}>
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>

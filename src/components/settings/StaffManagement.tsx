@@ -212,7 +212,7 @@ export function StaffManagement() {
                     >
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
-                    <Button
+                    <Button aria-label="Remove staff member"
                       variant="ghost"
                       size="sm"
                       className="h-8 w-8 p-0 text-rose-600 hover:bg-rose-50"

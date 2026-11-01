@@ -292,3 +292,70 @@ describe('#327 Step B — the card asks the database for its pages', () => {
     await waitFor(() => expect(screen.getByText(/INV-0001/)).toBeTruthy())
   })
 })
+
+describe('#330 — one tap to any month', () => {
+  const fetchMock = offlineFetch as jest.Mock
+  const monthList = [{ key: '2026-10', count: 30 }, { key: '2025-03', count: 40 }, { key: '2024-01', count: 5 }]
+  const page = (entries: HistoryEntry[], nextCursor: string | null) =>
+    ({ ok: true, json: async () => ({ entries, nextCursor, total: 75, days: {}, months: {}, monthList }) })
+  const march = (n: number): HistoryEntry => ({ ...sale(n, 100), id: `m${n}`, date: new Date(2025, 2, 28 - (n % 20), 10).toISOString() })
+  const mount = () => render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <PartyHistory partyId="p1" version={1} t={t} balWords={() => ''} onOpenBill={() => {}} />
+    </QueryClientProvider>,
+  )
+  const urls = () => fetchMock.mock.calls.map((c) => new URL(String(c[0]), 'http://x'))
+  const scrolled = jest.fn()
+  beforeEach(() => {
+    fetchMock.mockReset(); scrolled.mockReset(); window.localStorage.clear()
+    Element.prototype.scrollIntoView = scrolled
+  })
+
+  it('every month is a chip with its count; this year by name, older years with the year', async () => {
+    fetchMock.mockResolvedValue(page(Array.from({ length: 30 }, (_, i) => sale(i + 1, 100)), 'c1'))
+    mount()
+    await waitFor(() => expect(screen.getByRole('group', { name: 'bahi.months' })).toBeTruthy())
+    const chips = Array.from(screen.getByRole('group', { name: 'bahi.months' }).querySelectorAll('button')).map((b) => b.textContent)
+    expect(chips).toEqual(['Oct30', 'Mar 2540', 'Jan 245'])
+  })
+
+  it('a month already on screen scrolls into view, with no new request', async () => {
+    fetchMock.mockResolvedValue(page(Array.from({ length: 30 }, (_, i) => sale(i + 1, 100)), 'c1'))
+    mount()
+    await waitFor(() => expect(screen.getAllByText(/INV-\d{4}/).length).toBe(30))
+    fireEvent.click(screen.getByRole('button', { name: /^Oct/ }))
+    expect(scrolled).toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('an older month loads from that month; "Show older" counts only what is left below it; Newest goes back', async () => {
+    fetchMock
+      .mockResolvedValueOnce(page(Array.from({ length: 30 }, (_, i) => sale(i + 1, 100)), 'c1'))
+      .mockResolvedValueOnce(page(Array.from({ length: 30 }, (_, i) => march(i + 1)), 'c9'))
+      .mockResolvedValueOnce(page(Array.from({ length: 30 }, (_, i) => sale(i + 1, 100)), 'c1'))
+    mount()
+    await waitFor(() => expect(screen.getAllByText(/INV-\d{4}/).length).toBe(30))
+    fireEvent.click(screen.getByRole('button', { name: /^Mar 25/ }))
+    await waitFor(() => expect(urls()[1]?.searchParams.get('month')).toBe('2025-03'))
+    expect(urls()[1].searchParams.get('cursor')).toBeNull()
+    // 40 in March 2025 + 5 in January 2024 = 45 from here down; 30 shown.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Show 15 older (15 more)' })).toBeTruthy())
+    await waitFor(() => expect(scrolled).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: /bahi\.newest/ }))
+    await waitFor(() => expect(urls()[2]?.searchParams.get('month')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('button', { name: /bahi\.newest/ })).toBeNull())
+  })
+
+  it('a new filter starts from the newest again', async () => {
+    fetchMock.mockResolvedValue(page(Array.from({ length: 30 }, (_, i) => march(i + 1)), null))
+    mount()
+    await waitFor(() => expect(screen.getByRole('group', { name: 'bahi.months' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /^Jan 24/ }))
+    await waitFor(() => expect(urls().some((u) => u.searchParams.get('month') === '2024-01')).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: 'Bills' }))
+    await waitFor(() => expect(urls().some((u) => u.searchParams.get('filter') === 'bills')).toBe(true))
+    // Never the new filter with the old month.
+    const bills = urls().filter((u) => u.searchParams.get('filter') === 'bills')
+    expect(bills.map((u) => u.searchParams.get('month'))).toEqual([null])
+  })
+})

@@ -186,7 +186,7 @@ export function CameraPreviewModal({ open, onClose, onCapture }: CameraPreviewMo
 
       {/* Top controls */}
       <div className="absolute top-0 left-0 right-0 p-4 pt-[calc(1rem+var(--safe-top))] flex items-center justify-between z-10">
-        <button
+        <button aria-label="Close camera"
           onClick={handleClose}
           className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white active:scale-95 transition"
         >
@@ -195,7 +195,7 @@ export function CameraPreviewModal({ open, onClose, onCapture }: CameraPreviewMo
 
         <div className="flex items-center gap-2">
           {/* Grid toggle */}
-          <button
+          <button aria-label={gridOn ? "Hide grid" : "Show grid"}
             onClick={() => { haptic.click(); setGridOn(!gridOn) }}
             className={cn(
               'w-12 h-12 rounded-full backdrop-blur-sm flex items-center justify-center transition active:scale-95',

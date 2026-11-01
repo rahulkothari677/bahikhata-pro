@@ -200,7 +200,7 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
               </p>
             </div>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={() => { setSending(false); setCurrentIndex(null); onClose() }}
             className="min-h-12 min-w-12 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted"
           >

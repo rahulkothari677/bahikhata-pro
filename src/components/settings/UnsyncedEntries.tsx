@@ -268,7 +268,7 @@ export function UnsyncedEntries() {
                   <RefreshCw className={`w-3 h-3 ${retryingId === item.id ? 'animate-spin' : ''}`} />
                   Retry
                 </Button>
-                <Button
+                <Button aria-label="Discard entry"
                   variant="ghost"
                   size="sm"
                   onClick={() => handleDiscard(item)}

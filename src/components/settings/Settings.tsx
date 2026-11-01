@@ -2175,7 +2175,7 @@ export function Settings({
             </div>
             <div className="grid grid-cols-4 gap-1.5">
               {INVOICE_THEMES.map(t => (
-                <button
+                <button aria-label={t.name}
                   key={t.id}
                   type="button"
                   onClick={() => {

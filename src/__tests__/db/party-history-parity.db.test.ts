@@ -106,21 +106,23 @@ async function jsHistory(partyId: string, balance: number, cap?: number) {
   ).map((e) => ({ ...e, notes: e.isPayment ? e.notes : notes.get(e.id) ?? null })) as unknown as (HistoryEntry & { delta: number; due: number })[]
 }
 
-async function sqlAll(partyId: string, balance: number, extra: { filter?: any; q?: string } = {}) {
+async function sqlAll(partyId: string, balance: number, extra: { filter?: any; q?: string; month?: string } = {}) {
   const out: any[] = []
   const days: Record<string, any> = {}
   const months: Record<string, any> = {}
   let cursor: string | null = null
   let total = 0
+  let monthList: { key: string; count: number }[] = []
   do {
-    const page = await fetchPartyHistory({ userId, partyId, balance, cursor, limit: 30, filter: extra.filter ?? 'all', q: extra.q ?? '', labels: LABELS })
+    const page = await fetchPartyHistory({ userId, partyId, balance, cursor, limit: 30, filter: extra.filter ?? 'all', q: extra.q ?? '', labels: LABELS, month: extra.month })
     out.push(...page.entries)
     Object.assign(days, page.days)
     Object.assign(months, page.months)
     total = page.total
+    if (!cursor) monthList = page.monthList
     cursor = page.nextCursor
   } while (cursor)
-  return { entries: out, days, months, total }
+  return { entries: out, days, months, total, monthList }
 }
 
 // `|| 0`: a fully paid bill's effect is −0 in JS and 0 in SQL — the same paisa.
@@ -203,6 +205,33 @@ run('the database history agrees with the app rules (local database)', () => {
       }
     }
     console.log(`${asked} filter × search questions: all the same`)
+  })
+
+  it('#330: the month list counts every month, and a jump starts at that month with the same balances', async () => {
+    let jumps = 0
+    for (const id of khatas.slice(0, 12)) {
+      const { balance } = await computePartyBalance(userId, id)
+      const js = await jsHistory(id, balance)
+      for (const filter of ['all', 'bills'] as const) {
+        const rows = filterHistory(js, { filter, q: '', label })
+        const counts = new Map<string, number>()
+        for (const e of rows) { const k = billDayKey(e.date).slice(0, 7); counts.set(k, (counts.get(k) ?? 0) + 1) }
+        const want = [...counts].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([key, count]) => ({ key, count }))
+        const all = await sqlAll(id, balance, { filter })
+        expect(all.monthList).toEqual(want)
+        // The newest month, one from the middle, the oldest.
+        const picks = [...new Set([want[0], want[Math.floor(want.length / 2)], want[want.length - 1]].filter(Boolean).map((m) => m.key))]
+        for (const month of picks) {
+          const from = rows.filter((e) => billDayKey(e.date).slice(0, 7) <= month)
+          const got = await sqlAll(id, balance, { filter, month })
+          expect([month, got.entries.map((e) => e.id)]).toEqual([month, from.map((e) => e.id)])
+          expect(got.entries.map((e) => paise(e.runningBalance))).toEqual(from.map((e) => paise(e.runningBalance)))
+          expect(got.monthList).toEqual(want) // the strip keeps every month after a jump
+          jumps++
+        }
+      }
+    }
+    console.log(`${jumps} month jumps: all start at their month with the right balances`)
   })
 
   it('a big khata: the old 500 + 500 loading gets older balances wrong; the database does not', async () => {

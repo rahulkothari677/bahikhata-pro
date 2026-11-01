@@ -1698,7 +1698,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                         </Select>
                       </div>
                       <div className="col-span-1 flex justify-end">
-                        <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-rose-600 hover:bg-rose-50" onClick={() => removeItem(i)} disabled={items.length === 1}>
+                        <Button aria-label="Remove item" variant="ghost" size="sm" className="h-9 w-9 p-0 text-rose-600 hover:bg-rose-50" onClick={() => removeItem(i)} disabled={items.length === 1}>
                           <X className="w-4 h-4" />
                         </Button>
                       </div>

@@ -51,7 +51,12 @@ export interface HistoryPageInput {
   q: string
   /** The shown word for each kind, in the shop's language, so "got" or "मिले" finds payments. */
   labels?: Partial<Record<HistoryKind, string>>
+  /** "2026-03": start at the end of that month (IST) — the month jump (#330). */
+  month?: string | null
 }
+
+/** A month key the jump accepts: YYYY-MM. */
+export const HISTORY_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
 
 export interface HistoryPage {
   entries: (HistoryEntry & { delta: number; due: number })[]
@@ -62,6 +67,8 @@ export interface HistoryPage {
   months: Record<string, { gave: number; got: number }>
   /** billDayKey → that day's gave/got, for the days on this page. */
   days: Record<string, { gave: number; got: number }>
+  /** Every month with matching entries, newest first, and how many — the jump strip (#330). */
+  monthList: { key: string; count: number }[]
 }
 
 const GAVE = Prisma.join(GAVE_ENTRY_TYPES as unknown as string[])
@@ -108,6 +115,12 @@ export async function fetchPartyHistory(input: HistoryPageInput): Promise<Histor
   const after = cur
     ? Prisma.sql`(w."date", w."id") < (${cur.date.toISOString()}::timestamp, ${cur.id})`
     : Prisma.sql`TRUE`
+  // The jump: entries up to the end of that month. The balances are walked over the
+  // whole history first (b), so a page that starts in March 2024 still shows the
+  // right balance after each entry.
+  const jump = input.month && HISTORY_MONTH.test(input.month)
+    ? Prisma.sql`w.ist < (${`${input.month}-01`}::date + INTERVAL '1 month')`
+    : Prisma.sql`TRUE`
   // What an entry gave and got, in paise (dayTotals in party-history.ts).
   const paidOnBill = Prisma.sql`(CASE WHEN b."isPayment" THEN 0 ELSE GREATEST(0, b."amount" - ABS(b."delta")) END)`
   const gave = Prisma.sql`(CASE WHEN b."type" IN (${GAVE}) THEN b."amount" ELSE ${paidOnBill} END)`
@@ -119,6 +132,7 @@ export async function fetchPartyHistory(input: HistoryPageInput): Promise<Histor
     noteReason: string | null; originalTransactionId: string | null
     runningBalance: bigint; itemCount: number; total: bigint
     dayGave: bigint; dayGot: bigint; monthGave: bigint; monthGot: bigint
+    monthList: { key: string; count: number }[] | null
   }>>`
     WITH e0 AS (
       SELECT t."id", t."date", t."type", FALSE AS "isPayment",
@@ -169,9 +183,13 @@ export async function fetchPartyHistory(input: HistoryPageInput): Promise<Histor
       w."dayGot"::bigint AS "dayGot", w."monthGave"::bigint AS "monthGave", w."monthGot"::bigint AS "monthGot",
       CASE WHEN w."isPayment" THEN 0 ELSE (
         SELECT COUNT(*) FROM "TransactionItem" ti WHERE ti."transactionId" = w."id"
-      ) END::int AS "itemCount"
+      ) END::int AS "itemCount",
+      -- Not tied to the row: Postgres works it out once per query.
+      (SELECT json_agg(json_build_object('key', m."key", 'count', m."count") ORDER BY m."key" DESC)
+         FROM (SELECT TO_CHAR(f.ist, 'YYYY-MM') AS "key", COUNT(*)::int AS "count" FROM f GROUP BY 1) m
+      ) AS "monthList"
     FROM w
-    WHERE ${after}
+    WHERE ${after} AND ${jump}
     ORDER BY w."date" DESC, w."id" DESC
     LIMIT ${limit + 1}
   `
@@ -209,5 +227,6 @@ export async function fetchPartyHistory(input: HistoryPageInput): Promise<Histor
     total: Number(rows[0]?.total ?? 0),
     months,
     days,
+    monthList: rows[0]?.monthList ?? [],
   }
 }

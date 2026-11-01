@@ -1007,7 +1007,7 @@ export function BillScanner() {
                         <span className="font-bold tabular-nums flex-shrink-0 text-sm text-primary">
                           {formatINR(item.total || 0)}
                         </span>
-                        <button
+                        <button aria-label="Remove this item"
                           className="min-h-12 min-w-12 inline-flex items-center justify-center p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
                           onClick={() => removeItem(i)}
                           title="Remove this item"

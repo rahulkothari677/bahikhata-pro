@@ -248,7 +248,7 @@ export function NotificationCenter() {
                   Clear All
                 </button>
               )}
-              <button
+              <button aria-label="Close notifications"
                 onClick={() => { haptic.click(); setOpen(false) }}
                 className="min-h-12 min-w-12 inline-flex items-center justify-center text-white/80 hover:text-white p-1.5 rounded-md hover:bg-white/10"
               >
@@ -387,7 +387,7 @@ function SwipeableNotification({
     >
       {/* Delete button behind the row (revealed on swipe) */}
       <div className="absolute inset-0 flex items-center justify-end bg-rose-500 rounded-xl">
-        <button
+        <button aria-label="Dismiss notification"
           onClick={() => { haptic.medium(); onDismiss() }}
           className="h-full px-5 flex items-center text-white"
         >

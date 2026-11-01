@@ -168,7 +168,7 @@ export function CAAccess() {
                     </Badge>
                     <p className="text-xs text-muted-foreground">Added {formatDate(ca.createdAt)}</p>
                   </div>
-                  <Button
+                  <Button aria-label="Remove CA access"
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0 text-rose-600 hover:bg-rose-50"

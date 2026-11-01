@@ -352,7 +352,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
       {/* 🔒 V22-3 (Phase 1): Title + back button for single-report mode */}
       {isSingleReport && (
         <div className="flex items-center gap-3 no-print">
-          <button
+          <button aria-label="Go back"
             onClick={handleBackToHub}
             className="min-h-12 min-w-12 inline-flex items-center justify-center p-2 -ml-2 rounded-lg hover:bg-muted"
           >

@@ -271,13 +271,13 @@ export function IncomeExpense() {
                         <span className="text-xs text-muted-foreground">
                           {formatINR(progress.spent)} / {formatINR(progress.budget)}
                         </span>
-                        <button
+                        <button aria-label={`Edit budget for ${cat}`}
                           onClick={() => { setBudgetCategory(cat); setBudgetAmount(String(progress.budget)); setBudgetDialogOpen(true) }}
                           className="min-h-12 min-w-12 inline-flex items-center justify-center p-0.5 rounded hover:bg-muted text-muted-foreground"
                         >
                           <Edit2 className="w-3 h-3" />
                         </button>
-                        <button
+                        <button aria-label={`Remove budget for ${cat}`}
                           onClick={() => { removeBudget(cat); sonnerToast.success(`Budget removed for ${cat}`) }}
                           className="min-h-12 min-w-12 inline-flex items-center justify-center p-0.5 rounded hover:bg-muted text-muted-foreground"
                         >
@@ -360,7 +360,7 @@ export function IncomeExpense() {
                       </p>
                       <p className="text-xs text-muted-foreground">per month</p>
                     </div>
-                    <button
+                    <button aria-label="Remove recurring entry"
                       onClick={() => { removeRecurring(entry.id); sonnerToast.success('Recurring entry removed') }}
                       className="min-h-12 min-w-12 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-rose-50 text-rose-600 flex-shrink-0"
                     >
@@ -462,7 +462,7 @@ export function IncomeExpense() {
                             {isIncome ? '+' : '-'}{formatINR(txn.totalAmount)}
                           </p>
                         </div>
-                        <Button
+                        <Button aria-label="Delete entry"
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 flex-shrink-0"
