@@ -54,6 +54,15 @@ describe('#112: credit ending with this return, listed by supplier', () => {
     expect(t).toMatch(/October 2026 GSTR-3B is the last return/)
     expect(t).toMatch(/by 11 November 2026/)
   })
+  test('a bill in the ending box is not counted again on the waiting line', () => {
+    // Live 1 Nov: "₹50 ends with this return" and "₹61.50 waiting (2 bills)" counted the same ₹50 twice.
+    render(<ItcClaimNotes detail={{ ...NONE, stillWaitingCount: 2, stillWaitingTax: 61.5, endingSoon: [soon[0]], endingSoonTax: 50 }} />)
+    expect(screen.getByTestId('itc-claim-notes').textContent).toMatch(/₹11\.50 waiting for suppliers to file \(1 bill\)/)
+  })
+  test('when every waiting bill is ending, there is no waiting line at all', () => {
+    render(<ItcClaimNotes detail={{ ...NONE, stillWaitingCount: 1, stillWaitingTax: 50, endingSoon: [soon[0]], endingSoonTax: 50 }} />)
+    expect(screen.getByTestId('itc-claim-notes').textContent).not.toMatch(/waiting/)
+  })
   test('a month ahead it reads "next month", in the check colour', () => {
     render(<ItcClaimNotes detail={{ ...NONE, endingSoon: soon.map((b) => ({ ...b, final: false })), endingSoonTax: 750 }} />)
     expect(screen.getByTestId('itc-ending-soon').textContent).toMatch(/ends next month/)

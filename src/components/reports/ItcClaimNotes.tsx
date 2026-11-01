@@ -59,8 +59,10 @@ const bills = (n: number) => `${n} ${n === 1 ? 'bill' : 'bills'}`
 
 export function ItcClaimNotes({ detail }: { detail: ItcDetail | null | undefined }) {
   if (!detail) return null
-  const waitingCount = detail.deferredCount + detail.stillWaitingCount
-  const waitingTax = detail.deferredTax + detail.stillWaitingTax
+  // #112: bills already named in the ending-soon box are not counted again on the waiting line.
+  const soon = detail.endingSoon ?? []
+  const waitingCount = detail.deferredCount + detail.stillWaitingCount - soon.length
+  const waitingTax = Math.round((detail.deferredTax + detail.stillWaitingTax - (detail.endingSoonTax ?? 0)) * 100) / 100
   const lines: Array<{ key: string; tone: 'good' | 'check' | 'bad' | 'muted'; text: string; info: string }> = []
   if (detail.lateTax > 0) lines.push({
     key: 'late', tone: 'good',
@@ -82,7 +84,6 @@ export function ItcClaimNotes({ detail }: { detail: ItcDetail | null | undefined
     text: `${formatINR(detail.lapsedTax)} can no longer be claimed — past 30 November (${bills(detail.lapsedCount)})`,
     info: 'Section 16(4): credit for a bill must be claimed by 30 November after the end of its financial year (or the annual return, if filed earlier).',
   })
-  const soon = detail.endingSoon ?? []
   if (lines.length === 0 && soon.length === 0) return null
 
   return (
