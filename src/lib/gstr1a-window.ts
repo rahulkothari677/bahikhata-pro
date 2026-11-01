@@ -47,15 +47,16 @@
  * could make. It tells the shopkeeper the window is open, what belongs in it,
  * and what does not. Generating the file waits for the schema.
  *
- * ── UNCONFIRMED, AND SAID SO ────────────────────────────────────────────
+ * ── QUARTERLY (QRMP) FILERS — settled 1 Nov 2026 (#346) ────────────────
  *
- * The CA left Q4.6 blank. Two things follow:
- *
- *   1. QRMP (quarterly) filers. My understanding is they get a GSTR-1A after
- *      the quarterly GSTR-1, but I have not had that confirmed, so this refuses
- *      to answer for a quarterly filer rather than guess. See `unknownForQrmp`.
- *   2. Whether practitioners use it at all. That changes emphasis, not
- *      correctness — the window either is or is not open.
+ * GSTN advisory on FORM GSTR-1A (27 Jul 2024, under Notification 12/2024-CT):
+ * for a quarterly filer GSTR-1A is available "quarterly after actual filing of
+ * FORM GSTR-1 (Quarterly) or the due date … whichever is later", until the
+ * quarter's GSTR-3B is filed, and it covers what went in through IFF for the
+ * first two months too — there is no separate IFF amendment. Same two edges as
+ * a monthly filer, counted per quarter, so the same branches answer it.
+ * (The app itself files monthly today; frequency is not stored, so callers pass
+ * null. The quarterly wording is ready for when it is.)
  */
 
 import { gstinChanged, GSTIN_GSTR1A_REMEDY } from '@/lib/gstr1-amendments'
@@ -65,10 +66,7 @@ export interface Gstr1aInputs {
   gstr1Filed: boolean
   /** Has the SAME period's GSTR-3B been filed? */
   gstr3bFiled: boolean
-  /**
-   * Monthly or quarterly filer. Quarterly is refused rather than guessed —
-   * see the note above.
-   */
+  /** Monthly or quarterly filer — only the wording differs (see QRMP above). */
   filingFrequency?: 'monthly' | 'quarterly' | null
 }
 
@@ -79,8 +77,6 @@ export type Gstr1aState =
   | 'open'
   /** GSTR-3B filed. The window has closed for good; use a later amendment. */
   | 'closed'
-  /** Quarterly filer — we do not know, and will not pretend. */
-  | 'unknown-for-qrmp'
 
 export interface Gstr1aWindow {
   state: Gstr1aState
@@ -91,30 +87,15 @@ export interface Gstr1aWindow {
 }
 
 export function gstr1aWindow(input: Gstr1aInputs): Gstr1aWindow {
+  const q = input.filingFrequency === 'quarterly'
+  const period = q ? 'quarter' : 'month'
+  const next = q ? 'next quarter’s' : 'next month’s'
+
   if (!input.gstr1Filed) {
     return {
       state: 'not-filed-yet',
       isOpen: false,
-      message: 'You have not filed this month’s GSTR-1 yet, so just correct the bill. Nothing needs amending.',
-    }
-  }
-
-  /*
-   * Checked BEFORE the 3B test, not after.
-   *
-   * A quarterly filer whose GSTR-3B is unfiled would otherwise fall into
-   * 'open' and be told a window is available on a schedule I have not
-   * confirmed. Refusing beats guessing, and the refusal has to come before the
-   * branch that would answer confidently.
-   *
-   * The order is load-bearing, so it is pinned by a test that moves this block
-   * below the 3B check and watches the quarterly case start returning 'open'.
-   */
-  if (input.filingFrequency === 'quarterly') {
-    return {
-      state: 'unknown-for-qrmp',
-      isOpen: false,
-      message: 'You file quarterly (QRMP). GSTR-1A works differently for quarterly filers and we have not had that confirmed, so please ask your CA before relying on this.',
+      message: `You have not filed this ${period}’s GSTR-1 yet, so just correct the bill. Nothing needs amending.`,
     }
   }
 
@@ -122,14 +103,16 @@ export function gstr1aWindow(input: Gstr1aInputs): Gstr1aWindow {
     return {
       state: 'closed',
       isOpen: false,
-      message: 'You have already filed GSTR-3B for this month, so GSTR-1A is closed for it. Corrections now go into next month’s return as an amendment.',
+      message: `You have already filed GSTR-3B for this ${period}, so GSTR-1A is closed for it. Corrections now go into ${next} return as an amendment.`,
     }
   }
 
   return {
     state: 'open',
     isOpen: true,
-    message: 'You can still fix this month’s GSTR-1 using GSTR-1A, because you have not filed GSTR-3B yet. Correcting it now means GSTR-3B fills itself with the right figure — waiting means paying the wrong amount and claiming it back next month.',
+    message: q
+      ? 'You can still fix this quarter’s GSTR-1 — including bills you sent through IFF in the first two months — using GSTR-1A, because you have not filed GSTR-3B yet. Correcting it now means GSTR-3B fills itself with the right figure.'
+      : 'You can still fix this month’s GSTR-1 using GSTR-1A, because you have not filed GSTR-3B yet. Correcting it now means GSTR-3B fills itself with the right figure — waiting means paying the wrong amount and claiming it back next month.',
   }
 }
 
@@ -140,11 +123,10 @@ export function gstr1aWindow(input: Gstr1aInputs): Gstr1aWindow {
  * an invoice was billed to moves input credit from one taxpayer to another, and
  * no amendment is allowed to do that.
  *
- * CORRECTED AGAIN 31 Oct 2026 (#100). On 29 Aug this said a GSTIN "cannot be
- * amended in a later period either" — also wrong: the GSTN GSTR-1A FAQ says it
- * can be changed "only through GSTR 1 of the following tax periods". GSTR-1A
- * refuses it; whether 9A really accepts it is disputed (#345, for the CA). The
- * route every source accepts is a credit note plus a fresh invoice.
+ * CORRECTED AGAIN 31 Oct 2026 (#100), settled 1 Nov (#345). GSTR-1A's own
+ * form text: "Amendment of a document which is related to change of
+ * Recipient's GSTIN shall not be allowed in GSTR-1A" — it is a later GSTR-1
+ * that takes it. How the app routes it: GSTIN_CORRECTION_ROUTE.
  *
  * This matters because the GSTIN case is not rare: typing the wrong customer's
  * GSTIN is one of the commonest filing mistakes there is. Offering GSTR-1A for

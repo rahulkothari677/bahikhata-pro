@@ -199,8 +199,8 @@ export function buildCorrections(latest: LatestVersion[], current: Map<string, C
     } else if (!now.placed || now.placed.section !== f.section) {
       nowVal = now.placed ? roundMoney(Number(now.placed.row.val) || 0) : 0
       problem = now.placed
-        ? `This now belongs with ${NAMES[now.placed.section]}, not ${NAMES[f.section]} where it was filed — a correction cannot move it. Ask your CA.`
-        : 'This is no longer a separate document in GSTR-1 (for example, it is now all exempt). Ask your CA how to correct it.'
+        ? `${MOVED_ROUTE} It now belongs with ${NAMES[now.placed.section]}, not ${NAMES[f.section]} where it was filed.`
+        : NO_LONGER_A_DOCUMENT_ROUTE
       changes = [problem]
     } else {
       const r = now.placed.row
@@ -224,14 +224,15 @@ export function buildCorrections(latest: LatestVersion[], current: Map<string, C
       if (changes.length === 0) continue
       if (gstinChanged) {
         /*
-         * #100 (8c-3): NOT impossible — but not a 9A row the app writes either.
-         * GSTN's 9A row has no field for a new GSTIN: the group's ctin is how the
+         * #100 (8c-3), settled #345 (1 Nov): NOT impossible — but not a row the
+         * app's file can carry. In an uploaded 9A row the group's ctin is how the
          * portal finds the ORIGINAL ("GSTIN of the receiver does not match the
          * original invoice records"), so a row would keep the old GSTIN and look
-         * like a fix. Whether the portal lets 9A change it is disputed (GSTN FAQ:
-         * "only through GSTR 1 of the following tax periods"; offline-tool guides:
-         * not editable) — logged for the CA, #345. The route every source accepts
-         * is a credit note and a fresh bill.
+         * like a fix. The portal's own 9A screen does let the Recipient GSTIN be
+         * edited by hand (GSTN GSTR-1 manual, Table 9A), and GSTR-1A's form text
+         * sends a GSTIN change to a later GSTR-1. So the route given is the one
+         * the app can do itself — credit note + fresh bill — with the portal
+         * screen named as the other way.
          */
         problem = GSTIN_CORRECTION_ROUTE
       } else {
@@ -242,7 +243,7 @@ export function buildCorrections(latest: LatestVersion[], current: Map<string, C
     if (row) {
       const missing = amendmentRowProblems(f.section, row)
       if (missing.length) {
-        problem = 'The filed record of this document is in an older format the app cannot correct automatically. Ask your CA.'
+        problem = LEGACY_ROUTE
         row = null
       }
     }
@@ -300,10 +301,35 @@ export function lineChanges(filedRow: Record<string, any>, nowRow: Record<string
  * and by GSTR-1A, so both say the same thing.
  */
 export const GSTIN_CORRECTION_ROUTE =
-  'Customer GSTIN changed: raise a credit note on this bill and a fresh bill to the right GSTIN — the route the portal always accepts. A Table 9A change of GSTIN is disputed between sources; ask your CA before trying it.'
+  'Customer GSTIN changed. Fix it in two steps: raise a credit note for the whole bill to the old GSTIN, then a fresh bill to the right GSTIN — both go in this month’s GSTR-1, and the credit moves to the right buyer. An uploaded correction is matched to the bill by the GSTIN it was filed under, so the GSTIN itself is put right this way. If you prefer, the portal’s Table 9A screen lets you change the Recipient GSTIN by hand instead.'
+
+/*
+ * #346: the other corrections a 9A/9C row cannot carry, each with its fix —
+ * never "ask your CA". A row is matched to its original inside the SAME table,
+ * so a bill that changed tables is cancelled and issued again.
+ */
+const MOVED_ROUTE =
+  'A correction cannot move a bill to another GSTR-1 table. Raise a credit note for the whole bill and a fresh bill — the fresh one lands in the right table.'
+const NO_LONGER_A_DOCUMENT_ROUTE =
+  'This is no longer a separate document in GSTR-1 — it now belongs in a summary table (a sale without a customer GSTIN, or all exempt). Raise a credit note for the whole bill to cancel what was filed, and a fresh bill; the fresh one is reported in the right summary table.'
+const LEGACY_ROUTE =
+  'This bill was filed by an older version of EkBook, which did not keep the item lines a correction needs. Correct it by hand on the portal’s Table 9A/9C screen, or raise a credit note for the whole bill and a fresh bill.'
 
 /** The same advice in the few words a row has room for; the sentence above goes behind ⓘ. */
 export const GSTIN_CORRECTION_SHORT = 'Fix with a credit note and a fresh bill to the right GSTIN'
+
+/**
+ * Every problem in the few words a row has room for, with the full advice for ⓘ.
+ * One table, so no long route ever lands on a row unshortened (#346).
+ */
+export function problemParts(problem: string | null): { short: string | null; info: string | null } {
+  if (!problem) return { short: null, info: null }
+  if (problem === GSTIN_CORRECTION_ROUTE) return { short: GSTIN_CORRECTION_SHORT, info: problem }
+  if (problem.startsWith(MOVED_ROUTE)) return { short: 'Moved to another table — fix with a credit note and a fresh bill', info: problem }
+  if (problem === NO_LONGER_A_DOCUMENT_ROUTE) return { short: 'Now a summary-table sale — fix with a credit note and a fresh bill', info: problem }
+  if (problem === LEGACY_ROUTE) return { short: 'Filed by an older EkBook — fix by hand on the portal', info: problem }
+  return { short: problem, info: null }
+}
 
 /** The portal's four amendment tables, from the corrections that are going in. */
 export interface AmendmentTables {
@@ -380,14 +406,12 @@ export function includedCorrections(all: Correction[], included: IncludedCorrect
  * A CUSTOMER'S GSTIN — what can and cannot fix it (#90, CORRECTED by #100 in 8c-3).
  *
  * This block used to say a GSTIN "cannot be amended in ANY period". That was
- * wrong (#100): the GSTN GSTR-1A FAQ says a GSTIN can be changed "only through
- * GSTR 1 of the following tax periods" — it is GSTR-1A that refuses it. But
- * whether Table 9A really accepts a new GSTIN is disputed (offline-tool guides
- * call the field not editable, and the portal finds the original BY its GSTIN),
- * and GSTN's 9A row has no field for a new one. So: GSTR-1A blocks it; the
- * later-month route is not written by the app (buildCorrections shows the
- * reason, GSTIN_CORRECTION_ROUTE, instead of a row); the credit note + fresh
- * bill route is the one every source accepts. Open question for the CA: #345.
+ * wrong (#100): GSTR-1A's form text refuses a change of recipient GSTIN, and a
+ * later GSTR-1 takes it. Settled 1 Nov (#345): the portal's 9A screen can edit
+ * the Recipient GSTIN by hand, but an uploaded 9A row finds its original BY the
+ * GSTIN, so the app's file cannot carry the change (buildCorrections gives
+ * GSTIN_CORRECTION_ROUTE instead of a row): credit note + fresh bill, which the
+ * app can do itself, or the portal screen.
  *
  * ONE DEFINITION, used by both correction routes — two GSTIN rules would be
  * the drift class that caused four earlier bugs.

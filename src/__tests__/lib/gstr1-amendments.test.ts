@@ -8,7 +8,7 @@
  */
 import {
   buildCorrections, filedVersionsFrom, latestVersions, amendmentTables, includedCorrections, amendmentRowProblems, fingerprint,
-  lineChanges, GSTIN_CORRECTION_ROUTE,
+  lineChanges, GSTIN_CORRECTION_ROUTE, problemParts,
   type CurrentDoc, type LatestVersion,
 } from '@/lib/gstr1-amendments'
 import { documentRow, type Gstr1Transaction, type ShopInfo } from '@/lib/gstr1-builder'
@@ -90,7 +90,7 @@ describe('other changes are caught', () => {
   })
   test('#100: a GSTIN change is NOT written as a 9A row — the sure route is given instead, and nothing enters the file', () => {
     // GSTN's 9A row has no field for a new GSTIN (the group's ctin finds the original),
-    // so a row would keep the old GSTIN and look like a fix. Disputed route → the CA (#345).
+    // so a row would keep the old GSTIN and look like a fix. #345: credit note + fresh bill, or the portal's 9A screen.
     const [c] = run(filed, { 'INV-0003': sale({ partyGstin: '08AAAPL5555C1Z9' }) })
     expect(c.row).toBeNull()
     expect(c.problem).toBe(GSTIN_CORRECTION_ROUTE)
@@ -221,19 +221,36 @@ describe('#103: nothing goes in until switched on, and an edit turns the switch 
   })
 })
 
-describe('what the app cannot correct on its own says so', () => {
+describe('what the app cannot correct on its own says so — and how to fix it (#346)', () => {
+  test('every problem reaches the row short, with the full fix behind ⓘ', () => {
+    const filed = latestVersions(filedVersionsFrom(filedReturn([sale()]), '082026'))
+    for (const now of [sale({ partyGstin: null }), sale({ partyGstin: '08AAAPL5555C1Z9' })]) {
+      const [c] = run(filed, { 'INV-0003': now })
+      const parts = problemParts(c.problem)
+      expect(parts.info).toBe(c.problem)
+      expect(parts.short!.length).toBeLessThanOrEqual(70)
+    }
+    expect(problemParts(null)).toEqual({ short: null, info: null })
+  })
+  test('no correction ever answers "ask your CA"', () => {
+    const filed = latestVersions(filedVersionsFrom(filedReturn([sale()]), '082026'))
+    for (const now of [sale({ partyGstin: null }), sale({ partyGstin: '08AAAPL5555C1Z9' }), null]) {
+      for (const c of run(filed, { 'INV-0003': now })) expect(String(c.problem ?? '')).not.toMatch(/\bCA\b/)
+    }
+  })
   test('a document that moved to another table (GSTIN removed) gets a reason, not a row', () => {
     const filed = latestVersions(filedVersionsFrom(filedReturn([sale()]), '082026'))
     const [c] = run(filed, { 'INV-0003': sale({ partyGstin: null }) })
     expect(c.row).toBeNull()
-    expect(c.problem).toMatch(/Ask your CA/)
+    expect(c.problem).toMatch(/credit note for the whole bill/)
+    expect(c.problem).toMatch(/fresh bill/)
   })
   test('a legacy filed row with no items (stored before 8c) cannot be re-declared — reason, no row', () => {
     const legacy = { b2ba: [{ ctin: BUYER, inv: [{ oinum: 'INV-0003', oidt: '10-08-2026', inum: 'INV-0003', idt: '10-08-2026', val: 525, pos: '08', changes: ['x'] }] }] }
     const latest = latestVersions(filedVersionsFrom(legacy, '092026'))
     const [c] = run(latest, { 'INV-0003': null })
     expect(c.row).toBeNull()
-    expect(c.problem).toMatch(/older format/)
+    expect(c.problem).toMatch(/older version of EkBook/)
   })
 })
 

@@ -134,7 +134,7 @@ export function ItcReversalWarning() {
           title={<>{formatINR(data.totals?.overdueItc || 0)} of credit is past {data.rule?.days} days</>}
           // Stated as a thing to do, not a verdict: the credit comes back the
           // moment the supplier is paid.
-          info="This should be reversed in your GSTR-3B, with interest, and you can claim it back as soon as you pay the supplier. Show these to your CA."
+          info="Reverse this credit in GSTR-3B Table 4(B)(2) of the current month (Rule 37). Interest under section 50 is due only if the credit was already used to pay tax. Once you pay the supplier, claim it back in Table 4(A)(5) — there is no time limit on that re-claim."
           content={<div className="space-y-2">{overdue.map(f => <Row key={f.id} f={f} />)}</div>}
         >
           Pay the supplier to claim it back.
@@ -147,7 +147,7 @@ export function ItcReversalWarning() {
           // The quiet one, and the easiest to miss: these read as paid on
           // every other screen, so nothing suggests a problem.
           title={<>{paidLate.length === 1 ? 'One bill was' : `${paidLate.length} bills were`} paid after the {data.rule?.days}-day limit</>}
-          info="These are settled now, so nothing is owed to the supplier. But the credit fell due for reversal while they were unpaid, and interest may apply. Worth checking with your CA."
+          info="These are settled now, so nothing is owed to the supplier. The credit should have been reversed in GSTR-3B Table 4(B)(2) when the 180 days passed, and claimed back once paid. If it was not reversed then, add it to Table 4(B)(2) and 4(A)(5) together now; interest under section 50 applies only if the credit was used to pay tax in the months between."
           content={<div className="space-y-2">{paidLate.map(f => <Row key={f.id} f={f} />)}</div>}
         />
       )}

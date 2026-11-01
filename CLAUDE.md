@@ -514,6 +514,15 @@ cause**, never as a new line at the bottom.
   rejected is re-designed for the new shape, not carried over. (Now SUPER
   RULES S1–S3.)
 
+· **1 Nov (Rahul caught it): parked a law question "for the CA" (#345) and put
+  "ask your CA" in app text — when memory has said since 1 Oct that there IS
+  no CA.** He: "i don't have Ca so you have to found the answers by yourself …
+  anything which is online … youtube". **Rule: an open law question is
+  researched to an answer (primary text, GSTN manuals and tutorials, offline
+  tool docs, portal walkthrough videos, forums) and the app states what it
+  does and why. "Ask your CA" is never an answer — not in the tasklog, not on
+  a screen.**
+
 · **31 Oct (Rahul caught both): I removed a design he had, and I slowed the
   app he uses every day.** (1) Phase 5e-6 (20 Oct) replaced the customer page's
   WhatsApp-style history (his June design, "UI: WhatsApp-style party chat view")

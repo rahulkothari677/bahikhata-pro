@@ -11,6 +11,7 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CorrectionsList, periodName, type CorrectionRow } from '@/components/reports/CorrectionsList'
+import { GSTIN_CORRECTION_ROUTE } from '@/lib/gstr1-amendments'
 
 beforeAll(() => {
   window.matchMedia = window.matchMedia || ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList)
@@ -61,8 +62,8 @@ test('switched on, then the bill changed again: off, and it says why', () => {
 })
 
 test('one the app cannot write shows the reason, and no switch', () => {
-  show([{ ...ROW, canInclude: false, problem: 'This now belongs with sales to other customers — Ask your CA.' }])
-  expect(screen.getByText(/Ask your CA/)).toBeInTheDocument()
+  show([{ ...ROW, canInclude: false, problem: 'A correction cannot move a bill to another GSTR-1 table.' }])
+  expect(screen.getByText(/cannot move a bill/)).toBeInTheDocument()
   expect(screen.queryByRole('switch')).toBeNull()
 })
 
@@ -71,11 +72,11 @@ test('#100: a changed GSTIN shows the short fix on the row, the full advice behi
     ...ROW, canInclude: false,
     changes: ['Customer GSTIN changed from 08AAACT4321K1ZE to 08AAACT9876K1ZK'],
     problem: 'Fix with a credit note and a fresh bill to the right GSTIN',
-    problemInfo: 'Customer GSTIN changed: raise a credit note on this bill and a fresh bill to the right GSTIN — the route the portal always accepts. A Table 9A change of GSTIN is disputed between sources; ask your CA before trying it.',
+    problemInfo: GSTIN_CORRECTION_ROUTE,
   }])
   const row = screen.getByTestId('correction-row')
   expect(row).toHaveTextContent('Fix with a credit note and a fresh bill to the right GSTIN')
-  expect(row.textContent).not.toMatch(/disputed between sources/) // the long part is behind ⓘ
+  expect(row.textContent).not.toMatch(/matched to the bill by the GSTIN/) // the long part is behind ⓘ
   expect(screen.getByRole('button', { name: 'About how to correct INV-0003' })).toBeInTheDocument()
   expect(screen.queryByRole('switch')).toBeNull()
 })

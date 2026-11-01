@@ -4,6 +4,7 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
+import { itcVerificationCheck, type ReadinessCheck } from '@/lib/gst-readiness-checks'
 
 /**
  * "Can I file this month, and if not, what do I fix?"
@@ -31,17 +32,6 @@ import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
  *             not a problem; it is the law working. Presenting it in amber
  *             beside a real error taught the wrong thing.
  */
-
-export interface ReadinessCheck {
-  id: string
-  severity: 'blocker' | 'warn' | 'info' | 'ok'
-  title: string
-  detail: string
-  /** Rupees, when the check is about an amount. */
-  amount?: number
-  /** Where the shopkeeper goes to deal with it. */
-  action?: { label: string; view: string }
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -101,10 +91,7 @@ export async function GET(req: NextRequest) {
     /*
      * 2. Has input credit been checked against GSTR-2B?
      *
-     * A warning rather than a blocker: the return CAN be filed on book figures.
-     * But under Rule 36(4) the claim may be too high, and an over-claim is
-     * repaid later with interest — so the shopkeeper should know they are
-     * taking that risk, not be stopped.
+     * The rule (a blocker since #115) lives in lib/gst-readiness-checks.ts.
      */
     const monthYear = (() => {
       const ist = new Date(periodStart.getTime() + 5.5 * 60 * 60 * 1000)
@@ -114,22 +101,8 @@ export async function GET(req: NextRequest) {
     const purchaseCount = await db.transaction.count({
       where: { userId, type: 'purchase', deletedAt: null, date: { gte: periodStart, lte: periodEnd } },
     })
-    if (!twoB && purchaseCount > 0) {
-      checks.push({
-        id: 'itc-unverified',
-        severity: 'warn',
-        title: 'Input credit has not been checked against GSTR-2B',
-        detail: 'You can only claim credit on bills your suppliers have actually filed. Import this month’s GSTR-2B and the claim is worked out for you.',
-        action: { label: 'Import GSTR-2B', view: 'reports' },
-      })
-    } else if (twoB) {
-      checks.push({
-        id: 'itc-unverified',
-        severity: 'ok',
-        title: 'Input credit checked against GSTR-2B',
-        detail: `Matched against ${twoB.invoiceCount} ${twoB.invoiceCount === 1 ? 'bill' : 'bills'} from the portal.`,
-      })
-    }
+    const twoBCheck = itcVerificationCheck(twoB, purchaseCount)
+    if (twoBCheck) checks.push(twoBCheck)
 
     /*
      * 3. Credit blocked under Section 17(5).

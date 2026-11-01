@@ -71,7 +71,7 @@ describe('the deadline — 30 November, or the annual return, whichever is EARLI
   })
 })
 
-describe('a customer GSTIN: GSTR-1A refuses it, the later-month route is disputed (#100)', () => {
+describe('a customer GSTIN: GSTR-1A refuses it, a later GSTR-1 fixes it (#100, #345)', () => {
   test('a GSTIN change is recognised, whatever else changed on the invoice', () => {
     expect(gstinChanged(['Customer GSTIN changed from A to B'])).toBe(true)
     expect(gstinChanged(['Value changed', 'Customer GSTIN changed'])).toBe(true)
@@ -83,17 +83,18 @@ describe('a customer GSTIN: GSTR-1A refuses it, the later-month route is dispute
     }
   })
 
-  test('the advice no longer calls it impossible — it gives the sure route and names the dispute', () => {
+  test('the advice gives both fixes and never defers to a CA', () => {
     /*
      * REWRITTEN 31 Oct 2026 (#100). On 29 Aug this test locked in "it cannot
      * be amended in any period" — which contradicts the GSTN GSTR-1A FAQ ("only
      * through GSTR 1 of the following tax periods") and the CA, three times.
-     * GSTR-1A refuses it; whether Table 9A accepts it is disputed (#345); the
-     * credit note + fresh bill route is the one every source accepts.
+     * GSTR-1A refuses it. Settled 1 Nov (#345, no CA): credit note + fresh
+     * bill (the app can do it), or the portal's 9A screen by hand.
      */
     expect(GSTIN_CORRECTION_ROUTE).toMatch(/credit note/)
     expect(GSTIN_CORRECTION_ROUTE).toMatch(/fresh bill/)
-    expect(GSTIN_CORRECTION_ROUTE).toMatch(/ask your CA/i)
+    expect(GSTIN_CORRECTION_ROUTE).toMatch(/Table 9A screen/)
+    expect(GSTIN_CORRECTION_ROUTE).not.toMatch(/\bCA\b|disputed/i)
     expect(GSTIN_CORRECTION_ROUTE).not.toMatch(/cannot|never|impossible/i)
     expect(GSTIN_GSTR1A_REMEDY).toMatch(/^GSTR-1A cannot change a customer’s GSTIN\./)
   })

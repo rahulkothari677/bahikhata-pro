@@ -243,6 +243,9 @@ export function Gstr3bReport() {
   // no longer matches the books. Warn the user so they can file a revised return.
   const filedNet = data?.snapshot?.filedNetTaxPayable
   const liveNet = data?.netTaxPayable
+  // #115: until GSTR-2B is imported the credit is the books' figure, so the tax
+  // to pay is a floor, not a fact. Not shown once filed — that figure is history.
+  const estimate = !isFiled && data?.itcBasis === 'books-unverified' && (data?.totalItc || 0) > 0
   const hasDivergence = isFiled && typeof filedNet === 'number' && typeof liveNet === 'number'
     && Math.abs(filedNet - liveNet) > 0.01
 
@@ -396,6 +399,7 @@ export function Gstr3bReport() {
           color={data?.netTaxPayable > 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}
           bg={data?.netTaxPayable > 0 ? 'bg-rose-100 dark:bg-rose-900/40' : 'bg-emerald-100 dark:bg-emerald-900/40'}
           highlight
+          estimate={estimate}
         />
         <SummaryCard
           icon={<Receipt className="w-4 h-4" />}
@@ -630,10 +634,18 @@ export function Gstr3bReport() {
       )}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-white/80 text-xs font-medium">6.1 Net Tax Payable</p>
+            <p className="text-white/80 text-xs font-medium flex items-center gap-1">
+              6.1 Net Tax Payable
+              {estimate && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold text-white">Estimate</span>}
+            </p>
             <p className="text-3xl font-bold tabular-nums mt-1">
               {formatINR(data?.netTaxPayable || 0)}
             </p>
+            {estimate && (
+              <p className="text-xs text-white/85 mt-1">
+                Credit not yet checked against GSTR-2B — the tax may be higher.
+              </p>
+            )}
           </div>
           <div className="text-right text-xs text-white/70 space-y-0.5">
             <p>Output: {formatINR(data?.totalOutputTax || 0)}</p>
@@ -680,7 +692,7 @@ export function Gstr3bReport() {
 
 // ─── Helper components ───────────────────────────────────────────
 
-function SummaryCard({ icon, label, value, color, bg, highlight, isCount }: {
+function SummaryCard({ icon, label, value, color, bg, highlight, isCount, estimate }: {
   icon: React.ReactNode
   label: string
   value: number
@@ -688,6 +700,8 @@ function SummaryCard({ icon, label, value, color, bg, highlight, isCount }: {
   bg: string
   highlight?: boolean
   isCount?: boolean
+  /** #115: shown until GSTR-2B is imported — the figure rests on book credit. */
+  estimate?: boolean
 }) {
   return (
     <div className={cn(
@@ -702,6 +716,7 @@ function SummaryCard({ icon, label, value, color, bg, highlight, isCount }: {
         <p className={cn('text-base font-bold tabular-nums', color)}>
           {isCount ? value : formatINR(value)}
         </p>
+        {estimate && <p className="text-xs font-medium text-check">Estimate · import GSTR-2B</p>}
       </div>
     </div>
   )

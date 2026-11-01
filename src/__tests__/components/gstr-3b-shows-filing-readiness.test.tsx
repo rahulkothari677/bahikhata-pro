@@ -169,4 +169,32 @@ describe('GSTR-3B screen surfaces filing readiness', () => {
     // One line, not a list of green ticks.
     expect(screen.queryByText('Every sale has an HSN code')).not.toBeInTheDocument()
   })
+
+  /*
+   * #115: until GSTR-2B is imported the credit is the books' figure, so the
+   * tax to pay is labelled an estimate — on the summary card and on 6.1.
+   */
+  it('labels the tax to pay an estimate while credit is unchecked', async () => {
+    mockOfflineFetch.mockImplementation((url: string) =>
+      url.includes('/api/gst-readiness') ? ok(READINESS_WITH_BLOCKER) : ok({ ...GSTR3B, itcBasis: 'books-unverified' }),
+    )
+    renderReport()
+    await waitFor(() => expect(screen.getByText('August 2026')).toBeInTheDocument())
+    expect(screen.getByText('Estimate · import GSTR-2B')).toBeInTheDocument()
+    expect(screen.getByText('Estimate')).toBeInTheDocument()
+    expect(screen.getByText(/the tax may be higher/)).toBeInTheDocument()
+  })
+
+  it.each([
+    ['checked against 2B', { itcBasis: 'gstr2b' }],
+    ['already filed', { itcBasis: 'books-unverified', snapshot: { filingStatus: 'filed' } }],
+    ['no credit claimed', { itcBasis: 'books-unverified', totalItc: 0 }],
+  ])('no estimate label when %s', async (_, extra) => {
+    mockOfflineFetch.mockImplementation((url: string) =>
+      url.includes('/api/gst-readiness') ? ok(READINESS_WITH_BLOCKER) : ok({ ...GSTR3B, ...extra }),
+    )
+    renderReport()
+    await waitFor(() => expect(screen.getByText('August 2026')).toBeInTheDocument())
+    expect(screen.queryByText(/Estimate/)).not.toBeInTheDocument()
+  })
 })

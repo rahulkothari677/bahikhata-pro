@@ -3128,7 +3128,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <p className="text-sm text-amber-800 dark:text-amber-300">A composition shop can&apos;t sell to another state.</p>
                   <InfoHint
                     label="Composition and other states"
-                    text="Section 10(2)(c) of the CGST Act: a shop in the composition scheme may not sell to a buyer in another state. Speak to your CA before billing this."
+                    text="Section 10(2)(c) of the CGST Act: a shop in the composition scheme may not supply goods to another state. What counts is where the goods are delivered, not the buyer’s address — if the buyer takes the goods here, set the place of supply to your own state and bill it as a local sale."
                   />
                 </div>
               )}

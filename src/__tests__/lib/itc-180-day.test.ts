@@ -200,16 +200,17 @@ describe('the message is something a shopkeeper can act on', () => {
     expect(a.reason).toMatch(/claim it again/)
   })
 
-  test('paid-late sends them to their CA rather than asserting the interest', () => {
+  test('paid-late says when interest applies, without inventing a number — and never "ask your CA" (#346)', () => {
     // We can see that the reversal fell due. We cannot compute the interest —
-    // that depends on the reversal and re-claim dates and the Section 50 rate,
-    // and a confident wrong number here would be worse than none.
+    // that depends on whether the credit was used and for how long — so the
+    // rule is stated (section 50, only if used), not a rupee figure.
     const a = assessItcReversal({
       ...BILL, invoiceDate: daysBefore(220), paidAmount: 0,
       allocations: [{ amount: 118000, date: daysBefore(10) }],
     }, ASOF)
-    expect(a.reason).toMatch(/CA/)
-    expect(a.reason).toMatch(/interest may apply/)
+    expect(a.reason).not.toMatch(/\bCA\b/)
+    expect(a.reason).toMatch(/section 50 applies only if that credit was used/)
+    expect(a.reason).not.toMatch(/₹[\d,]+ (of )?interest/)
   })
 })
 

@@ -11,7 +11,7 @@ import { stateCodeOf } from '@/lib/gst'
 import { getAdvancesForPeriod } from '@/lib/advances-for-period'
 import {
   buildCorrections, filedVersionsFrom, latestVersions, includedCorrections, amendmentTables, amendmentDeadline,
-  GSTIN_CORRECTION_ROUTE, GSTIN_CORRECTION_SHORT,
+  problemParts,
   type Correction, type CurrentDoc, type IncludedCorrections,
 } from '@/lib/gstr1-amendments'
 import { gstr1aWindow, correctionFitsGstr1a } from '@/lib/gstr1a-window'
@@ -333,9 +333,9 @@ function correctionsForScreen(all: Correction[], included: Correction[], existin
       // Switched on for an older version of the bill: it has changed again since, so it is off until confirmed again.
       lapsed: !!stored && stored !== c.fingerprint,
       canInclude: !!c.row && !deadline.expired,
-      // The row gets the short form; the full advice (and the CA note) sits behind ⓘ.
-      problem: c.problem === GSTIN_CORRECTION_ROUTE ? GSTIN_CORRECTION_SHORT : c.problem ?? (deadline.expired ? deadline.message : null),
-      problemInfo: c.problem === GSTIN_CORRECTION_ROUTE ? GSTIN_CORRECTION_ROUTE : null,
+      // The row gets the short form; the full advice sits behind ⓘ.
+      problem: problemParts(c.problem).short ?? (deadline.expired ? deadline.message : null),
+      problemInfo: problemParts(c.problem).info,
       deadline: deadline.message,
       // #344: the date alone, for the row; the sentence goes behind ⓘ.
       deadlineDate: deadline.effectiveDeadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),

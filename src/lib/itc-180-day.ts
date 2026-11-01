@@ -233,7 +233,7 @@ export function assessItcReversal(
         daysLeft,
         unpaidAmount: 0,
         itcAtRisk: missedItc,
-        reason: `This supplier was paid, but only after the 180-day limit passed on ${deadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}. ₹${shortAtDeadline.toLocaleString('en-IN')} was still owed on that date, so the credit on it should have been reversed then and claimed again once you paid. Check this one with your CA — interest may apply.`,
+        reason: `This supplier was paid, but only after the 180-day limit passed on ${deadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}. ₹${shortAtDeadline.toLocaleString('en-IN')} was still owed on that date, so the credit on it should have been reversed then and claimed again once you paid. Interest under section 50 applies only if that credit was used to pay tax in between.`,
       }
     }
 

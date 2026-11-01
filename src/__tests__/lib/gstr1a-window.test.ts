@@ -49,26 +49,35 @@ describe('when the window is open', () => {
   })
 })
 
-describe('a quarterly filer gets a refusal, not a guess', () => {
+describe('a quarterly filer gets the real rule, per quarter (#346)', () => {
   /*
-   * The CA left Q4.6 blank — GSTR-1A was one of the questions he did not
-   * answer. My understanding is that QRMP filers get a GSTR-1A after the
-   * quarterly GSTR-1, but that is unconfirmed, and this decides whether a
-   * shopkeeper acts on a deadline.
-   *
-   * Refusing beats guessing, and it is checked BEFORE the 3B branch: a
-   * quarterly filer with an unfiled GSTR-3B would otherwise fall through to
-   * 'open' and be told confidently about a window on a schedule nobody has
-   * confirmed.
+   * GSTN advisory on GSTR-1A (27 Jul 2024): for QRMP it opens after the
+   * quarterly GSTR-1 and closes when the quarter's GSTR-3B is filed, and it
+   * covers the IFF bills of the first two months. This used to refuse and say
+   * "ask your CA" — there is no CA, and the rule is published.
    */
-  test.each([
-    [false, 'GSTR-3B unfiled'],
-    [true, 'GSTR-3B filed'],
-  ])('quarterly + %s → unknown, and says to ask the CA', (gstr3bFiled) => {
-    const w = gstr1aWindow({ gstr1Filed: true, gstr3bFiled, filingFrequency: 'quarterly' })
-    expect(w.state).toBe('unknown-for-qrmp')
-    expect(w.isOpen).toBe(false)
-    expect(w.message).toMatch(/CA/)
+  test("open until the quarter's GSTR-3B, and says IFF bills are covered", () => {
+    const w = gstr1aWindow({ gstr1Filed: true, gstr3bFiled: false, filingFrequency: 'quarterly' })
+    expect(w.state).toBe('open')
+    expect(w.isOpen).toBe(true)
+    expect(w.message).toMatch(/quarter/)
+    expect(w.message).toMatch(/IFF/)
+  })
+
+  test("closed once the quarter's GSTR-3B is filed; corrections go to next quarter", () => {
+    const w = gstr1aWindow({ gstr1Filed: true, gstr3bFiled: true, filingFrequency: 'quarterly' })
+    expect(w.state).toBe('closed')
+    expect(w.message).toMatch(/next quarter/)
+  })
+
+  test('no message ever defers to a CA', () => {
+    for (const filingFrequency of ['monthly', 'quarterly', null] as const) {
+      for (const gstr1Filed of [true, false]) {
+        for (const gstr3bFiled of [true, false]) {
+          expect(gstr1aWindow({ gstr1Filed, gstr3bFiled, filingFrequency }).message).not.toMatch(/\bCA\b/)
+        }
+      }
+    }
   })
 
   test('a monthly filer is answered normally', () => {

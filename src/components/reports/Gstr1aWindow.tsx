@@ -31,7 +31,7 @@
  * and what is not; the file waits for the schema.
  */
 
-import { Clock, AlertTriangle, Info } from 'lucide-react'
+import { Clock, AlertTriangle } from 'lucide-react'
 
 interface Correction {
   inum: string
@@ -42,7 +42,7 @@ interface Correction {
 
 interface Props {
   window?: {
-    state: 'not-filed-yet' | 'open' | 'closed' | 'unknown-for-qrmp'
+    state: 'not-filed-yet' | 'open' | 'closed'
     message: string
     isOpen: boolean
   } | null
@@ -64,15 +64,6 @@ export function Gstr1aWindow({ window, corrections = [], blockedCount = 0 }: Pro
    * furniture people stop reading.
    */
   if (window.state === 'open' && corrections.length === 0) return null
-
-  if (window.state === 'unknown-for-qrmp') {
-    return (
-      <div className="rounded-2xl border border-border/60 bg-muted/30 p-4 flex items-start gap-2">
-        <Info className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-muted-foreground">{window.message}</p>
-      </div>
-    )
-  }
 
   /*
    * CLOSED — silent, and deliberately so.

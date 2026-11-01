@@ -254,7 +254,7 @@ export function lookupHsn(input: string, asOn: Date = new Date()): HsnLookupResu
       return {
         ...base, ...extra, outcome: 'unknown', matchedOn: key, rules,
         suggestedRate: null,
-        message: `HSN ${key} has a rate, but this notification specifically excludes ${hsn}. Check the exemption list or ask your CA.`,
+        message: `HSN ${key} has a rate, but that rate row specifically excludes ${hsn}, so it is not yours. Type the full 8-digit code from your supplier’s bill to find the row that covers it, or use the rate printed on that bill.`,
       }
     }
     const rates = [...new Set(applicable.map(r => r.gstRate))]
