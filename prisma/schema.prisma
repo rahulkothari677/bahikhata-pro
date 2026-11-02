@@ -1298,6 +1298,10 @@ model Gstr2bInvoice {
   sgst            Int          @default(0)
   totalAmount     Int          @default(0)
   isReverseCharge Boolean      @default(false)
+  /// #353: false when 2B marks the bill itcavl "N" — no input credit may be claimed on it.
+  itcAvailable    Boolean      @default(true)
+  /// 2B's reason code (rsn) when credit is not available, as the portal sent it.
+  itcReason       String?
   createdAt       DateTime     @default(now())
 
   @@index([gstr2bImportId])

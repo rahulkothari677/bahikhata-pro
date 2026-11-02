@@ -445,7 +445,10 @@ function MatchedTable({ items }: { items: any[] }) {
               <td className="text-right py-1.5 tabular-nums">{m.twoBSgst ? formatINR(m.twoBSgst) : '-'}</td>
               <td className="text-right py-1.5 tabular-nums font-medium">{formatINR(m.twoBTotal)}</td>
               <td className="text-center py-1.5">
-                {m.status === 'matched' ? (
+                {m.status === 'itc_not_available' ? (
+                  // #353: 2B itself says no credit on this bill (itcavl N); rsn is the portal's reason code.
+                  <Badge className="bg-bad text-white text-xs" title={m.itcReason ? `2B reason code: ${m.itcReason}` : undefined}>No credit in 2B</Badge>
+                ) : m.status === 'matched' ? (
                   <Badge className="bg-emerald-600 text-white text-xs">✓ Match</Badge>
                 ) : (
                   <Badge className="bg-amber-600 text-white text-xs">Amt Δ₹{m.amountDifference?.toFixed(2)}</Badge>

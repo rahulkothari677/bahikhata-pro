@@ -403,7 +403,8 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
         itcClaimedIn: p.itcClaimedIn,
         supplier: p.party?.name || null,
       })),
-      gstr2b.invoices.map((i) => ({ supplierGstin: i.supplierGstin, invoiceNumber: i.invoiceNumber, taxableValue: i.taxableValue, cgst: i.cgst, sgst: i.sgst, igst: i.igst })),
+      // #353: a bill 2B marks "ITC not available" (itcavl N) is never claimed.
+      gstr2b.invoices.filter((i) => i.itcAvailable).map((i) => ({ supplierGstin: i.supplierGstin, invoiceNumber: i.invoiceNumber, taxableValue: i.taxableValue, cgst: i.cgst, sgst: i.sgst, igst: i.igst })),
     )
     const t = itcClaim.totals.claim
     itcTaxableValue = t.taxable; itcCgst = t.cgst; itcSgst = t.sgst; itcIgst = t.igst

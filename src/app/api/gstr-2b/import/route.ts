@@ -6,6 +6,7 @@ import { roundMoney } from '@/lib/money'
 import { getISTDateParts, istMonthStartOffset } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { logAudit } from '@/lib/audit'
+import { parseGstr2b } from '@/lib/gstr2b-parse'
 
 /**
  * POST /api/gstr-2b/import
@@ -99,12 +100,12 @@ export async function POST(req: NextRequest) {
      * Both shapes are accepted now. The portal's own nesting first, because
      * that is what a shopkeeper actually has.
      */
-    const root = data?.data && typeof data.data === 'object' ? data.data : data
-    const docdata = root?.docdata && typeof root.docdata === 'object' ? root.docdata : root
+    // #353: one parser (lib/gstr2b-parse.ts) reads the real 2B layout — the money is in `items`.
+    const parsed = parseGstr2b(data)
 
     // === Validate GSTIN match ===
     // The GSTIN in the 2B file must match the shop's GSTIN
-    const fileGstin = root.gstin
+    const fileGstin = parsed.gstin
     if (!fileGstin) {
       return NextResponse.json({ error: 'The uploaded file does not contain a GSTIN. Please download the GSTR-2B JSON from the GST portal.' }, { status: 400 })
     }
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
 
     // === Validate filing period match ===
     // The portal calls it `rtnprd`; `fp` is the flat variant.
-    const fileFp = root.rtnprd || root.fp
+    const fileFp = parsed.period
     if (fileFp && fileFp !== monthYear) {
       return NextResponse.json({
         error: 'Period mismatch',
@@ -131,63 +132,8 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // === Parse the 2B JSON into normalized invoice rows ===
-    const b2bEntries = docdata.b2b || []
-    const parsedInvoices: Array<{
-      supplierGstin: string
-      invoiceNumber: string
-      invoiceDate: string | null
-      taxableValue: number
-      igst: number
-      cgst: number
-      sgst: number
-      totalAmount: number
-      isReverseCharge: boolean
-    }> = []
-
-    for (const b2bEntry of b2bEntries) {
-      const ctin = b2bEntry.ctin
-      if (!ctin) continue // skip entries without supplier GSTIN
-
-      const invs = b2bEntry.inv || []
-      for (const inv of invs) {
-        const inum = inv.inum || inv.inum_inv || 'UNKNOWN'
-        /*
-         * The money is on the ITEMS, not on the invoice.
-         *
-         * A 2B invoice carries `val` (the gross invoice value) and a rate-wise
-         * `itms: [{ itm_det: { txval, iamt, camt, samt } }]`. Reading `txval`
-         * and `camt` off the invoice itself found nothing and defaulted to
-         * zero — so a file could import "1 invoice" worth ₹0 and report
-         * success. Under Rule 36(4) the app then limits input credit to what
-         * 2B contains, so a silent zero does not merely lose information: it
-         * tells the shopkeeper they may claim nothing, and they pay tax they
-         * did not owe.
-         *
-         * Invoice-level fields are still honoured as a fallback for the
-         * flattened shape.
-         */
-        const items = Array.isArray(inv.itms) ? inv.itms : []
-        const sumItems = (f: string) =>
-          items.reduce((s: number, it: any) => s + (Number(it?.itm_det?.[f]) || 0), 0)
-        const taxable = items.length ? sumItems('txval') : Number(inv.txval) || 0
-        const igst = items.length ? sumItems('iamt') : Number(inv.iamt) || 0
-        const cgst = items.length ? sumItems('camt') : Number(inv.camt) || 0
-        const sgst = items.length ? sumItems('samt') : Number(inv.samt) || 0
-
-        parsedInvoices.push({
-          supplierGstin: String(ctin).toUpperCase(),
-          invoiceNumber: String(inum),
-          invoiceDate: inv.idt || inv.dt || null,
-          taxableValue: roundMoney(taxable),
-          igst: roundMoney(igst),
-          cgst: roundMoney(cgst),
-          sgst: roundMoney(sgst),
-          totalAmount: roundMoney(Number(inv.val) || Number(inv.itcval) || 0),
-          isReverseCharge: String(inv.rchrg || inv.rchrgitc || 'N').toUpperCase() === 'Y',
-        })
-      }
-    }
+    // === The bill lines, read by the one parser ===
+    const parsedInvoices = parsed.lines
 
     // Compute summary totals
     /*
@@ -200,7 +146,7 @@ export async function POST(req: NextRequest) {
      * A silent no-op dressed as success is worse here than an error, because
      * the consequence is paying tax they did not owe.
      */
-    if (b2bEntries.length === 0 && parsedInvoices.length === 0) {
+    if (!parsed.hasB2b && parsedInvoices.length === 0) {
       return NextResponse.json({
         error: 'No purchase invoices found in this file',
         message:
@@ -253,6 +199,8 @@ export async function POST(req: NextRequest) {
             sgst: inv.sgst,
             totalAmount: inv.totalAmount,
             isReverseCharge: inv.isReverseCharge,
+            itcAvailable: inv.itcAvailable,
+            itcReason: inv.itcReason,
           })),
         },
       },

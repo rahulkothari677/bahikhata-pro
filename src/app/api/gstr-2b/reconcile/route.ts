@@ -154,7 +154,10 @@ export async function GET(req: NextRequest) {
           // Match quality
           amountMatch: isAmountMatch,
           amountDifference: roundMoney(amountDiff),
-          status: isAmountMatch ? 'matched' : 'amount_mismatch',
+          // #353: 2B says no credit on this bill (itcavl N, reason rsn) — never counted as eligible.
+          itcAvailable: inv.itcAvailable,
+          itcReason: inv.itcReason,
+          status: !inv.itcAvailable ? 'itc_not_available' : isAmountMatch ? 'matched' : 'amount_mismatch',
         })
       } else {
         // 2B invoice has no matching purchase in books
@@ -195,7 +198,7 @@ export async function GET(req: NextRequest) {
 
     // === Compute summary totals ===
     const matchedItc = roundMoney(
-      matched.reduce((s, m) => s + m.twoBIgst + m.twoBCgst + m.twoBSgst, 0)
+      matched.filter((m) => m.itcAvailable).reduce((s, m) => s + m.twoBIgst + m.twoBCgst + m.twoBSgst, 0)
     )
     const deferredItc = roundMoney(
       booksOnly.reduce((s, b) => s + b.igst + b.cgst + b.sgst, 0)

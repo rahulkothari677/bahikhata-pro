@@ -1,96 +1,99 @@
 /**
  * The 2B importer must read the file the portal actually gives you.
  *
- * WHY (2026-08-09, found by uploading one). The parser was written against a
- * flat shape — `{ gstin, rtnprd, b2b: [...] }` — that the GST portal does not
- * produce. Two failures followed, and the second is the dangerous one:
+ * 9 Aug 2026: the parser was written against a flat shape the portal does not
+ * produce, so a real file was rejected, and one that imported read ₹0.
  *
- *   1. A REAL FILE WAS REJECTED with "does not contain a GSTIN" — the very file
- *      the error tells you to download. Only hand-flattened files imported.
- *   2. A FILE THAT DID IMPORT READ ₹0. The money in a 2B sits on the ITEMS
- *      (`itms[].itm_det.txval`), not on the invoice, which carries only `val`.
- *      So an import could report "1 invoice found, taxable ₹0" and call itself
- *      a success. Under Rule 36(4) this app limits input credit to what 2B
- *      contains — so a silent zero tells the shopkeeper they may claim nothing
- *      and they pay tax they never owed.
+ * #353 (2 Nov 2026): the 9 Aug fix read the money from `itms[].itm_det` — the
+ * GSTR-2A / GSTR-1 layout — and this test checked a COPY of that extraction
+ * ("kept in step with the route"), so it pinned the wrong shape. A real
+ * GSTR-2B carries `items[].{rt, txval, igst, cgst, sgst, cess}` (GSTN GSTR-2B
+ * GET response as published in GSP API docs) and `rev` for reverse charge, so
+ * every real bill imported at ₹0 tax and GSTR-3B (which claims the smaller of
+ * books and 2B, #116) would have claimed no credit at all.
  *
- * These pin the parsing shape. The route is thin around it; what matters is
- * that both nestings resolve and the amounts come off the items.
+ * Now the route and this test call the same parser (lib/gstr2b-parse.ts).
  */
+import fs from 'node:fs'
+import path from 'node:path'
+import { parseGstr2b } from '@/lib/gstr2b-parse'
 
-/** The extraction the route performs, kept in step with it. */
-function extract(data: any) {
-  const root = data?.data && typeof data.data === 'object' ? data.data : data
-  const docdata = root?.docdata && typeof root.docdata === 'object' ? root.docdata : root
-  const out: Array<{ inum: string; taxable: number; cgst: number; sgst: number; igst: number }> = []
-  for (const entry of docdata.b2b || []) {
-    for (const inv of entry.inv || []) {
-      const items = Array.isArray(inv.itms) ? inv.itms : []
-      const sum = (f: string) =>
-        items.reduce((s: number, it: any) => s + (Number(it?.itm_det?.[f]) || 0), 0)
-      out.push({
-        inum: inv.inum,
-        taxable: items.length ? sum('txval') : Number(inv.txval) || 0,
-        cgst: items.length ? sum('camt') : Number(inv.camt) || 0,
-        sgst: items.length ? sum('samt') : Number(inv.samt) || 0,
-        igst: items.length ? sum('iamt') : Number(inv.iamt) || 0,
-      })
-    }
-  }
-  return { gstin: root.gstin, period: root.rtnprd || root.fp, invoices: out }
+/** One bill exactly as the GSTR-2B GET response lays it out (keys as published). */
+const TWO_B_BILL = {
+  inum: 'S008400', typ: 'R', dt: '24-11-2026', val: 11800, pos: '27', rev: 'N',
+  itcavl: 'Y', rsn: '', diffprcnt: 1, srctyp: 'e-Invoice', irn: 'abc', irngendate: '24-11-2026',
+  items: [{ num: 1, rt: 18, txval: 10000, igst: 0, cgst: 900, sgst: 900, cess: 0 }],
 }
+const portal = (inv: object[], extra: object = {}) => ({
+  chksum: 'abc',
+  data: { gstin: '27ABCDE1234F1Z5', rtnprd: '112026', version: '1.0', gendt: '14-12-2026', ...extra, docdata: { b2b: [{ ctin: '29bbbbb1111b1z2', trdnm: 'Supplier', supfildt: '11-12-2026', supprd: '112026', inv }] } },
+})
 
-const ONE_INVOICE = {
-  inum: 'SUP-11', idt: '05-08-2026', val: 11800, pos: '27', rchrg: 'N',
-  itms: [{ num: 1, itm_det: { rt: 18, txval: 10000, iamt: 0, camt: 900, samt: 900, csamt: 0 } }],
-}
-
-describe('the shape the GST portal actually produces', () => {
-  it('reads a genuine GSTR-2B download', () => {
-    const portalFile = {
-      chksum: 'abc',
-      data: { gstin: '27ABCDE1234F1Z5', rtnprd: '082026', docdata: { b2b: [{ ctin: '29BBBBB1111B1Z2', inv: [ONE_INVOICE] }] } },
-    }
-    const r = extract(portalFile)
+describe('a genuine GSTR-2B download (#353)', () => {
+  it('reads the GSTIN, the period and the money from `items`', () => {
+    const r = parseGstr2b(portal([TWO_B_BILL]))
     expect(r.gstin).toBe('27ABCDE1234F1Z5')
-    expect(r.period).toBe('082026')
-    expect(r.invoices).toHaveLength(1)
-    expect(r.invoices[0].taxable).toBe(10000)
+    expect(r.period).toBe('112026')
+    expect(r.lines).toEqual([{
+      supplierGstin: '29BBBBB1111B1Z2', invoiceNumber: 'S008400', invoiceDate: '24-11-2026',
+      taxableValue: 10000, igst: 0, cgst: 900, sgst: 900, totalAmount: 11800,
+      isReverseCharge: false, itcAvailable: true, itcReason: null,
+    }])
   })
 
-  it('still reads the flattened shape', () => {
-    const flat = { gstin: '27ABCDE1234F1Z5', rtnprd: '082026', b2b: [{ ctin: '29BBBBB1111B1Z2', inv: [ONE_INVOICE] }] }
-    expect(extract(flat).invoices[0].taxable).toBe(10000)
+  it('adds every rate line of one bill', () => {
+    const mixed = { ...TWO_B_BILL, val: 12650, items: [
+      { num: 1, rt: 18, txval: 10000, igst: 0, cgst: 900, sgst: 900, cess: 0 },
+      { num: 2, rt: 5, txval: 1000, igst: 0, cgst: 25, sgst: 25, cess: 0 },
+    ] }
+    const [l] = parseGstr2b(portal([mixed])).lines
+    expect([l.taxableValue, l.cgst, l.sgst]).toEqual([11000, 925, 925])
+  })
+
+  it('an inter-state bill carries IGST', () => {
+    const inter = { ...TWO_B_BILL, items: [{ num: 1, rt: 18, txval: 10000, igst: 1800, cgst: 0, sgst: 0, cess: 0 }] }
+    expect(parseGstr2b(portal([inter])).lines[0].igst).toBe(1800)
+  })
+
+  it('reverse charge comes from `rev`', () => {
+    expect(parseGstr2b(portal([{ ...TWO_B_BILL, rev: 'Y' }])).lines[0].isReverseCharge).toBe(true)
+  })
+
+  it('a bill 2B marks itcavl "N" is kept, with its reason, as credit NOT available', () => {
+    const [l] = parseGstr2b(portal([{ ...TWO_B_BILL, itcavl: 'N', rsn: 'P' }])).lines
+    expect([l.itcAvailable, l.itcReason]).toEqual([false, 'P'])
   })
 })
 
-describe('the money comes off the items', () => {
-  it('does not read zero from an invoice that only carries val', () => {
-    // This was the bug: `val` is the gross invoice value, not the taxable value.
-    const r = extract({ gstin: 'G', rtnprd: '082026', b2b: [{ ctin: 'C', inv: [ONE_INVOICE] }] })
-    expect(r.invoices[0].taxable).toBe(10000)
-    expect(r.invoices[0].cgst).toBe(900)
-    expect(r.invoices[0].sgst).toBe(900)
-    expect(r.invoices[0].taxable).not.toBe(0)
+describe('the older shapes still read', () => {
+  const OLD = { inum: 'SUP-11', idt: '05-08-2026', val: 11800, rchrg: 'N', itms: [{ num: 1, itm_det: { rt: 18, txval: 10000, iamt: 0, camt: 900, samt: 900 } }] }
+
+  it('itms / itm_det', () => {
+    const [l] = parseGstr2b({ data: { gstin: 'G', rtnprd: '082026', docdata: { b2b: [{ ctin: 'C', inv: [OLD] }] } } }).lines
+    expect([l.taxableValue, l.cgst, l.sgst, l.invoiceDate]).toEqual([10000, 900, 900, '05-08-2026'])
   })
 
-  it('adds up every rate line on one invoice', () => {
-    const mixed = {
-      inum: 'SUP-12', val: 12600,
-      itms: [
-        { num: 1, itm_det: { rt: 18, txval: 10000, iamt: 0, camt: 900, samt: 900 } },
-        { num: 2, itm_det: { rt: 5, txval: 1000, iamt: 0, camt: 25, samt: 25 } },
-      ],
-    }
-    const r = extract({ gstin: 'G', b2b: [{ ctin: 'C', inv: [mixed] }] })
-    expect(r.invoices[0].taxable).toBe(11000)
-    expect(r.invoices[0].cgst).toBe(925)
+  it('a flattened file with amounts on the bill', () => {
+    const [l] = parseGstr2b({ gstin: 'G', b2b: [{ ctin: 'C', inv: [{ inum: 'X', txval: 500, cgst: 45, sgst: 45 }] }] }).lines
+    expect([l.taxableValue, l.cgst]).toEqual([500, 45])
   })
 
-  it('falls back to invoice-level amounts when there are no items', () => {
-    const noItems = { inum: 'SUP-13', txval: 500, camt: 45, samt: 45, iamt: 0 }
-    const r = extract({ gstin: 'G', b2b: [{ ctin: 'C', inv: [noItems] }] })
-    expect(r.invoices[0].taxable).toBe(500)
-    expect(r.invoices[0].cgst).toBe(45)
+  it('no b2b section is reported, so the route can refuse it', () => {
+    expect(parseGstr2b({ data: { gstin: 'G', docdata: {} } }).hasB2b).toBe(false)
+  })
+})
+
+describe('one parser', () => {
+  it('the import route uses lib/gstr2b-parse and reads no bill field itself', () => {
+    const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gstr-2b/import/route.ts'), 'utf8')
+    expect(route).toMatch(/parseGstr2b\(/)
+    expect(route).not.toMatch(/itm_det|\.itms\b|inv\.rchrg|inv\.inum/)
+  })
+
+  it('GSTR-3B claims only bills 2B says carry credit', () => {
+    const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gstr-3b/route.ts'), 'utf8')
+    const call = route.slice(route.indexOf('claimForPeriod('), route.indexOf('claimForPeriod(') + 600)
+    expect(call).toMatch(/claimForPeriod\(/)
+    expect(call).toMatch(/gstr2b\.invoices\.filter\(\(i\) => i\.itcAvailable\)/)
   })
 })
