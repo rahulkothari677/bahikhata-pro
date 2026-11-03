@@ -160,6 +160,8 @@ describe('it is wired into the screen that already matches', () => {
   test('the countdown is silent when everything matched', () => {
     // Calm when fine. A countdown on a month with nothing to act on is how a
     // banner becomes furniture.
-    expect(ui).toContain('summary.twoBOnly > 0 || summary.booksOnly > 0')
+    // 9a-3: the supplier-bills screen shows it only when a bill needs a decision;
+    // the render is tested in supplier-bills-screen.test.tsx.
+    expect(ui).toMatch(/\{ims && decisions > 0 && \(/)
   })
 })

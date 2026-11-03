@@ -9,6 +9,7 @@
  * same sorting (lib/gstr2b-match.ts).
  */
 import { db } from '@/lib/db'
+import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset } from '@/lib/timezone'
 import { earliestClaimableBill, itcMatchKey } from '@/lib/itc-claim'
 import { sortTwoB, type MatchLine, type MatchPurchase, type StoredDecision, type DecisionKind, type TwoBSort } from '@/lib/gstr2b-match'
@@ -48,7 +49,7 @@ export async function claimCandidates(userId: string, fp: string) {
     select: {
       id: true, date: true, subtotal: true, discountAmount: true, totalAmount: true,
       cgst: true, sgst: true, igst: true, invoiceNo: true, itcClaimedIn: true,
-      party: { select: { id: true, gstin: true, name: true } },
+      party: { select: { id: true, gstin: true, name: true, phone: true } },
     },
     orderBy: [{ date: 'asc' }, { id: 'asc' }],
   })
@@ -63,6 +64,8 @@ export interface TwoBMonth {
   sort: TwoBSort
   /** Bills an earlier month's 2B marked "no credit" (itcMatchKey). */
   noCreditKeys: Set<string>
+  /** GSTIN (upper case) → the shop's own party for that supplier, for suppliers in this file. */
+  suppliers: Map<string, { id: string; name: string }>
 }
 
 /** This month's 2B against the books, or null when no 2B is imported for fp. */
@@ -73,7 +76,8 @@ export async function loadTwoBMonth(userId: string, fp: string): Promise<TwoBMon
   })
   if (!importRow) return null
   const docNumbers = [...new Set(importRow.invoices.map((i) => i.invoiceNumber))]
-  const [purchases, decisions, earlierNoCredit] = await Promise.all([
+  const fileGstins = [...new Set(importRow.invoices.map((i) => i.supplierGstin))]
+  const [purchases, decisions, earlierNoCredit, knownSuppliers] = await Promise.all([
     claimCandidates(userId, fp),
     // Answers about THIS 2B's documents only — bounded by the file.
     db.gstr2bDecision.findMany({
@@ -85,6 +89,11 @@ export async function loadTwoBMonth(userId: string, fp: string): Promise<TwoBMon
       where: { userId, docType: 'invoice', itcAvailable: false, gstr2bImport: { monthYear: { in: earlierPeriods(fp) } } },
       select: { supplierGstin: true, invoiceNumber: true },
     }),
+    // 9a-3: the shop's own name for each supplier in the file, so a row reads "Sharma Traders", not a GSTIN.
+    db.party.findMany({
+      where: { userId, deletedAt: null, gstin: { in: fileGstins } },
+      select: { id: true, gstin: true, name: true },
+    }),
   ])
   const lines: MatchLine[] = importRow.invoices.map((i) => ({
     id: i.id, docType: i.docType, supplierGstin: i.supplierGstin, invoiceNumber: i.invoiceNumber,
@@ -95,6 +104,8 @@ export async function loadTwoBMonth(userId: string, fp: string): Promise<TwoBMon
   const forMatch: MatchPurchase[] = purchases.map((p) => ({
     id: p.id, gstin: p.party?.gstin ?? null, invoiceNo: p.invoiceNo, totalAmount: p.totalAmount,
     cgst: p.cgst || 0, sgst: p.sgst || 0, igst: p.igst || 0, date: p.date, supplier: p.party?.name ?? null,
+    phone: p.party?.phone ?? null,
+    taxable: roundMoney((p.subtotal || 0) - (p.discountAmount || 0)),
   }))
   const sort = sortTwoB(lines, forMatch, decisions.map((d) => ({ ...d, decision: d.decision as DecisionKind }) as StoredDecision))
   return {
@@ -104,6 +115,7 @@ export async function loadTwoBMonth(userId: string, fp: string): Promise<TwoBMon
     },
     lines, purchases, sort,
     noCreditKeys: new Set(earlierNoCredit.map((r) => itcMatchKey(r.supplierGstin, r.invoiceNumber))),
+    suppliers: new Map(knownSuppliers.filter((p) => p.gstin).map((p) => [p.gstin!.trim().toUpperCase(), { id: p.id, name: p.name }])),
   }
 }
 

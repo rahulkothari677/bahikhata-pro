@@ -71,10 +71,12 @@ export async function GET(req: NextRequest) {
       originalNumber: l.originalNumber, invoiceDate: l.invoiceDate, taxableValue: l.taxableValue,
       igst: l.igst, cgst: l.cgst, sgst: l.sgst, totalAmount: l.totalAmount,
       isReverseCharge: l.isReverseCharge, itcAvailable: l.itcAvailable, itcReason: l.itcReason,
+      supplierName: twoB.suppliers.get(l.supplierGstin.trim().toUpperCase())?.name ?? null,
+      supplierPartyId: twoB.suppliers.get(l.supplierGstin.trim().toUpperCase())?.id ?? null,
     })
     const purchaseOut = (p: MatchPurchase) => ({
       purchaseId: p.id, invoiceNumber: p.invoiceNo, purchaseDate: p.date, partyName: p.supplier || 'Unknown',
-      partyGstin: p.gstin || '', igst: p.igst, cgst: p.cgst, sgst: p.sgst, totalAmount: p.totalAmount,
+      partyGstin: p.gstin || '', partyPhone: p.phone ?? null, taxableValue: p.taxable ?? 0, igst: p.igst, cgst: p.cgst, sgst: p.sgst, totalAmount: p.totalAmount,
     })
     // The shape the screen and the CSV export have always read, one row per paired bill.
     const pairOut = (pr: Pair, status: string, difference = 0) => ({
@@ -83,7 +85,7 @@ export async function GET(req: NextRequest) {
       twoBTotal: pr.line.totalAmount, isReverseCharge: pr.line.isReverseCharge,
       purchaseId: pr.purchase.id, purchaseDate: pr.purchase.date, purchaseTotal: pr.purchase.totalAmount,
       purchaseInvoiceNo: pr.purchase.invoiceNo, purchaseCgst: pr.purchase.cgst, purchaseSgst: pr.purchase.sgst,
-      purchaseIgst: pr.purchase.igst, partyName: pr.purchase.supplier || 'Unknown',
+      purchaseIgst: pr.purchase.igst, partyName: pr.purchase.supplier || 'Unknown', partyPhone: pr.purchase.phone ?? null,
       amountMatch: status !== 'amount_mismatch', amountDifference: difference,
       itcAvailable: pr.line.itcAvailable, itcReason: pr.line.itcReason, via: pr.via, status,
     })

@@ -603,7 +603,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         setPartyId(stored.data.partyId)
       } else {
         const sellerName = stored.data.sellerName || stored.data.partyName
-        if (sellerName && allParties.length > 0) {
+        // 9a-3: the name is kept even before the party list has loaded — it used
+        // to be dropped then, so "Add as purchase" (and a fast scan) opened with
+        // an empty supplier. With no list yet, nothing matches and it goes to the search.
+        if (sellerName) {
           const matched = allParties.find(p =>
             p.name?.toLowerCase().includes(sellerName.toLowerCase()) ||
             sellerName.toLowerCase().includes(p.name?.toLowerCase() || '')

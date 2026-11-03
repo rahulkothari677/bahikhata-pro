@@ -146,6 +146,16 @@ export function TransactionDetail() {
   const setting = settingData?.setting || {}
 
   const txn = data?.transaction
+  /*
+   * 9a-3: the header names the bill's own kind. Only the bills list recorded the
+   * type when opening a bill, so a purchase opened from a customer's page or the
+   * supplier-bills screen was titled "Sales Ledger". The bill now says what it is —
+   * only when the opener recorded nothing, so the bills list's own choice (its
+   * side-by-side panel matches on it) is never overwritten.
+   */
+  useEffect(() => {
+    if (txn?.type && !selectedTransactionType) setSelectedTransactionType(txn.type)
+  }, [txn?.type, selectedTransactionType, setSelectedTransactionType])
   // Phase 6d: the Counter's "Saved" sheet opens this bill to print it — print once the bill has loaded.
   const [printOnLoad, setPrintOnLoad] = useState(false)
   useArrivalRequest('transaction-detail', 'print', () => setPrintOnLoad(true))

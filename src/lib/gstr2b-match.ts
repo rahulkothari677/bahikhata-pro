@@ -53,6 +53,10 @@ export interface MatchPurchase {
   igst: number
   date: Date | string
   supplier: string | null
+  /** The supplier's phone, for a WhatsApp reminder (9a-3). */
+  phone?: string | null
+  /** Taxable value (subtotal less discount), for the CSV export. */
+  taxable?: number
 }
 
 export type DecisionKind = 'same-bill' | 'different-bills' | 'not-mine'

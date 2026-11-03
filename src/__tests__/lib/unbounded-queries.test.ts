@@ -41,6 +41,10 @@ const ACCEPTED: Record<string, string> = {
     '"No credit" bills from earlier 2Bs, limited to the periods whose bills can still be claimed (earlierPeriods: '
     + 's.16(4), at most ~19 months) and to itcAvailable=false — a few rows a month. A cap would let a no-credit '
     + 'bill read "waiting for the supplier" again. Two-column select.',
+  'lib/gstr2b-context.ts:party':
+    'The shop\'s own suppliers whose GSTIN is in THIS 2B (gstin IN the file\'s GSTINs) — bounded by one file, '
+    + 'two-column select, for showing a supplier\'s name instead of a GSTIN. A cap would show a known supplier '
+    + 'as a bare GSTIN.',
   // — Bill dues (8f-2) ——————————————————————————————————————————————————
   'lib/invoice-credits.ts:transaction':
     'Notes against the bills the caller passes (originalTransactionId IN ids) — bounded by that list, which is '

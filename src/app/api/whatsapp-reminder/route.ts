@@ -7,6 +7,7 @@ import { computePartyBalance } from '@/lib/party-balance'
 import { computeInvoiceDue, LIVE_ALLOCATIONS } from '@/lib/invoice-due'
 import { creditsFromNotes } from '@/lib/invoice-credits'
 import { generateUpiLink } from '@/lib/upi-link'
+import { whatsAppUrl } from '@/lib/whatsapp-link'
 
 // POST /api/whatsapp-reminder - generate WhatsApp reminder link for outstanding dues
 export async function POST(req: NextRequest) {
@@ -165,16 +166,8 @@ export async function POST(req: NextRequest) {
     lines.push(`- ${setting?.ownerName || setting?.shopName || 'Shop Owner'}`)
     if (setting?.phone) lines.push(`Phone: ${setting.phone}`)
 
-    const message = encodeURIComponent(lines.join('\n'))
-
-    let whatsappUrl: string
-    if (party.phone) {
-      let phone = party.phone.replace(/\D/g, '')
-      if (phone.length === 10) phone = '91' + phone
-      whatsappUrl = `https://wa.me/${phone}?text=${message}`
-    } else {
-      whatsappUrl = `https://wa.me/?text=${message}`
-    }
+    // One rule for the number (lib/whatsapp-link.ts) — the 2B screen's reminders use it too.
+    const whatsappUrl = whatsAppUrl(party.phone, lines.join('\n'))
 
     return NextResponse.json({
       success: true,

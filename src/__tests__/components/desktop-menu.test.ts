@@ -137,6 +137,14 @@ describe('the desktop menu', () => {
     }
   })
 
+  test('9a-3: a purchase opened from any screen is titled as a purchase, not "Sales Ledger"', () => {
+    expect(headerTitleKey('transaction-detail', 'purchase')).toBe('nav.purchases')
+    // Only the bills list recorded the type; the bill page now fills it in when nobody did,
+    // without overwriting a list's own choice.
+    const detail = readCode('src/components/ledger/TransactionDetail.tsx')
+    expect(detail).toContain('if (txn?.type && !selectedTransactionType) setSelectedTransactionType(txn.type)')
+  })
+
   test('the menu lights entries with isNavActive, not its own list of special cases', () => {
     const code = readCode('src/components/layout/Sidebar.tsx')
     expect(code).toMatch(/isNavActive\(item, currentView\)/)

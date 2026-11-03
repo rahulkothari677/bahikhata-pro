@@ -56,8 +56,8 @@ const GST_TOOLS: GstTool[] = [
   },
   {
     icon: FileCheck,
-    label: 'GSTR-2B Reconciliation',
-    description: 'Import 2B JSON & match against your purchase books',
+    label: 'Supplier bills (GSTR-2B)',
+    description: 'What matches, what needs you, what to do on the portal',
     reportType: 'gstr-2b',
     view: 'reports',
     iconColor: 'text-blue-600 dark:text-blue-400',

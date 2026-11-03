@@ -310,7 +310,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     'gstr-1': 'GSTR-1 Report',
     'gstr-3b': 'GSTR-3B Report',
     'gstr-9': 'GSTR-9 Annual Return',
-    'gstr-2b': 'GSTR-2B Reconciliation',
+    'gstr-2b': 'Supplier bills (GSTR-2B)',
     'gst': 'GST Summary Report',
     'bank-recon': 'Bank Reconciliation',
     'pl': 'Profit & Loss Report',

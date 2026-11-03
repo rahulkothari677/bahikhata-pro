@@ -918,9 +918,9 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'gstr-2b',
     gstNeeds: 'regular',
-    label: 'GSTR-2B Reconciliation',
-    keywords: 'gstr2b gstr-2b purchase reconcile input credit itc match',
-    description: 'Match purchase ITC with auto-generated GSTR-2B',
+    label: 'Supplier bills (GSTR-2B)',
+    keywords: 'gstr2b gstr-2b ims supplier bills purchase reconcile input credit itc match',
+    description: 'What matches, what needs you, what to do on the portal',
     icon: ShieldCheck,
     iconColor: BLUE,
     iconBg: BLUE_BG,

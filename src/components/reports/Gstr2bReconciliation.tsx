@@ -1,41 +1,39 @@
 'use client'
 
 /**
- * V17-Ext Tier 3 Step 4: GSTR-2B Reconciliation UI
+ * Supplier bills (GSTR-2B / IMS) — 9a-3, 3 Nov 2026, from plan 9a (approved 3 Nov).
  *
- * Self-contained component (manages its own month state + data fetching).
- * Lets the user upload the GSTR-2B JSON from the GST portal, then shows
- * the 3-way reconciliation result:
+ * Kept from the screen it replaces: the month switch, upload / re-upload of the
+ * 2B file, the CSV export, the "no 2B yet" state, the IMS timing, and every
+ * bill's numbers.
  *
- * ✅ Matched — 2B invoice has a corresponding purchase (eligible ITC)
- * ⚠️ Books-only — purchase in books but NOT in 2B (ITC deferred)
- * ❌ 2B-only — 2B invoice but NO purchase in books (missing purchase)
- *
- * Features:
- * - Month picker (prev/next, defaults to current IST month)
- * - Upload 2B JSON button (file input)
- * - Summary cards: Matched ITC, Deferred ITC, Missing ITC
- * - 3 section tables (toggle between them)
- * - CSV download of the reconciliation report
+ * Changed: one screen in groups instead of three tabs. The credit that is fine
+ * comes first and biggest ("Nothing to do on the portal" — a bill nobody acts on
+ * is deemed accepted, s.38); then only the bills that need the shop, each with
+ * one reason and its action — open my bill, ask the supplier, "same bill?",
+ * add as purchase (filled in), "not mine" (the portal steps; EkBook has no GSP
+ * link to press Reject itself) — then 2B's no-credit bills, suppliers' notes,
+ * bills waiting for suppliers (remind on WhatsApp), and the folded matched list.
+ * The sorting is the server's (lib/gstr2b-match.ts), the same GSTR-3B claims by.
  *
  * Defensive: all hooks before early return, optional chaining everywhere.
  */
 
 import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatINR, cn } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
-import {
-  ChevronLeft, ChevronRight, Upload, Download, Loader2,
-  CheckCircle2, AlertTriangle, XCircle, FileCheck, FileX, Clock } from 'lucide-react'
-
-type ReconcileSection = 'matched' | 'booksOnly' | 'twoBOnly'
+import { ChevronLeft, ChevronRight, Upload, Download, Loader2, CheckCircle2, FileCheck, FileX, Clock } from 'lucide-react'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { InfoHint } from '@/components/common/InfoHint'
+import { useAppStore } from '@/store/app-store'
+import { whatsAppUrl } from '@/lib/whatsapp-link'
+import { purchasePresetFrom, askSupplierText, remindSupplierText } from '@/lib/supplier-bills'
 
 export function Gstr2bReconciliation() {
   const queryClient = useQueryClient()
@@ -43,7 +41,6 @@ export function Gstr2bReconciliation() {
   const [month, setMonth] = useState(
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   )
-  const [activeSection, setActiveSection] = useState<ReconcileSection>('matched')
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -163,6 +160,8 @@ export function Gstr2bReconciliation() {
   }
 
   const hasImport = data?.hasImport
+  const groups = data?.groups as Groups | undefined
+  const refresh = () => { void queryClient.invalidateQueries({ queryKey: ['gstr-2b-reconcile', month] }) }
   const summary = data?.summary
   const monthLabel = new Date(month + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 
@@ -227,305 +226,300 @@ export function Gstr2bReconciliation() {
         </Card>
       )}
 
-      {/* Reconciliation results */}
-      {hasImport && summary && (
-        <>
-          {/*
-            * IMS — the deadline that arrives on its own (#40).
-            *
-            * Above everything, because it changes what every number below
-            * MEANS. Doing nothing used to leave things as they were; since the
-            * substituted Section 38 it accepts them. A shopkeeper who reads the
-            * tables without knowing that will conclude an unmatched invoice is
-            * somebody else's problem.
-            *
-            * Only shown when there is actually something to act on. A month
-            * where everything matched needs no countdown — calm when fine.
-            */}
-          {data?.ims && (summary.twoBOnly > 0 || summary.booksOnly > 0) && (
-            <div className={
-              data.ims.state === 'deemed-accepted'
-                ? 'rounded-2xl border border-red-300 dark:border-red-900 bg-red-50 dark:bg-red-950/30 p-4'
-                : data.ims.state === 'closing'
-                  ? 'rounded-2xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-4'
-                  : 'rounded-2xl border border-border/60 bg-muted/30 p-4'
-            }>
-              <div className="flex items-start gap-2">
-                <Clock className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                  data.ims.state === 'deemed-accepted' ? 'text-red-600 dark:text-red-400'
-                    : data.ims.state === 'closing' ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-muted-foreground'
-                }`} />
-                <div>
-                  <p className="text-sm font-semibold">
-                    {data.ims.state === 'deemed-accepted'
-                      ? 'These were accepted automatically'
-                      : data.ims.state === 'period-closed'
-                        ? 'This month is closed'
-                        : 'Doing nothing counts as saying yes'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">{data.ims.message}</p>
-                </div>
-              </div>
-
-              {/*
-                * The two ways out of a portal-only invoice, side by side.
-                *
-                * Offering ONE would decide for the shopkeeper which kind of
-                * problem this is — and only they can know whether a bill is
-                * theirs. This is the same rule as the packaging question on the
-                * item screen: where the app cannot know, it asks.
-                */}
-              {summary.twoBOnly > 0 && data.ims.actions?.twoBOnly && (
-                <div className="mt-3 rounded-lg border border-border/60 bg-background/60 p-3">
-                  <p className="text-xs font-medium">{data.ims.actions.twoBOnly.title}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{data.ims.actions.twoBOnly.detail}</p>
-                  <ul className="mt-2 space-y-1">
-                    {data.ims.actions.twoBOnly.options.map((o: string) => (
-                      <li key={o} className="text-xs flex gap-2">
-                        <span className="text-muted-foreground">•</span>
-                        <span>{o}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Import info */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>
-              Imported on {new Date(data?.importInfo?.importedAt).toLocaleDateString('en-IN')} ·
-              {' '}{data?.importInfo?.invoiceCount || 0} invoices ·
-              {' '}Taxable: {formatINR(data?.importInfo?.taxableTotal || 0)}
-            </span>
-          </div>
-
-          {/* Summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <SummaryCard
-              icon={<CheckCircle2 className="w-4 h-4" />}
-              label="Matched (Eligible ITC)"
-              count={summary.matched}
-              itc={summary.matchedItc}
-              color="text-emerald-600 dark:text-emerald-400"
-              bg="bg-emerald-100 dark:bg-emerald-900/40"
-              active={activeSection === 'matched'}
-              onClick={() => setActiveSection('matched')}
-            />
-            <SummaryCard
-              icon={<AlertTriangle className="w-4 h-4" />}
-              label="Books-only (Deferred ITC)"
-              count={summary.booksOnly}
-              itc={summary.deferredItc}
-              color="text-amber-600 dark:text-amber-400"
-              bg="bg-amber-100 dark:bg-amber-900/40"
-              active={activeSection === 'booksOnly'}
-              onClick={() => setActiveSection('booksOnly')}
-            />
-            {/*
-              * Labelled "2B-only (Missing Purchase)" until 29 Aug 2026, and it
-              * had to change.
-              *
-              * That label states a conclusion the app cannot reach: it tells the
-              * shopkeeper they FORGOT something, so the obvious next move is to
-              * enter the bill and make the numbers agree.
-              *
-              * Under IMS the same row can mean the opposite — a supplier has
-              * filed an invoice against this GSTIN that is not theirs — and
-              * entering it would turn somebody else's mistake into their own
-              * wrong return. Worse, doing nothing accepts it anyway on the 14th.
-              *
-              * So the label now says what is TRUE (it is not in your books) and
-              * leaves the conclusion to the person who can actually draw it. The
-              * panel above gives both ways out.
-              */}
-            <SummaryCard
-              icon={<XCircle className="w-4 h-4" />}
-              label="Not in your books — needs a decision"
-              count={summary.twoBOnly}
-              itc={summary.missingItc}
-              color="text-rose-600"
-              bg="bg-rose-100 dark:bg-rose-900/40"
-              active={activeSection === 'twoBOnly'}
-              onClick={() => setActiveSection('twoBOnly')}
-            />
-          </div>
-
-          {/* Active section table */}
-          <Card className="shadow-card border-border/60">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                {activeSection === 'matched' && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
-                {activeSection === 'booksOnly' && <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
-                {activeSection === 'twoBOnly' && <XCircle className="w-4 h-4 text-rose-600" />}
-                {activeSection === 'matched' ? 'Matched Invoices' : activeSection === 'booksOnly' ? 'In Books, Not in 2B' : 'In 2B, Not in Books'}
-                <Badge variant="secondary">
-                  {(activeSection === 'matched' ? data?.matched : activeSection === 'booksOnly' ? data?.booksOnly : data?.twoBOnly)?.length || 0}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {activeSection === 'matched' && (
-                <MatchedTable items={data?.matched || []} />
-              )}
-              {activeSection === 'booksOnly' && (
-                <BooksOnlyTable items={data?.booksOnly || []} />
-              )}
-              {activeSection === 'twoBOnly' && (
-                <TwoBOnlyTable items={data?.twoBOnly || []} />
-              )}
-            </CardContent>
-          </Card>
-        </>
+      {/* Reconciliation results — 9a-3: the supplier-bills screen (plan 9a, approved 3 Nov). */}
+      {hasImport && summary && groups && (
+        <SupplierBills data={data} groups={groups} month={month} onChanged={refresh} />
       )}
     </div>
   )
 }
 
-// ─── Helper components ───────────────────────────────────────────
+// ─── 9a-3: the supplier-bills screen ─────────────────────────────
 
-function SummaryCard({ icon, label, count, itc, color, bg, active, onClick }: {
-  icon: React.ReactNode
-  label: string
-  count: number
-  itc: number
-  color: string
-  bg: string
-  active: boolean
-  onClick: () => void
-}) {
+/*
+ * What the server sends per group (app/api/gstr-2b/reconcile → groups). Typed
+ * here, at the one place that reads it.
+ */
+interface Line {
+  id: string; docType: string; supplierGstin: string; supplierName: string | null; supplierPartyId: string | null
+  invoiceNumber: string; originalNumber: string | null; invoiceDate: string | null
+  taxableValue: number; igst: number; cgst: number; sgst: number; totalAmount: number
+  itcAvailable: boolean; itcReason: string | null
+}
+interface Buy {
+  purchaseId: string; invoiceNumber: string | null; purchaseDate: string; partyName: string; partyGstin: string
+  partyPhone: string | null; igst: number; cgst: number; sgst: number; totalAmount: number
+}
+interface PairRow {
+  supplierGstin: string; invoiceNumber: string; invoiceDate: string | null; twoBTotal: number
+  twoBIgst: number; twoBCgst: number; twoBSgst: number; purchaseId: string; purchaseTotal: number
+  purchaseInvoiceNo: string | null; partyName: string; partyPhone: string | null; amountDifference: number; itcReason: string | null; via: string
+}
+interface Groups {
+  matched: PairRow[]; amountDiffers: PairRow[]; noCredit: PairRow[]
+  sameBill: Array<{ line: Line; candidates: Buy[] }>
+  notInBooks: Line[]; notMine: Line[]; notes: Line[]; waiting: Buy[]
+}
+
+const tax = (x: { cgst: number; sgst: number; igst: number }) => Math.round((x.cgst + x.sgst + x.igst) * 100) / 100
+const pairTax = (p: PairRow) => tax({ cgst: p.twoBCgst, sgst: p.twoBSgst, igst: p.twoBIgst })
+const shortGstin = (g: string) => `${g.slice(0, 7)}…`
+const nameOf = (l: Line) => l.supplierName || shortGstin(l.supplierGstin)
+const dayOf = (d: string) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+
+async function decide(body: Record<string, string>, method: 'POST' | 'DELETE' = 'POST') {
+  const r = await offlineFetch('/api/gstr-2b/decisions', {
+    method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}))
+    throw new Error(j.message || j.error || 'Could not save that')
+  }
+}
+
+function SupplierBills({ data, groups, month, onChanged }: { data: any; groups: Groups; month: string; onChanged: () => void }) {
+  const { setView, setPreviousView, setSelectedTransactionId } = useAppStore.getState()
+  const [notMine, setNotMine] = useState<Line | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const ims = data?.ims
+
+  const readyTax = groups.matched.reduce((s, p) => s + pairTax(p), 0)
+  const waitingTax = groups.waiting.reduce((s, b) => s + tax(b), 0)
+  const decisions = groups.amountDiffers.length + groups.notInBooks.length + groups.sameBill.length
+  const openBill = (id: string) => { setSelectedTransactionId(id); setPreviousView('reports'); setView('transaction-detail') }
+  const addAsPurchase = (l: Line) => {
+    ;(window as any).__ledgerPreset = purchasePresetFrom(l, l.supplierPartyId)
+    setPreviousView('reports')
+    setView('new-purchase')
+  }
+  const run = async (key: string, body: Record<string, string>, method: 'POST' | 'DELETE' = 'POST', done?: string) => {
+    setBusy(key)
+    try {
+      await decide(body, method)
+      haptic.success()
+      if (done) sonnerToast.success(done)
+      onChanged()
+    } catch (e) {
+      haptic.error()
+      sonnerToast.error((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'rounded-xl border p-3 flex items-center gap-3 text-left transition',
-        active ? 'border-primary/40 bg-primary/5 shadow-sm' : 'border-border/60 hover:border-border',
+    <div className="space-y-4" data-testid="supplier-bills">
+      {/* When to act: on the portal, before GSTR-3B is filed (IMS FAQ: actions freeze on filing). */}
+      {/* Calm when fine: no countdown when nothing needs a decision. */}
+      {ims && decisions > 0 && (
+        <div className="flex items-center gap-1">
+          <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold',
+            ims.state === 'period-closed' ? 'bg-muted text-muted-foreground' : 'bg-check-soft text-check')}
+          >
+            <Clock className="w-3.5 h-3.5" aria-hidden />
+            {ims.state === 'period-closed' ? 'GSTR-3B filed — this month is closed'
+              : ims.state === 'deemed-accepted' ? 'Change it on the portal before you file GSTR-3B'
+                : `${ims.daysLeft} days to act on the portal`}
+          </span>
+          <InfoHint text={ims.message} label="when to act on the portal" />
+        </div>
       )}
-    >
-      <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', bg)}>
-        <span className={color}>{icon}</span>
+
+      {/* The money that is fine comes first, and biggest. */}
+      <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-card" data-testid="credit-ready">
+        <p className="text-3xl font-extrabold tabular-nums text-good">{formatINR(readyTax)}</p>
+        <p className="text-sm text-muted-foreground">
+          input credit ready · {groups.matched.length} {groups.matched.length === 1 ? 'bill matches' : 'bills match'} your books
+        </p>
+        {groups.matched.length > 0 && (
+          <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-good-soft px-3 py-1 text-xs font-semibold text-good">
+            <CheckCircle2 className="w-3.5 h-3.5" aria-hidden /> Nothing to do on the portal for these
+          </span>
+        )}
+      </section>
+
+      {decisions > 0 && (
+        <Section title="Needs your decision" count={`${decisions} ${decisions === 1 ? 'bill' : 'bills'}`}>
+          {groups.amountDiffers.map((p) => (
+            <Row key={`amt-${p.supplierGstin}-${p.invoiceNumber}`} title={`${p.partyName} · ${p.invoiceNumber}`} amount={p.twoBTotal}
+              why={<><Chip tone="check">Amount differs by {formatINR(p.amountDifference)}</Chip><span className="text-xs text-muted-foreground">your bill {formatINR(p.purchaseTotal)}</span></>}
+            >
+              <Act onClick={() => openBill(p.purchaseId)}>Open my bill</Act>
+              <Act href={whatsAppUrl(p.partyPhone, askSupplierText(p.invoiceNumber, p.twoBTotal, p.purchaseTotal))}>Ask supplier</Act>
+            </Row>
+          ))}
+          {groups.sameBill.flatMap((s) => s.candidates.map((c) => (
+            <Row key={`same-${s.line.id}-${c.purchaseId}`} title={nameOf(s.line)} amount={s.line.totalAmount}
+              why={<><Chip tone="check">Same bill? Number written differently</Chip>
+                <span className="text-xs text-muted-foreground">2B: {s.line.invoiceNumber} · yours: {c.invoiceNumber} {formatINR(c.totalAmount)}</span></>}
+            >
+              <Act primary disabled={busy !== null} onClick={() => run(`same-${s.line.id}`, { supplierGstin: s.line.supplierGstin, documentNumber: s.line.invoiceNumber, decision: 'same-bill', purchaseId: c.purchaseId }, 'POST', 'Matched')}>Same bill</Act>
+              <Act disabled={busy !== null} onClick={() => run(`diff-${s.line.id}`, { supplierGstin: s.line.supplierGstin, documentNumber: s.line.invoiceNumber, decision: 'different-bills', purchaseId: c.purchaseId })}>Different bills</Act>
+            </Row>
+          )))}
+          {groups.notInBooks.map((l) => (
+            <Row key={`nib-${l.id}`} title={`${nameOf(l)} · ${l.invoiceNumber}`} amount={l.totalAmount}
+              why={<Chip tone="bad">Not in your books</Chip>}
+            >
+              <Act primary onClick={() => addAsPurchase(l)}>Add as purchase</Act>
+              <Act onClick={() => setNotMine(l)}>Not mine</Act>
+            </Row>
+          ))}
+        </Section>
+      )}
+
+      {groups.noCredit.length > 0 && (
+        <Section title="2B says no credit" count={`${groups.noCredit.length} ${groups.noCredit.length === 1 ? 'bill' : 'bills'}`}>
+          {groups.noCredit.map((p) => (
+            <Row key={`nc-${p.supplierGstin}-${p.invoiceNumber}`} title={`${p.partyName} · ${p.invoiceNumber}`} amount={p.twoBTotal}
+              why={<><Chip tone="bad">No credit on this bill</Chip>
+                <InfoHint label={`why ${p.invoiceNumber} has no credit`} text={`Your GSTR-2B marks this bill "ITC not available"${p.itcReason ? ` (portal reason code ${p.itcReason})` : ''}, so its credit is not claimed. If that looks wrong, ask the supplier to check the GSTIN and place of supply on their bill.`} /></>}
+            />
+          ))}
+        </Section>
+      )}
+
+      {groups.notes.length > 0 && (
+        <Section title="Notes from suppliers" count={`${groups.notes.length}`}>
+          {groups.notes.map((l) => (
+            <Row key={`note-${l.id}`} title={`${nameOf(l)} · ${l.invoiceNumber}`} amount={l.totalAmount}
+              why={<Chip tone="quiet">{l.docType === 'debit-note' ? 'Debit note' : 'Credit note'} · GST {formatINR(tax(l))}</Chip>}
+            />
+          ))}
+        </Section>
+      )}
+
+      {groups.waiting.length > 0 && (
+        <Section title="Waiting for suppliers" count={`${groups.waiting.length} · ${formatINR(waitingTax)} credit`}>
+          {groups.waiting.map((b) => (
+            <Row key={`w-${b.purchaseId}`} title={`${b.partyName} · ${b.invoiceNumber ?? ''}`} amount={b.totalAmount}
+              why={<span className="text-xs text-muted-foreground">Not in 2B yet · {dayOf(b.purchaseDate)} · GST {formatINR(tax(b))}</span>}
+            >
+              <Act href={whatsAppUrl(b.partyPhone, remindSupplierText(b.invoiceNumber, dayOf(b.purchaseDate), b.totalAmount))}>Remind</Act>
+            </Row>
+          ))}
+        </Section>
+      )}
+
+      <Folded title="Matched" count={groups.matched.length}>
+        {groups.matched.map((p) => (
+          <Row key={`m-${p.supplierGstin}-${p.invoiceNumber}`} title={`${p.partyName} · ${p.invoiceNumber}`} amount={p.twoBTotal}
+            why={<span className="text-xs text-muted-foreground">GST {formatINR(pairTax(p))}{p.via === 'corrected' ? ` · corrected bill, yours ${p.purchaseInvoiceNo}` : p.via === 'confirmed' ? ` · same as your ${p.purchaseInvoiceNo}` : ''}</span>}
+          />
+        ))}
+      </Folded>
+
+      <Folded title="Not mine" count={groups.notMine.length}>
+        {groups.notMine.map((l) => (
+          <Row key={`nm-${l.id}`} title={`${nameOf(l)} · ${l.invoiceNumber}`} amount={l.totalAmount}
+            why={<span className="text-xs text-muted-foreground">Rejected on the portal</span>}
+          >
+            <Act disabled={busy !== null} onClick={() => run(`undo-${l.id}`, { supplierGstin: l.supplierGstin, documentNumber: l.invoiceNumber, decision: 'not-mine' }, 'DELETE')}>Undo</Act>
+          </Row>
+        ))}
+      </Folded>
+
+      {/* Import info — quiet, at the end. */}
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <FileCheck className="w-3.5 h-3.5 text-good" aria-hidden />
+        2B for {new Date(month + '-01').toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })} · imported {new Date(data?.importInfo?.importedAt).toLocaleDateString('en-IN')} · {data?.importInfo?.invoiceCount || 0} bills
+      </p>
+
+      {notMine && (
+        <NotMineSheet line={notMine} busy={busy !== null} onClose={() => setNotMine(null)}
+          onDone={() => run(`nm-${notMine.id}`, { supplierGstin: notMine.supplierGstin, documentNumber: notMine.invoiceNumber, decision: 'not-mine' }, 'POST', 'Marked as not yours').then(() => setNotMine(null))}
+        />
+      )}
+    </div>
+  )
+}
+
+function Section({ title, count, children }: { title: string; count: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <h3 className="flex items-baseline justify-between px-1 text-sm font-bold">
+        {title} <span className="text-xs font-semibold text-muted-foreground">{count}</span>
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+function Folded({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  if (count === 0) return null
+  return (
+    <section className="space-y-2">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        className="flex w-full min-h-12 items-center justify-between rounded-xl px-1 text-sm font-bold hover:bg-muted/40"
+      >
+        {title}
+        <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+          {count} {count === 1 ? 'bill' : 'bills'} <ChevronRight className={cn('w-4 h-4 transition-transform', open && 'rotate-90')} aria-hidden />
+        </span>
+      </button>
+      {open && children}
+    </section>
+  )
+}
+
+function Row({ title, amount, why, children }: { title: string; amount: number; why: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-card px-3 py-2.5">
+      <div className="flex items-baseline justify-between gap-2 text-sm font-semibold">
+        <span className="min-w-0 truncate">{title}</span>
+        <span className="shrink-0 tabular-nums">{formatINR(amount)}</span>
       </div>
-      <div className="min-w-0">
-        <p className="text-xs text-muted-foreground truncate">{label}</p>
-        <p className={cn('text-base font-bold tabular-nums', color)}>{count} invoice(s)</p>
-        <p className="text-xs text-muted-foreground tabular-nums">ITC: {formatINR(itc)}</p>
-      </div>
-    </button>
-  )
-}
-
-function MatchedTable({ items }: { items: any[] }) {
-  if (items.length === 0) return <p className="text-center py-8 text-sm text-muted-foreground">No matched invoices</p>
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-muted-foreground border-b">
-            <th className="text-left py-1.5 font-medium">Supplier GSTIN</th>
-            <th className="text-left py-1.5 font-medium">Invoice No</th>
-            <th className="text-right py-1.5 font-medium">Taxable</th>
-            <th className="text-right py-1.5 font-medium">IGST</th>
-            <th className="text-right py-1.5 font-medium">CGST</th>
-            <th className="text-right py-1.5 font-medium">SGST</th>
-            <th className="text-right py-1.5 font-medium">Total</th>
-            <th className="text-center py-1.5 font-medium">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((m, i) => (
-            <tr key={i} className="border-b border-border/30">
-              <td className="py-1.5 font-mono text-xs">{m.supplierGstin}</td>
-              <td className="py-1.5">{m.invoiceNumber}</td>
-              <td className="text-right py-1.5 tabular-nums">{formatINR(m.twoBTaxable)}</td>
-              <td className="text-right py-1.5 tabular-nums">{m.twoBIgst ? formatINR(m.twoBIgst) : '-'}</td>
-              <td className="text-right py-1.5 tabular-nums">{m.twoBCgst ? formatINR(m.twoBCgst) : '-'}</td>
-              <td className="text-right py-1.5 tabular-nums">{m.twoBSgst ? formatINR(m.twoBSgst) : '-'}</td>
-              <td className="text-right py-1.5 tabular-nums font-medium">{formatINR(m.twoBTotal)}</td>
-              <td className="text-center py-1.5">
-                {m.status === 'itc_not_available' ? (
-                  // #353: 2B itself says no credit on this bill (itcavl N); rsn is the portal's reason code.
-                  <Badge className="bg-bad text-white text-xs" title={m.itcReason ? `2B reason code: ${m.itcReason}` : undefined}>No credit in 2B</Badge>
-                ) : m.status === 'matched' ? (
-                  <Badge className="bg-emerald-600 text-white text-xs">✓ Match</Badge>
-                ) : (
-                  <Badge className="bg-amber-600 text-white text-xs">Amt Δ₹{m.amountDifference?.toFixed(2)}</Badge>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">{why}</div>
+      {children && <div className="mt-2 flex flex-wrap gap-2">{children}</div>}
     </div>
   )
 }
 
-function BooksOnlyTable({ items }: { items: any[] }) {
-  if (items.length === 0) return <p className="text-center py-8 text-sm text-muted-foreground">All purchases are in 2B — no deferred ITC</p>
+function Chip({ tone, children }: { tone: 'check' | 'bad' | 'quiet'; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-muted-foreground border-b">
-            <th className="text-left py-1.5 font-medium">Supplier</th>
-            <th className="text-left py-1.5 font-medium">GSTIN</th>
-            <th className="text-left py-1.5 font-medium">Invoice No</th>
-            <th className="text-right py-1.5 font-medium">Taxable</th>
-            <th className="text-right py-1.5 font-medium">Total Tax</th>
-            <th className="text-right py-1.5 font-medium">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((b, i) => (
-            <tr key={i} className="border-b border-border/30">
-              <td className="py-1.5">{b.partyName}</td>
-              <td className="py-1.5 font-mono text-xs">{b.partyGstin}</td>
-              <td className="py-1.5">{b.invoiceNumber}</td>
-              <td className="text-right py-1.5 tabular-nums">{formatINR(b.taxableValue)}</td>
-              <td className="text-right py-1.5 tabular-nums text-amber-600 dark:text-amber-400">{formatINR(b.igst + b.cgst + b.sgst)}</td>
-              <td className="text-right py-1.5 tabular-nums font-medium">{formatINR(b.totalAmount)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold',
+      tone === 'check' ? 'bg-check-soft text-check' : tone === 'bad' ? 'bg-bad-soft text-bad' : 'bg-muted text-foreground')}
+    >{children}</span>
   )
 }
 
-function TwoBOnlyTable({ items }: { items: any[] }) {
-  if (items.length === 0) return <p className="text-center py-8 text-sm text-muted-foreground">All 2B invoices are in your books — no missing purchases</p>
+/** One action on a row: a 48 px button, or a link that opens WhatsApp with the message typed. */
+function Act({ children, onClick, href, primary, disabled }: { children: React.ReactNode; onClick?: () => void; href?: string; primary?: boolean; disabled?: boolean }) {
+  const cls = cn('inline-flex min-h-12 items-center rounded-xl px-3 text-sm font-semibold border',
+    primary ? 'border-transparent bg-primary text-primary-foreground' : 'border-border bg-card text-foreground hover:bg-muted/50',
+    disabled && 'opacity-60')
+  if (href) return <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>{children}</a>
+  return <button type="button" onClick={onClick} disabled={disabled} className={cls}>{children}</button>
+}
+
+/** "Not mine": EkBook cannot press Reject on the portal (no GSP link), so it shows the steps and remembers. */
+function NotMineSheet({ line, busy, onClose, onDone }: { line: Line; busy: boolean; onClose: () => void; onDone: () => void }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-muted-foreground border-b">
-            <th className="text-left py-1.5 font-medium">Supplier GSTIN</th>
-            <th className="text-left py-1.5 font-medium">Invoice No</th>
-            <th className="text-left py-1.5 font-medium">Date</th>
-            <th className="text-right py-1.5 font-medium">Taxable</th>
-            <th className="text-right py-1.5 font-medium">IGST</th>
-            <th className="text-right py-1.5 font-medium">CGST</th>
-            <th className="text-right py-1.5 font-medium">SGST</th>
-            <th className="text-right py-1.5 font-medium">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((t, i) => (
-            <tr key={i} className="border-b border-border/30">
-              <td className="py-1.5 font-mono text-xs">{t.supplierGstin}</td>
-              <td className="py-1.5">{t.invoiceNumber}</td>
-              <td className="py-1.5">{t.invoiceDate || '-'}</td>
-              <td className="text-right py-1.5 tabular-nums">{formatINR(t.taxableValue)}</td>
-              <td className="text-right py-1.5 tabular-nums">{t.igst ? formatINR(t.igst) : '-'}</td>
-              <td className="text-right py-1.5 tabular-nums">{t.cgst ? formatINR(t.cgst) : '-'}</td>
-              <td className="text-right py-1.5 tabular-nums">{t.sgst ? formatINR(t.sgst) : '-'}</td>
-              <td className="text-right py-1.5 tabular-nums font-medium text-rose-600">{formatINR(t.totalAmount)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Sheet open onOpenChange={(o) => { if (!o) onClose() }}>
+      <SheetContent side="bottom" className="rounded-t-3xl max-h-[88vh] overflow-y-auto gap-0 pb-[calc(1rem+var(--safe-bottom))] lg:mx-auto lg:max-w-lg" data-testid="not-mine-sheet">
+        <SheetHeader className="pb-1">
+          <SheetTitle className="text-lg">Not yours? {line.invoiceNumber}</SheetTitle>
+          <SheetDescription className="text-xs">
+            {nameOf(line)} · {formatINR(line.totalAmount)} · GST {formatINR(tax(line))} if you leave it
+          </SheetDescription>
+        </SheetHeader>
+        <div className="px-4 space-y-4">
+          <div className="rounded-xl border border-border/60 p-3">
+            <p className="text-sm font-semibold">Reject it on the GST portal</p>
+            <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm">
+              <li>gst.gov.in → Services → Returns → <b>IMS</b></li>
+              <li>Inward supplies → B2B → find <b>{line.invoiceNumber}</b></li>
+              <li>Tap <b>Reject</b>, then <b>Recompute GSTR-2B</b></li>
+            </ol>
+            <p className="mt-2 text-xs text-muted-foreground">Do it before you file GSTR-3B for this month.</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Button className="min-h-12" disabled={busy} onClick={onDone}>Done on the portal</Button>
+            <Button variant="outline" className="min-h-12" onClick={onClose}>It is mine after all</Button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
