@@ -1,7 +1,7 @@
 /**
  * 9a-3: the small rules behind the supplier-bills screen (lib/supplier-bills.ts).
  */
-import { twoBDate, twoBRate, purchasePresetFrom, askSupplierText, remindSupplierText } from '@/lib/supplier-bills'
+import { twoBDate, twoBRate, purchasePresetFrom, returnPresetFrom, askSupplierText, remindSupplierText } from '@/lib/supplier-bills'
 import { whatsAppUrl } from '@/lib/whatsapp-link'
 
 describe('2B dates', () => {
@@ -39,6 +39,16 @@ describe('"Add as purchase" fills in the form, it does not save', () => {
     const p = purchasePresetFrom(bill, null)
     expect(p.data).toMatchObject({ partyName: '08AAACS1234K1Z5' })
     expect('partyId' in p.data).toBe(false)
+  })
+})
+
+describe('9a-4: "Record it" fills in a return to the supplier, it does not save', () => {
+  it('the supplier, the note’s date and number, one line at its value and rate', () => {
+    const note = { supplierGstin: '08AAACS1234K1Z5', supplierName: 'Sharma Traders', invoiceNumber: 'CN-14', invoiceDate: '20-10-2026', taxableValue: 500, cgst: 45, sgst: 45, igst: 0 }
+    const p = returnPresetFrom(note, 'party-1')
+    expect(p.type).toBe('debit-note')
+    expect(p.data).toMatchObject({ partyId: 'party-1', date: '2026-10-20', notes: "Supplier's credit note CN-14" })
+    expect(p.data.items).toEqual([{ name: "As per supplier's credit note CN-14", quantity: 1, unitPrice: 500, gstRate: 18, unit: 'pcs', priceIncludesGst: false }])
   })
 })
 

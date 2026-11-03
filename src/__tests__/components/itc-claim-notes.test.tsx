@@ -35,6 +35,11 @@ test('9a-1: a bill 2B says carries no credit has its own line, not "waiting for 
   expect(t).not.toMatch(/88D/) // the rule sits behind ⓘ
 })
 
+test('9a-4: suppliers’ credit notes not in the books have their own line', () => {
+  render(<ItcClaimNotes detail={{ ...NONE, unrecordedNotesCount: 1, unrecordedNotesTax: 90 }} />)
+  expect(screen.getByTestId('itc-claim-notes').textContent).toMatch(/₹90(\.00)? in suppliers' credit notes not in your books \(1 note\)/)
+})
+
 test('the rule is behind ⓘ, not on the line', () => {
   render(<ItcClaimNotes detail={{ ...NONE, shortBy: 2000, shortCount: 1 }} />)
   expect(screen.getByTestId('itc-claim-notes').textContent).not.toMatch(/Rule 36|88D/)

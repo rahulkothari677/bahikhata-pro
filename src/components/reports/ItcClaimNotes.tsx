@@ -36,6 +36,9 @@ export interface ItcDetail {
   /** 9a-1: bills in 2B that 2B marks "ITC not available". */
   notAvailableCount?: number
   notAvailableTax?: number
+  /** 9a-4: suppliers' credit notes in 2B not yet recorded in the books. */
+  unrecordedNotesCount?: number
+  unrecordedNotesTax?: number
   endingSoonTax?: number
   endingSoon?: EndingSoonBill[]
 }
@@ -86,6 +89,11 @@ export function ItcClaimNotes({ detail }: { detail: ItcDetail | null | undefined
     key: 'no-credit', tone: 'bad',
     text: `${formatINR(detail.notAvailableTax!)} not claimed — GSTR-2B says no credit (${bills(detail.notAvailableCount ?? 0)})`,
     info: 'Your GSTR-2B lists these bills with input credit marked "not available", so it is not claimed; claiming it would invite a DRC-01C notice (Rule 88D). The portal’s reason code is on the GSTR-2B screen. If it looks wrong, ask the supplier to check the GSTIN and place of supply on their bill.',
+  })
+  if ((detail.unrecordedNotesTax ?? 0) > 0) lines.push({
+    key: 'notes', tone: 'check',
+    text: `${formatINR(detail.unrecordedNotesTax!)} in suppliers' credit notes not in your books (${(detail.unrecordedNotesCount ?? 0) === 1 ? '1 note' : `${detail.unrecordedNotesCount} notes`})`,
+    info: 'Your GSTR-2B has credit notes from suppliers. Once accepted on the portal, they cut your credit by their GST in GSTR-3B. Record each as a return to the supplier (Supplier bills → Notes from suppliers) so your figures match the portal.',
   })
   if (detail.lapsedTax > 0) lines.push({
     key: 'lapsed', tone: 'bad',

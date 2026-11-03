@@ -12,7 +12,7 @@ import { db } from '@/lib/db'
 import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset } from '@/lib/timezone'
 import { earliestClaimableBill, itcMatchKey } from '@/lib/itc-claim'
-import { sortTwoB, type MatchLine, type MatchPurchase, type StoredDecision, type DecisionKind, type TwoBSort } from '@/lib/gstr2b-match'
+import { sortTwoB, isBillDoc, type MatchLine, type MatchPurchase, type StoredDecision, type DecisionKind, type TwoBSort } from '@/lib/gstr2b-match'
 
 const periodFrom = (year: number, month: number, offset: number) => istMonthStartOffset(new Date(Date.UTC(year, month - 1, 15)), offset)
 
@@ -77,7 +77,10 @@ export async function loadTwoBMonth(userId: string, fp: string): Promise<TwoBMon
   if (!importRow) return null
   const docNumbers = [...new Set(importRow.invoices.map((i) => i.invoiceNumber))]
   const fileGstins = [...new Set(importRow.invoices.map((i) => i.supplierGstin))]
-  const [purchases, decisions, earlierNoCredit, knownSuppliers] = await Promise.all([
+  const month = Number(fp.slice(0, 2))
+  const year = Number(fp.slice(2))
+  const earliest = earliestClaimableBill(fp)
+  const [purchases, decisions, earlierNoCredit, knownSuppliers, ownNoteRows] = await Promise.all([
     claimCandidates(userId, fp),
     // Answers about THIS 2B's documents only — bounded by the file.
     db.gstr2bDecision.findMany({
@@ -86,13 +89,23 @@ export async function loadTwoBMonth(userId: string, fp: string): Promise<TwoBMon
     }),
     // "No credit" bills from earlier 2Bs whose bills can still be claimed (the s.16(4) window).
     db.gstr2bInvoice.findMany({
-      where: { userId, docType: 'invoice', itcAvailable: false, gstr2bImport: { monthYear: { in: earlierPeriods(fp) } } },
+      where: { userId, docType: { in: ['invoice', 'debit-note'] }, itcAvailable: false, gstr2bImport: { monthYear: { in: earlierPeriods(fp) } } },
       select: { supplierGstin: true, invoiceNumber: true },
     }),
     // 9a-3: the shop's own name for each supplier in the file, so a row reads "Sharma Traders", not a GSTIN.
     db.party.findMany({
       where: { userId, deletedAt: null, gstin: { in: fileGstins } },
       select: { id: true, gstin: true, name: true },
+    }),
+    // 9a-4: the shop's own return-to-supplier entries (debit notes) from these suppliers, in the same
+    // s.16(4) window — what a supplier's credit note in 2B pairs with.
+    db.transaction.findMany({
+      where: {
+        userId, type: 'debit-note', deletedAt: null,
+        date: { gte: periodFrom(earliest.year, earliest.month, 0), lt: periodFrom(year, month, 1) },
+        party: { gstin: { in: fileGstins } },
+      },
+      select: { id: true, date: true, totalAmount: true, cgst: true, sgst: true, igst: true, invoiceNo: true, party: { select: { gstin: true, name: true } } },
     }),
   ])
   const lines: MatchLine[] = importRow.invoices.map((i) => ({
@@ -107,7 +120,11 @@ export async function loadTwoBMonth(userId: string, fp: string): Promise<TwoBMon
     phone: p.party?.phone ?? null,
     taxable: roundMoney((p.subtotal || 0) - (p.discountAmount || 0)),
   }))
-  const sort = sortTwoB(lines, forMatch, decisions.map((d) => ({ ...d, decision: d.decision as DecisionKind }) as StoredDecision))
+  const ownNotes: MatchPurchase[] = ownNoteRows.map((n) => ({
+    id: n.id, gstin: n.party?.gstin ?? null, invoiceNo: n.invoiceNo, totalAmount: n.totalAmount,
+    cgst: n.cgst || 0, sgst: n.sgst || 0, igst: n.igst || 0, date: n.date, supplier: n.party?.name ?? null,
+  }))
+  const sort = sortTwoB(lines, forMatch, decisions.map((d) => ({ ...d, decision: d.decision as DecisionKind }) as StoredDecision), ownNotes)
   return {
     importRow: {
       id: importRow.id, importedAt: importRow.importedAt, invoiceCount: importRow.invoiceCount,
@@ -126,7 +143,8 @@ export async function loadTwoBMonth(userId: string, fp: string): Promise<TwoBMon
  */
 export function claimLines(month: TwoBMonth) {
   return month.lines
-    .filter((l) => l.docType === 'invoice')
+    // Bills and suppliers' debit notes carry credit (IMS: "Inv/DN"); credit notes reduce it through the shop's own return entry.
+    .filter((l) => isBillDoc(l.docType))
     .map((l) => ({
       supplierGstin: l.supplierGstin,
       invoiceNumber: month.sort.claimNumber.get(l.id) ?? l.invoiceNumber,

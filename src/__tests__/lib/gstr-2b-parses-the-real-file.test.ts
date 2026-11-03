@@ -142,5 +142,8 @@ describe('one parser', () => {
       sort: { claimNumber: new Map([['B1', 'MY-B1']]) },
     } as unknown as Parameters<typeof claimLines>[0]
     expect(claimLines(month).map((l) => [l.invoiceNumber, l.itcAvailable])).toEqual([['MY-B1', true], ['B2', false]])
+    // 9a-4: a supplier's debit note carries credit like a bill (IMS "Inv/DN").
+    const withDn = { ...month, lines: [...month.lines, line('DN-7', 'debit-note')] } as unknown as Parameters<typeof claimLines>[0]
+    expect(claimLines(withDn).map((l) => l.invoiceNumber)).toEqual(['MY-B1', 'B2', 'DN-7'])
   })
 })

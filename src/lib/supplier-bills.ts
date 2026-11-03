@@ -66,6 +66,32 @@ export function purchasePresetFrom(bill: TwoBBill, partyId: string | null) {
   }
 }
 
+/**
+ * 9a-4 — "Record it": a supplier's credit note goes in the books as a return to the
+ * supplier (the app's debit-note entry, which reduces credit in GSTR-3B the way the
+ * portal's Table 4A does once the note is accepted — GSTN IMS FAQ Q15). Filled in
+ * from 2B; the shop picks the reason (goods back, or a discount) and saves.
+ */
+export function returnPresetFrom(note: TwoBBill, partyId: string | null) {
+  const rate = twoBRate(note)
+  return {
+    type: 'debit-note' as const,
+    data: {
+      ...(partyId ? { partyId } : { partyName: note.supplierName || note.supplierGstin }),
+      ...(twoBDate(note.invoiceDate) ? { date: twoBDate(note.invoiceDate) } : {}),
+      notes: `Supplier's credit note ${note.invoiceNumber}`,
+      items: [{
+        name: `As per supplier's credit note ${note.invoiceNumber}`,
+        quantity: 1,
+        unitPrice: note.taxableValue,
+        gstRate: rate ?? 0,
+        unit: 'pcs',
+        priceIncludesGst: false,
+      }],
+    },
+  }
+}
+
 /** The message for a supplier whose filed amount differs from the shop's bill. */
 export function askSupplierText(no: string, filed: number, mine: number): string {
   return `Namaste. In your GSTR-1, bill ${no} shows ${formatINR(filed)}, but our bill says ${formatINR(mine)}. Please correct it in your GSTR-1 so the GST credit matches. Thank you.`

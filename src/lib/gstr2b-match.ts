@@ -82,8 +82,14 @@ export interface TwoBSort {
   notInBooks: MatchLine[]
   notMine: MatchLine[]
   waiting: MatchPurchase[]
-  /** Suppliers' credit / debit notes — matched to the shop's entries in 9a-4. */
+  /** Suppliers' credit notes in this 2B (all of them; the three lists below split them). */
   notes: MatchLine[]
+  /** 9a-4: credit notes paired with the shop's return-to-supplier entry by its stored answer. */
+  notesRecorded: Pair[]
+  /** 9a-4: credit notes with exactly-the-same-amount return entries from that supplier — offered, never assumed. */
+  notesOffered: Array<{ line: MatchLine; candidates: MatchPurchase[] }>
+  /** 9a-4: credit notes not in the books — the portal will cut credit by their GST; "Record it". */
+  notesToRecord: MatchLine[]
   /**
    * 2B line id → the purchase's own number, for every pairing the claim's key would
    * miss (corrected and confirmed). GSTR-3B claims through this, so the screen and
@@ -100,8 +106,21 @@ export function normBillNo(s: string | null | undefined): string {
 /** A stored answer belongs to one document: its type plus the one match key. */
 const decisionKey = (gstin: string, docType: string, no: string) => `${docType}#${itcMatchKey(gstin, no)}`
 
-export function sortTwoB(lines: MatchLine[], purchases: MatchPurchase[], decisions: StoredDecision[]): TwoBSort {
-  const out: TwoBSort = { matched: [], amountDiffers: [], noCredit: [], sameBill: [], notInBooks: [], notMine: [], waiting: [], notes: [], claimNumber: new Map() }
+/** The 2B document types that are bills for matching and credit — IMS treats "Inv/DN" alike. */
+const BILL_DOCS = ['invoice', 'debit-note']
+export const isBillDoc = (docType: string) => BILL_DOCS.includes(docType)
+
+export function sortTwoB(
+  lines: MatchLine[],
+  purchases: MatchPurchase[],
+  decisions: StoredDecision[],
+  /** 9a-4: the shop's own return-to-supplier entries (debit notes) that can take a supplier's credit note. */
+  ownNotes: MatchPurchase[] = [],
+): TwoBSort {
+  const out: TwoBSort = {
+    matched: [], amountDiffers: [], noCredit: [], sameBill: [], notInBooks: [], notMine: [], waiting: [],
+    notes: [], notesRecorded: [], notesOffered: [], notesToRecord: [], claimNumber: new Map(),
+  }
   const byKey = new Map<string, MatchPurchase>()
   const byId = new Map<string, MatchPurchase>()
   for (const p of purchases) {
@@ -126,14 +145,14 @@ export function sortTwoB(lines: MatchLine[], purchases: MatchPurchase[], decisio
 
   const bills: MatchLine[] = []
   for (const line of lines) {
-    if (line.docType !== 'invoice') { out.notes.push(line); continue }
+    if (!BILL_DOCS.includes(line.docType)) { out.notes.push(line); continue }
     bills.push(line)
   }
 
   // Pass 1 — certain pairings: the shop's own answers, the number itself, the corrected number.
   const open: MatchLine[] = []
   for (const line of bills) {
-    const mine = decided.get(decisionKey(line.supplierGstin, 'invoice', line.invoiceNumber)) ?? []
+    const mine = decided.get(decisionKey(line.supplierGstin, line.docType, line.invoiceNumber)) ?? []
     if (mine.some((d) => d.decision === 'not-mine')) { out.notMine.push(line); continue }
     const confirmed = mine.find((d) => d.decision === 'same-bill' && byId.has(d.purchaseId) && !used.has(d.purchaseId))
     if (confirmed) { place(line, byId.get(confirmed.purchaseId)!, 'confirmed'); continue }
@@ -146,7 +165,7 @@ export function sortTwoB(lines: MatchLine[], purchases: MatchPurchase[], decisio
 
   // Pass 2 — offered, never assumed: same supplier, number written differently.
   for (const line of open) {
-    const rejected = new Set((decided.get(decisionKey(line.supplierGstin, 'invoice', line.invoiceNumber)) ?? [])
+    const rejected = new Set((decided.get(decisionKey(line.supplierGstin, line.docType, line.invoiceNumber)) ?? [])
       .filter((d) => d.decision === 'different-bills').map((d) => d.purchaseId))
     const want = normBillNo(line.invoiceNumber)
     const candidates = purchases.filter((p) => !used.has(p.id) && !rejected.has(p.id)
@@ -159,5 +178,32 @@ export function sortTwoB(lines: MatchLine[], purchases: MatchPurchase[], decisio
   // A purchase offered as "same bill?" is not also listed as waiting — it is being asked about.
   const offered = new Set(out.sameBill.flatMap((s) => s.candidates.map((c) => c.id)))
   out.waiting = purchases.filter((p) => p.gstin && p.invoiceNo && !used.has(p.id) && !offered.has(p.id))
+
+  /*
+   * 9a-4 — a supplier's credit note against the shop's return-to-supplier entry.
+   * The shop numbers its own entry (DN-…), so the supplier's number never matches;
+   * the link is the shop's stored answer. An entry from the same supplier for the
+   * same amount is OFFERED ("Recorded as DN-0003?"), never assumed.
+   */
+  const noteIds = new Map(ownNotes.map((n) => [n.id, n]))
+  const usedNotes = new Set<string>()
+  const pending: MatchLine[] = []
+  for (const line of out.notes) {
+    const mine = decided.get(decisionKey(line.supplierGstin, line.docType, line.invoiceNumber)) ?? []
+    const confirmed = mine.find((d) => d.decision === 'same-bill' && noteIds.has(d.purchaseId) && !usedNotes.has(d.purchaseId))
+    if (confirmed) {
+      usedNotes.add(confirmed.purchaseId)
+      out.notesRecorded.push({ line, purchase: noteIds.get(confirmed.purchaseId)!, via: 'confirmed' })
+    } else pending.push(line)
+  }
+  for (const line of pending) {
+    const rejected = new Set((decided.get(decisionKey(line.supplierGstin, line.docType, line.invoiceNumber)) ?? [])
+      .filter((d) => d.decision === 'different-bills').map((d) => d.purchaseId))
+    const candidates = ownNotes.filter((n) => !usedNotes.has(n.id) && !rejected.has(n.id)
+      && (n.gstin ?? '').trim().toUpperCase() === line.supplierGstin.trim().toUpperCase()
+      && Math.abs(roundMoney(n.totalAmount) - roundMoney(line.totalAmount)) <= AMOUNT_TOLERANCE)
+    if (candidates.length) out.notesOffered.push({ line, candidates })
+    else out.notesToRecord.push(line)
+  }
   return out
 }

@@ -620,6 +620,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         }
       }
       if (stored.data.invoiceNo) setInvoiceNo(stored.data.invoiceNo)
+      // 9a-4: a supplier's credit note recorded from Supplier bills carries its number here.
+      if (stored.data.notes) setNotes(stored.data.notes)
       if (stored.data.date) {
         try {
           const d = new Date(stored.data.date)

@@ -33,7 +33,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { InfoHint } from '@/components/common/InfoHint'
 import { useAppStore } from '@/store/app-store'
 import { whatsAppUrl } from '@/lib/whatsapp-link'
-import { purchasePresetFrom, askSupplierText, remindSupplierText } from '@/lib/supplier-bills'
+import { purchasePresetFrom, returnPresetFrom, askSupplierText, remindSupplierText } from '@/lib/supplier-bills'
 
 export function Gstr2bReconciliation() {
   const queryClient = useQueryClient()
@@ -47,6 +47,10 @@ export function Gstr2bReconciliation() {
   // 🔒 Hooks first — always called unconditionally
   const { data, isLoading, error } = useQuery({
     queryKey: ['gstr-2b-reconcile', month],
+    // 9a-4: "Add as purchase" and "Record it" send the shop to a form and back. Fetch fresh each
+    // time the screen opens (showing the cached answer meanwhile), or the bill just entered read
+    // "not in your books" for the app-wide 2-minute cache.
+    refetchOnMount: 'always',
     queryFn: async () => {
       const r = await offlineFetch(`/api/gstr-2b/reconcile?month=${month}`)
       if (!r.ok) {
@@ -259,6 +263,7 @@ interface Groups {
   matched: PairRow[]; amountDiffers: PairRow[]; noCredit: PairRow[]
   sameBill: Array<{ line: Line; candidates: Buy[] }>
   notInBooks: Line[]; notMine: Line[]; notes: Line[]; waiting: Buy[]
+  notesRecorded?: Array<{ line: Line; entry: Buy }>; notesOffered?: Array<{ line: Line; candidates: Buy[] }>; notesToRecord?: Line[]
 }
 
 const tax = (x: { cgst: number; sgst: number; igst: number }) => Math.round((x.cgst + x.sgst + x.igst) * 100) / 100
@@ -289,6 +294,12 @@ function SupplierBills({ data, groups, month, onChanged }: { data: any; groups: 
   const openBill = (id: string) => { setSelectedTransactionId(id); setPreviousView('reports'); setView('transaction-detail') }
   const addAsPurchase = (l: Line) => {
     ;(window as any).__ledgerPreset = purchasePresetFrom(l, l.supplierPartyId)
+    setPreviousView('reports')
+    setView('new-purchase')
+  }
+  // 9a-4: "Record it" — the return-to-supplier form, filled in from the note; nothing is saved from here.
+  const recordNote = (l: Line) => {
+    ;(window as any).__ledgerPreset = returnPresetFrom(l, l.supplierPartyId)
     setPreviousView('reports')
     setView('new-purchase')
   }
@@ -353,8 +364,8 @@ function SupplierBills({ data, groups, month, onChanged }: { data: any; groups: 
               why={<><Chip tone="check">Same bill? Number written differently</Chip>
                 <span className="text-xs text-muted-foreground">2B: {s.line.invoiceNumber} · yours: {c.invoiceNumber} {formatINR(c.totalAmount)}</span></>}
             >
-              <Act primary disabled={busy !== null} onClick={() => run(`same-${s.line.id}`, { supplierGstin: s.line.supplierGstin, documentNumber: s.line.invoiceNumber, decision: 'same-bill', purchaseId: c.purchaseId }, 'POST', 'Matched')}>Same bill</Act>
-              <Act disabled={busy !== null} onClick={() => run(`diff-${s.line.id}`, { supplierGstin: s.line.supplierGstin, documentNumber: s.line.invoiceNumber, decision: 'different-bills', purchaseId: c.purchaseId })}>Different bills</Act>
+              <Act primary disabled={busy !== null} onClick={() => run(`same-${s.line.id}`, { supplierGstin: s.line.supplierGstin, docType: s.line.docType, documentNumber: s.line.invoiceNumber, decision: 'same-bill', purchaseId: c.purchaseId }, 'POST', 'Matched')}>Same bill</Act>
+              <Act disabled={busy !== null} onClick={() => run(`diff-${s.line.id}`, { supplierGstin: s.line.supplierGstin, docType: s.line.docType, documentNumber: s.line.invoiceNumber, decision: 'different-bills', purchaseId: c.purchaseId })}>Different bills</Act>
             </Row>
           )))}
           {groups.notInBooks.map((l) => (
@@ -379,11 +390,34 @@ function SupplierBills({ data, groups, month, onChanged }: { data: any; groups: 
         </Section>
       )}
 
+      {/*
+        * 9a-4: a supplier's credit note. Once accepted on the portal it cuts credit by its
+        * GST (GSTN IMS FAQ Q15: accepted records auto-populate GSTR-3B), so the books
+        * record it as a return to the supplier. Recorded, offered ("Recorded as DN-…?"),
+        * or still to record — never assumed from an amount alone.
+        */}
       {groups.notes.length > 0 && (
         <Section title="Notes from suppliers" count={`${groups.notes.length}`}>
-          {groups.notes.map((l) => (
+          {(groups.notesToRecord ?? []).map((l) => (
             <Row key={`note-${l.id}`} title={`${nameOf(l)} · ${l.invoiceNumber}`} amount={l.totalAmount}
-              why={<Chip tone="quiet">{l.docType === 'debit-note' ? 'Debit note' : 'Credit note'} · GST {formatINR(tax(l))}</Chip>}
+              why={<><Chip tone="check">Credit note · not in your books</Chip>
+                <span className="text-xs text-muted-foreground">Portal: accept, reduce credit {formatINR(tax(l))}</span>
+                <InfoHint label={`about credit note ${l.invoiceNumber}`} text={`On the portal, accept it and say "Yes" to reducing credit, by ${formatINR(tax(l))} — or "No" if you never took credit on that bill. A credit note can stay Pending only until your next GSTR-3B; after that it counts as accepted.`} /></>}
+            >
+              <Act primary onClick={() => recordNote(l)}>Record it</Act>
+            </Row>
+          ))}
+          {(groups.notesOffered ?? []).flatMap((x) => x.candidates.map((c) => (
+            <Row key={`noff-${x.line.id}-${c.purchaseId}`} title={`${nameOf(x.line)} · ${x.line.invoiceNumber}`} amount={x.line.totalAmount}
+              why={<><Chip tone="check">Recorded as {c.invoiceNumber}?</Chip><span className="text-xs text-muted-foreground">your return {formatINR(c.totalAmount)}</span></>}
+            >
+              <Act primary disabled={busy !== null} onClick={() => run(`nsame-${x.line.id}`, { supplierGstin: x.line.supplierGstin, docType: x.line.docType, documentNumber: x.line.invoiceNumber, decision: 'same-bill', purchaseId: c.purchaseId }, 'POST', 'Matched')}>Yes, that one</Act>
+              <Act disabled={busy !== null} onClick={() => run(`ndiff-${x.line.id}`, { supplierGstin: x.line.supplierGstin, docType: x.line.docType, documentNumber: x.line.invoiceNumber, decision: 'different-bills', purchaseId: c.purchaseId })}>No</Act>
+            </Row>
+          )))}
+          {(groups.notesRecorded ?? []).map((n) => (
+            <Row key={`nrec-${n.line.id}`} title={`${nameOf(n.line)} · ${n.line.invoiceNumber}`} amount={n.line.totalAmount}
+              why={<span className="inline-flex items-center gap-1 text-xs text-good"><CheckCircle2 className="w-3.5 h-3.5" aria-hidden /> Recorded as {n.entry.invoiceNumber}</span>}
             />
           ))}
         </Section>
@@ -414,7 +448,7 @@ function SupplierBills({ data, groups, month, onChanged }: { data: any; groups: 
           <Row key={`nm-${l.id}`} title={`${nameOf(l)} · ${l.invoiceNumber}`} amount={l.totalAmount}
             why={<span className="text-xs text-muted-foreground">Rejected on the portal</span>}
           >
-            <Act disabled={busy !== null} onClick={() => run(`undo-${l.id}`, { supplierGstin: l.supplierGstin, documentNumber: l.invoiceNumber, decision: 'not-mine' }, 'DELETE')}>Undo</Act>
+            <Act disabled={busy !== null} onClick={() => run(`undo-${l.id}`, { supplierGstin: l.supplierGstin, docType: l.docType, documentNumber: l.invoiceNumber, decision: 'not-mine' }, 'DELETE')}>Undo</Act>
           </Row>
         ))}
       </Folded>
@@ -427,7 +461,7 @@ function SupplierBills({ data, groups, month, onChanged }: { data: any; groups: 
 
       {notMine && (
         <NotMineSheet line={notMine} busy={busy !== null} onClose={() => setNotMine(null)}
-          onDone={() => run(`nm-${notMine.id}`, { supplierGstin: notMine.supplierGstin, documentNumber: notMine.invoiceNumber, decision: 'not-mine' }, 'POST', 'Marked as not yours').then(() => setNotMine(null))}
+          onDone={() => run(`nm-${notMine.id}`, { supplierGstin: notMine.supplierGstin, docType: notMine.docType, documentNumber: notMine.invoiceNumber, decision: 'not-mine' }, 'POST', 'Marked as not yours').then(() => setNotMine(null))}
         />
       )}
     </div>

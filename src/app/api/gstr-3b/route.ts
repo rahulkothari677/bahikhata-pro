@@ -463,6 +463,10 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       // 9a-1: in 2B, but 2B says no credit on it.
       notAvailableCount: itcClaim.notAvailable.length,
       notAvailableTax: itcClaim.totals.notAvailableTax,
+      // 9a-4: suppliers' credit notes in 2B not yet in the books — the portal cuts credit by their GST.
+      // An offered note ("Recorded as DN-…?") already has its return entry — only notes with none count.
+      unrecordedNotesCount: gstr2b ? gstr2b.sort.notesToRecord.length : 0,
+      unrecordedNotesTax: gstr2b ? roundMoney(gstr2b.sort.notesToRecord.reduce((t, l) => t + l.cgst + l.sgst + l.igst, 0)) : 0,
       // #112: bills to chase, by name, before s.16(4) shuts the window.
       endingSoonTax: itcClaim.totals.endingSoonTax,
       endingSoon: itcClaim.endingSoon.map((p) => ({

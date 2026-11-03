@@ -50,11 +50,14 @@ export async function POST(req: NextRequest) {
     if (typeof parsed === 'string') return NextResponse.json({ error: parsed }, { status: 400 })
 
     if (parsed.purchaseId) {
+      // 9a-4: a supplier's credit note pairs with the shop's return-to-supplier entry; a bill or a
+      // supplier's debit note with a purchase.
+      const entryType = parsed.docType === 'credit-note' ? 'debit-note' : 'purchase'
       const purchase = await db.transaction.findFirst({
-        where: { id: parsed.purchaseId, userId, type: 'purchase', deletedAt: null },
+        where: { id: parsed.purchaseId, userId, type: entryType, deletedAt: null },
         select: { id: true, party: { select: { gstin: true } } },
       })
-      if (!purchase) return NextResponse.json({ error: 'Purchase not found' }, { status: 404 })
+      if (!purchase) return NextResponse.json({ error: entryType === 'debit-note' ? 'Return to supplier not found' : 'Purchase not found' }, { status: 404 })
       if ((purchase.party?.gstin ?? '').trim().toUpperCase() !== parsed.supplierGstin) {
         return NextResponse.json({ error: 'That purchase is from a different supplier', message: 'A 2B bill can only be the same bill as a purchase from the supplier with that GSTIN.' }, { status: 409 })
       }

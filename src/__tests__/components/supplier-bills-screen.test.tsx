@@ -47,7 +47,10 @@ const payload = {
     sameBill: [{ line: line('RO/0012'), candidates: [buy('p-ro12', 'RO-12')] }],
     notInBooks: [line('X-9', { supplierGstin: C, supplierName: null, supplierPartyId: null, totalAmount: 826, taxableValue: 700, cgst: 63, sgst: 63 })],
     notMine: [],
-    notes: [line('CN-14', { docType: 'credit-note', totalAmount: 590, taxableValue: 500, cgst: 45, sgst: 45 })],
+    notes: [line('CN-14', { docType: 'credit-note', totalAmount: 590, taxableValue: 500, cgst: 45, sgst: 45 }), line('CN-15', { docType: 'credit-note', totalAmount: 236, taxableValue: 200, cgst: 18, sgst: 18 })],
+    notesToRecord: [line('CN-14', { docType: 'credit-note', totalAmount: 590, taxableValue: 500, cgst: 45, sgst: 45 })],
+    notesOffered: [{ line: line('CN-15', { docType: 'credit-note', totalAmount: 236, taxableValue: 200, cgst: 18, sgst: 18 }), candidates: [buy('d-3', 'DN-0003', { totalAmount: 236 })] }],
+    notesRecorded: [],
     waiting: [buy('p-977', 'SUP-977', { totalAmount: 354, taxableValue: 300, cgst: 27, sgst: 27 })],
   },
 }
@@ -80,7 +83,9 @@ describe('the supplier-bills screen (9a-3)', () => {
     expect(screen.getByText('Same bill? Number written differently')).toBeTruthy()
     expect(screen.getByText('Not in your books')).toBeTruthy()
     expect(screen.getByText('No credit on this bill')).toBeTruthy()
-    expect(screen.getByText(/Credit note · GST ₹90/)).toBeTruthy()
+    expect(screen.getByText('Credit note · not in your books')).toBeTruthy()
+    expect(screen.getByText(/Portal: accept, reduce credit ₹90/)).toBeTruthy()
+    expect(screen.getByText('Recorded as DN-0003?')).toBeTruthy()
     expect(screen.getByText('Change it on the portal before you file GSTR-3B')).toBeTruthy()
   })
 
@@ -88,7 +93,7 @@ describe('the supplier-bills screen (9a-3)', () => {
     mount()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Same bill' })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Same bill' }))
-    await waitFor(() => expect(decisionsSent()).toEqual([{ method: 'POST', supplierGstin: A, documentNumber: 'RO/0012', decision: 'same-bill', purchaseId: 'p-ro12' }]))
+    await waitFor(() => expect(decisionsSent()).toEqual([{ method: 'POST', supplierGstin: A, docType: 'invoice', documentNumber: 'RO/0012', decision: 'same-bill', purchaseId: 'p-ro12' }]))
   })
 
   it('"Not mine" shows the three portal steps; "Done on the portal" records it', async () => {
@@ -99,7 +104,7 @@ describe('the supplier-bills screen (9a-3)', () => {
     expect(within(sheet).getByText(/Recompute GSTR-2B/)).toBeTruthy()
     expect(decisionsSent()).toEqual([]) // nothing recorded until the shop says it is done
     fireEvent.click(within(sheet).getByRole('button', { name: 'Done on the portal' }))
-    await waitFor(() => expect(decisionsSent()).toEqual([{ method: 'POST', supplierGstin: C, documentNumber: 'X-9', decision: 'not-mine' }]))
+    await waitFor(() => expect(decisionsSent()).toEqual([{ method: 'POST', supplierGstin: C, docType: 'invoice', documentNumber: 'X-9', decision: 'not-mine' }]))
   })
 
   it('"Add as purchase" opens the purchase form filled in from 2B — it saves nothing', async () => {
@@ -116,6 +121,28 @@ describe('the supplier-bills screen (9a-3)', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: 'Remind' })).toBeTruthy())
     expect(screen.getByRole('link', { name: 'Remind' }).getAttribute('href')).toMatch(/^https:\/\/wa\.me\/919829012345\?text=.*SUP-977/)
     expect(screen.getByRole('link', { name: 'Ask supplier' }).getAttribute('href')).toMatch(/SB-1182/)
+  })
+
+  it('9a-4: "Record it" opens the return-to-supplier form filled from the note; "Yes, that one" links it', async () => {
+    mount()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Record it' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, that one' }))
+    await waitFor(() => expect(decisionsSent()).toEqual([{ method: 'POST', supplierGstin: A, docType: 'credit-note', documentNumber: 'CN-15', decision: 'same-bill', purchaseId: 'd-3' }]))
+    fireEvent.click(screen.getByRole('button', { name: 'Record it' }))
+    expect((window as any).__ledgerPreset).toMatchObject({ type: 'debit-note', data: { partyId: 'party-a', notes: "Supplier's credit note CN-14" } })
+    expect(useAppStore.getState().currentView).toBe('new-purchase')
+  })
+
+  it('9a-4: coming back from a form fetches fresh, even inside the app-wide cache time', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 2 * 60 * 1000 } } })
+    const view = () => <QueryClientProvider client={client}><Gstr2bReconciliation /></QueryClientProvider>
+    const first = render(view())
+    await waitFor(() => expect(screen.getByTestId('credit-ready')).toBeTruthy())
+    const calls = () => fetchMock.mock.calls.filter((c) => String(c[0]).startsWith('/api/gstr-2b/reconcile')).length
+    expect(calls()).toBe(1)
+    first.unmount() // off to the purchase form…
+    render(view())  // …and back
+    await waitFor(() => expect(calls()).toBe(2))
   })
 
   it('calm when fine: everything matched → no countdown, no decision list', async () => {

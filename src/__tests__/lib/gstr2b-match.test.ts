@@ -105,6 +105,45 @@ describe('the shop’s answers, remembered', () => {
   })
 })
 
+describe('9a-4: suppliers’ notes', () => {
+  const cn = (no: string, total = 590, over: Partial<MatchLine> = {}) => line(no, { docType: 'credit-note', totalAmount: total, taxableValue: 500, cgst: 45, sgst: 45, ...over })
+  const ret = (id: string, no: string, total = 590): MatchPurchase => buy(id, no, { totalAmount: total })
+
+  it('a supplier’s DEBIT note is a bill (IMS "Inv/DN"): matched to the purchase entered under its number', () => {
+    const r = sortTwoB([line('DN-7', { docType: 'debit-note' })], [buy('p1', 'DN-7')], [])
+    expect(r.matched.map((p) => [p.line.invoiceNumber, p.purchase.id])).toEqual([['DN-7', 'p1']])
+    expect(r.notes).toEqual([])
+  })
+
+  it('a credit note with no return entry is "to record"', () => {
+    const r = sortTwoB([cn('CN-14')], [], [], [])
+    expect(r.notesToRecord.map((l) => l.invoiceNumber)).toEqual(['CN-14'])
+  })
+
+  it('the same supplier’s return for the same amount is OFFERED, never assumed', () => {
+    const r = sortTwoB([cn('CN-14')], [], [], [ret('d1', 'DN-0003'), ret('d2', 'DN-0004', 600)])
+    expect(r.notesOffered.map((x) => [x.line.invoiceNumber, ids(x.candidates)])).toEqual([['CN-14', ['d1']]])
+    expect(r.notesRecorded).toEqual([])
+  })
+
+  it('another supplier’s return of the same amount is not offered', () => {
+    const r = sortTwoB([cn('CN-14')], [], [], [buy('d1', 'DN-0003', { gstin: H, totalAmount: 590 })])
+    expect(r.notesToRecord.map((l) => l.invoiceNumber)).toEqual(['CN-14'])
+  })
+
+  it('the shop’s answer records it; "No" stops the offer', () => {
+    const yes = sortTwoB([cn('CN-14')], [], [{ supplierGstin: G, docType: 'credit-note', documentNumber: 'CN-14', decision: 'same-bill', purchaseId: 'd1' }], [ret('d1', 'DN-0003')])
+    expect(yes.notesRecorded.map((p) => [p.line.invoiceNumber, p.purchase.invoiceNo])).toEqual([['CN-14', 'DN-0003']])
+    const no = sortTwoB([cn('CN-14')], [], [{ supplierGstin: G, docType: 'credit-note', documentNumber: 'CN-14', decision: 'different-bills', purchaseId: 'd1' }], [ret('d1', 'DN-0003')])
+    expect(no.notesToRecord.map((l) => l.invoiceNumber)).toEqual(['CN-14'])
+  })
+
+  it('an answer about a bill is not read as an answer about a note with the same number', () => {
+    const r = sortTwoB([cn('X-1')], [], [{ supplierGstin: G, docType: 'invoice', documentNumber: 'X-1', decision: 'same-bill', purchaseId: 'd1' }], [ret('d1', 'DN-0003')])
+    expect(r.notesRecorded).toEqual([])
+  })
+})
+
 describe('each purchase is used once', () => {
   it('two 2B lines cannot both claim one purchase', () => {
     const r = sortTwoB([line('A-1'), line('A-1', { id: 'L-dup' })], [buy('p1', 'A-1')], [])

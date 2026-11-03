@@ -6,7 +6,7 @@ import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { imsWindow, IMS_ACTIONS } from '@/lib/ims-deadline'
 import { loadTwoBMonth } from '@/lib/gstr2b-context'
-import type { MatchLine, MatchPurchase, Pair } from '@/lib/gstr2b-match'
+import { isBillDoc, type MatchLine, type MatchPurchase, type Pair } from '@/lib/gstr2b-match'
 
 /**
  * GET /api/gstr-2b/reconcile?month=2026-07
@@ -143,7 +143,7 @@ export async function GET(req: NextRequest) {
         deferredItc,
         missingItc,
         totalPurchases: twoB.purchases.length,
-        totalTwoBInvoices: twoB.lines.filter((l) => l.docType === 'invoice').length,
+        totalTwoBInvoices: twoB.lines.filter((l) => isBillDoc(l.docType)).length,
       },
       matched,
       booksOnly,
@@ -160,6 +160,10 @@ export async function GET(req: NextRequest) {
         notInBooks: sort.notInBooks.map(lineOut),
         notMine: sort.notMine.map(lineOut),
         notes: sort.notes.map(lineOut),
+        // 9a-4: each supplier credit note recorded (with the shop's entry), offered, or still to record.
+        notesRecorded: sort.notesRecorded.map((p) => ({ line: lineOut(p.line), entry: purchaseOut(p.purchase) })),
+        notesOffered: sort.notesOffered.map((x) => ({ line: lineOut(x.line), candidates: x.candidates.map(purchaseOut) })),
+        notesToRecord: sort.notesToRecord.map(lineOut),
         waiting: sort.waiting.map(purchaseOut),
       },
     })
