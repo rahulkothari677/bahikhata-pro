@@ -34,6 +34,17 @@ describe('#116: never more than the supplier filed', () => {
   })
 })
 
+describe('9a-1: a bill 2B marks "ITC not available" (#353)', () => {
+  it('is not claimed, and is not "waiting for the supplier" either', () => {
+    const r = claimForPeriod('072026', [p(), p({ id: 'p2', invoiceNo: 'S-102' })], [line(), line({ invoiceNumber: 'S-102', itcAvailable: false })])
+    expect(r.claimed.map((c) => c.id)).toEqual(['p1'])
+    expect(r.notAvailable.map((x) => x.id)).toEqual(['p2'])
+    expect([r.deferred.length, r.stillWaiting.length]).toEqual([0, 0])
+    expect(r.totals.notAvailableTax).toBe(12000) // the book tax: ₹6,000 + ₹6,000
+    expect(r.totals.claim.cgst).toBe(5000)        // only S-101's, the smaller of book and 2B
+  })
+})
+
 describe('#117: a supplier who files late — claimed in the month it appears, never lost, never twice', () => {
   const june = p({ id: 'june', billFp: '062026' })
   test('June\'s 2B does not have it: June defers it', () => {

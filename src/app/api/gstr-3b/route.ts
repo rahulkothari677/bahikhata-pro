@@ -329,7 +329,8 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
 
   const gstr2b = await db.gstr2bImport.findFirst({
     where: { userId, monthYear: monthYearOf(periodStart) },
-    include: { invoices: true },
+    // 9a-1: bills only; suppliers' notes reduce credit through the shop's own entries.
+    include: { invoices: { where: { docType: 'invoice' } } },
   })
 
   /*
@@ -403,8 +404,9 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
         itcClaimedIn: p.itcClaimedIn,
         supplier: p.party?.name || null,
       })),
-      // #353: a bill 2B marks "ITC not available" (itcavl N) is never claimed.
-      gstr2b.invoices.filter((i) => i.itcAvailable).map((i) => ({ supplierGstin: i.supplierGstin, invoiceNumber: i.invoiceNumber, taxableValue: i.taxableValue, cgst: i.cgst, sgst: i.sgst, igst: i.igst })),
+      // #353 / 9a-1: a bill 2B marks "ITC not available" (itcavl N) is never claimed — claimForPeriod
+      // puts it in its own bucket, not "waiting for the supplier".
+      gstr2b.invoices.map((i) => ({ supplierGstin: i.supplierGstin, invoiceNumber: i.invoiceNumber, taxableValue: i.taxableValue, cgst: i.cgst, sgst: i.sgst, igst: i.igst, itcAvailable: i.itcAvailable })),
     )
     const t = itcClaim.totals.claim
     itcTaxableValue = t.taxable; itcCgst = t.cgst; itcSgst = t.sgst; itcIgst = t.igst
@@ -470,6 +472,9 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       stillWaitingTax: itcClaim.totals.stillWaitingTax,
       lapsedCount: itcClaim.lapsed.length,
       lapsedTax: itcClaim.totals.lapsedTax,
+      // 9a-1: in 2B, but 2B says no credit on it.
+      notAvailableCount: itcClaim.notAvailable.length,
+      notAvailableTax: itcClaim.totals.notAvailableTax,
       // #112: bills to chase, by name, before s.16(4) shuts the window.
       endingSoonTax: itcClaim.totals.endingSoonTax,
       endingSoon: itcClaim.endingSoon.map((p) => ({

@@ -27,6 +27,14 @@ test('each held-back amount, in shop words, with counts', () => {
   expect(t).toMatch(/₹450(\.00)? can no longer be claimed — past 30 November \(1 bill\)/)
 })
 
+test('9a-1: a bill 2B says carries no credit has its own line, not "waiting for suppliers"', () => {
+  render(<ItcClaimNotes detail={{ ...NONE, notAvailableCount: 1, notAvailableTax: 180 }} />)
+  const t = screen.getByTestId('itc-claim-notes').textContent!
+  expect(t).toMatch(/₹180(\.00)? not claimed — GSTR-2B says no credit \(1 bill\)/)
+  expect(t).not.toMatch(/waiting/)
+  expect(t).not.toMatch(/88D/) // the rule sits behind ⓘ
+})
+
 test('the rule is behind ⓘ, not on the line', () => {
   render(<ItcClaimNotes detail={{ ...NONE, shortBy: 2000, shortCount: 1 }} />)
   expect(screen.getByTestId('itc-claim-notes').textContent).not.toMatch(/Rule 36|88D/)

@@ -17,12 +17,26 @@
  *     this bill (with the reason code in `rsn`). Kept as itcAvailable=false so
  *     GSTR-3B never claims it; any other value (or none) is available.
  *   - `rev` / `rchrg`: reverse charge.
- * Credit notes (`docdata.cdnr`) are left to Phase 9a.
+ *
+ * 9a-1 (3 Nov 2026): also the other three sections a small shop's 2B carries —
+ *   - `docdata.b2ba`  corrected bills, the original number in `oinum`;
+ *   - `docdata.cdnr`  suppliers' credit / debit notes, under `nt[]` with
+ *                     `ntnum` and `typ` "C" or "D";
+ *   - `docdata.cdnra` corrected notes, the original number in `ontnum`.
+ * Each line says what it is (docType) so a note is never matched as a bill.
+ * Not read: `itcrev` (reversals), `isd`, `impg`, `ecom` — not a kirana's 2B.
  */
 import { roundMoney as r2 } from '@/lib/money'
 
+/** What a 2B line is: a supplier's bill, or a credit / debit note they issued to you. */
+export type Gstr2bDocType = 'invoice' | 'credit-note' | 'debit-note'
+
 export interface Gstr2bLine {
+  docType: Gstr2bDocType
+  /** For a corrected bill or note (b2ba / cdnra): the number it replaces. */
+  originalNumber: string | null
   supplierGstin: string
+  /** The bill's or note's number (inum / ntnum). */
   invoiceNumber: string
   invoiceDate: string | null
   taxableValue: number
@@ -40,8 +54,8 @@ export interface Gstr2bLine {
 export interface Gstr2bFile {
   gstin: string | null
   period: string | null
-  /** True when the file has a `b2b` section at all (even an empty one). */
-  hasB2b: boolean
+  /** True when the file has any bill or note section (b2b, b2ba, cdnr, cdnra), even an empty one. */
+  hasDocuments: boolean
   lines: Gstr2bLine[]
 }
 
@@ -67,38 +81,57 @@ function moneyOf(inv: Obj): { taxable: number; igst: number; cgst: number; sgst:
   }
 }
 
+/** One document (a bill under `inv`, a note under `nt`) into a line. */
+function lineOf(sup: Obj, doc: Obj, docType: Gstr2bDocType, originalNumber: unknown): Gstr2bLine {
+  const m = moneyOf(doc)
+  const itcavl = String(doc.itcavl ?? '').toUpperCase()
+  return {
+    docType,
+    originalNumber: originalNumber != null && originalNumber !== '' ? String(originalNumber) : null,
+    supplierGstin: String(sup.ctin).toUpperCase(),
+    invoiceNumber: String(doc.inum ?? doc.ntnum ?? doc.inum_inv ?? 'UNKNOWN'),
+    invoiceDate: (doc.dt ?? doc.idt ?? null) as string | null,
+    taxableValue: r2(m.taxable),
+    igst: r2(m.igst),
+    cgst: r2(m.cgst),
+    sgst: r2(m.sgst),
+    totalAmount: r2(num(doc.val) || num(doc.itcval)),
+    isReverseCharge: String(doc.rev ?? doc.rchrg ?? doc.rchrgitc ?? 'N').toUpperCase() === 'Y',
+    itcAvailable: itcavl !== 'N',
+    itcReason: itcavl === 'N' && doc.rsn != null ? String(doc.rsn) : null,
+  }
+}
+
+/** Every document of one section: suppliers (`ctin`) each holding `inv` or `nt`. */
+function sectionLines(section: unknown, list: 'inv' | 'nt', amended: boolean): Gstr2bLine[] {
+  const out: Gstr2bLine[] = []
+  for (const sup of Array.isArray(section) ? section : []) {
+    if (!isObj(sup) || !sup.ctin) continue
+    for (const doc of Array.isArray(sup[list]) ? sup[list] : []) {
+      if (!isObj(doc)) continue
+      const docType: Gstr2bDocType = list === 'inv' ? 'invoice'
+        : String(doc.typ ?? doc.ntty ?? 'C').toUpperCase() === 'D' ? 'debit-note' : 'credit-note'
+      out.push(lineOf(sup, doc, docType, amended ? (list === 'inv' ? doc.oinum : doc.ontnum) : null))
+    }
+  }
+  return out
+}
+
 export function parseGstr2b(file: unknown): Gstr2bFile {
   const top = isObj(file) ? file : {}
   // The portal nests the payload: { chksum, data: { gstin, rtnprd, docdata: { b2b } } }.
   const root = isObj(top.data) ? top.data : top
   const docdata = isObj(root.docdata) ? root.docdata : root
-  const b2b = Array.isArray(docdata.b2b) ? docdata.b2b : null
-  const lines: Gstr2bLine[] = []
-  for (const sup of b2b ?? []) {
-    if (!isObj(sup) || !sup.ctin) continue
-    for (const inv of Array.isArray(sup.inv) ? sup.inv : []) {
-      if (!isObj(inv)) continue
-      const m = moneyOf(inv)
-      const itcavl = String(inv.itcavl ?? '').toUpperCase()
-      lines.push({
-        supplierGstin: String(sup.ctin).toUpperCase(),
-        invoiceNumber: String(inv.inum ?? inv.inum_inv ?? 'UNKNOWN'),
-        invoiceDate: (inv.dt ?? inv.idt ?? null) as string | null,
-        taxableValue: r2(m.taxable),
-        igst: r2(m.igst),
-        cgst: r2(m.cgst),
-        sgst: r2(m.sgst),
-        totalAmount: r2(num(inv.val) || num(inv.itcval)),
-        isReverseCharge: String(inv.rev ?? inv.rchrg ?? inv.rchrgitc ?? 'N').toUpperCase() === 'Y',
-        itcAvailable: itcavl !== 'N',
-        itcReason: itcavl === 'N' && inv.rsn != null ? String(inv.rsn) : null,
-      })
-    }
-  }
+  const lines: Gstr2bLine[] = [
+    ...sectionLines(docdata.b2b, 'inv', false),
+    ...sectionLines(docdata.b2ba, 'inv', true),
+    ...sectionLines(docdata.cdnr, 'nt', false),
+    ...sectionLines(docdata.cdnra, 'nt', true),
+  ]
   return {
     gstin: root.gstin ? String(root.gstin) : null,
     period: (root.rtnprd ?? root.fp ?? null) as string | null,
-    hasB2b: !!b2b,
+    hasDocuments: ['b2b', 'b2ba', 'cdnr', 'cdnra'].some((k) => Array.isArray(docdata[k])),
     lines,
   }
 }

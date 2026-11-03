@@ -70,6 +70,8 @@ export async function GET(req: NextRequest) {
       where: { userId_monthYear: { userId, monthYear } },
       include: {
         invoices: {
+          // 9a-1: bills only — a supplier's credit note matched as a bill would read "not in your books".
+          where: { docType: 'invoice' },
           orderBy: { supplierGstin: 'asc' },
         },
       },

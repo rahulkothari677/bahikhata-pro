@@ -35,6 +35,7 @@ describe('a genuine GSTR-2B download (#353)', () => {
     expect(r.gstin).toBe('27ABCDE1234F1Z5')
     expect(r.period).toBe('112026')
     expect(r.lines).toEqual([{
+      docType: 'invoice', originalNumber: null,
       supplierGstin: '29BBBBB1111B1Z2', invoiceNumber: 'S008400', invoiceDate: '24-11-2026',
       taxableValue: 10000, igst: 0, cgst: 900, sgst: 900, totalAmount: 11800,
       isReverseCharge: false, itcAvailable: true, itcReason: null,
@@ -78,8 +79,40 @@ describe('the older shapes still read', () => {
     expect([l.taxableValue, l.cgst]).toEqual([500, 45])
   })
 
-  it('no b2b section is reported, so the route can refuse it', () => {
-    expect(parseGstr2b({ data: { gstin: 'G', docdata: {} } }).hasB2b).toBe(false)
+  it('a file with no bill or note section is reported, so the route can refuse it', () => {
+    expect(parseGstr2b({ data: { gstin: 'G', docdata: {} } }).hasDocuments).toBe(false)
+    expect(parseGstr2b({ data: { gstin: 'G', docdata: { cdnr: [] } } }).hasDocuments).toBe(true)
+  })
+})
+
+describe('9a-1: notes and corrections', () => {
+  const note = (ntnum: string, typ: 'C' | 'D', extra: object = {}) => ({
+    ntnum, typ, suptyp: 'R', dt: '20-11-2026', val: 590, pos: '27', rev: 'N', itcavl: 'Y', rsn: '', diffprcnt: 1, srctyp: 'Upload',
+    items: [{ num: 1, rt: 18, txval: 500, igst: 0, cgst: 45, sgst: 45, cess: 0 }], ...extra,
+  })
+  const file = {
+    data: { gstin: '27ABCDE1234F1Z5', rtnprd: '112026', docdata: {
+      b2b: [{ ctin: '29BBBBB1111B1Z2', inv: [TWO_B_BILL] }],
+      b2ba: [{ ctin: '29BBBBB1111B1Z2', inv: [{ ...TWO_B_BILL, inum: 'S008400A', oinum: 'S008400', oidt: '24-11-2026' }] }],
+      cdnr: [{ ctin: '29CCCCC2222C1Z3', trdnm: 'Gupta Agencies', nt: [note('CN-14', 'C'), note('DN-3', 'D')] }],
+      cdnra: [{ ctin: '29CCCCC2222C1Z3', nt: [note('CN-15', 'C', { onttyp: 'C', ontnum: 'CN-09', ontdt: '01-10-2026' })] }],
+    } },
+  }
+  const lines = parseGstr2b(file).lines
+
+  it('every section is read and says what it is', () => {
+    expect(lines.map((l) => [l.docType, l.invoiceNumber, l.originalNumber])).toEqual([
+      ['invoice', 'S008400', null],
+      ['invoice', 'S008400A', 'S008400'],
+      ['credit-note', 'CN-14', null],
+      ['debit-note', 'DN-3', null],
+      ['credit-note', 'CN-15', 'CN-09'],
+    ])
+  })
+
+  it('a note carries its money from items, like a bill', () => {
+    const cn = lines.find((l) => l.invoiceNumber === 'CN-14')!
+    expect([cn.supplierGstin, cn.taxableValue, cn.cgst, cn.sgst, cn.totalAmount]).toEqual(['29CCCCC2222C1Z3', 500, 45, 45, 590])
   })
 })
 
@@ -90,10 +123,19 @@ describe('one parser', () => {
     expect(route).not.toMatch(/itm_det|\.itms\b|inv\.rchrg|inv\.inum/)
   })
 
-  it('GSTR-3B claims only bills 2B says carry credit', () => {
+  it('GSTR-3B reads 2B bills only, and hands each one its credit flag', () => {
     const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gstr-3b/route.ts'), 'utf8')
-    const call = route.slice(route.indexOf('claimForPeriod('), route.indexOf('claimForPeriod(') + 600)
-    expect(call).toMatch(/claimForPeriod\(/)
-    expect(call).toMatch(/gstr2b\.invoices\.filter\(\(i\) => i\.itcAvailable\)/)
+    expect(route).toMatch(/include: \{ invoices: \{ where: \{ docType: 'invoice' \} \} \}/)
+    // The 2B lines handed to the claim: anchored on the call, then on its 2B argument.
+    const at = route.indexOf('itcClaim = claimForPeriod(')
+    expect(at).toBeGreaterThan(0)
+    const twoBArg = route.slice(route.indexOf('gstr2b.invoices.map(', at), route.indexOf('gstr2b.invoices.map(', at) + 300)
+    expect(twoBArg).toMatch(/^gstr2b\.invoices\.map\(/)
+    expect(twoBArg).toMatch(/itcAvailable: i\.itcAvailable/)
+  })
+
+  it('the 2B matcher reads bills only', () => {
+    const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gstr-2b/reconcile/route.ts'), 'utf8')
+    expect(route).toMatch(/invoices: \{[\s\S]{0,200}where: \{ docType: 'invoice' \}/)
   })
 })

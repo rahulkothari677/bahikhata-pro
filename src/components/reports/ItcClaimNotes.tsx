@@ -33,6 +33,9 @@ export interface ItcDetail {
   stillWaitingTax: number
   lapsedCount: number
   lapsedTax: number
+  /** 9a-1: bills in 2B that 2B marks "ITC not available". */
+  notAvailableCount?: number
+  notAvailableTax?: number
   endingSoonTax?: number
   endingSoon?: EndingSoonBill[]
 }
@@ -78,6 +81,11 @@ export function ItcClaimNotes({ detail }: { detail: ItcDetail | null | undefined
     key: 'waiting', tone: 'muted',
     text: `${formatINR(waitingTax)} waiting for suppliers to file (${bills(waitingCount)})`,
     info: 'Not in your GSTR-2B yet. Each is claimed in the month it appears there — until 30 November after its financial year.',
+  })
+  if ((detail.notAvailableTax ?? 0) > 0) lines.push({
+    key: 'no-credit', tone: 'bad',
+    text: `${formatINR(detail.notAvailableTax!)} not claimed — GSTR-2B says no credit (${bills(detail.notAvailableCount ?? 0)})`,
+    info: 'Your GSTR-2B lists these bills with input credit marked "not available", so it is not claimed; claiming it would invite a DRC-01C notice (Rule 88D). The portal’s reason code is on the GSTR-2B screen. If it looks wrong, ask the supplier to check the GSTIN and place of supply on their bill.',
   })
   if (detail.lapsedTax > 0) lines.push({
     key: 'lapsed', tone: 'bad',

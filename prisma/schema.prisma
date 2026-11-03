@@ -400,8 +400,10 @@ model Transaction {
   /// chemist, so only the shopkeeper can say.
   itcCategory              String?
 
-  // 🔒 M6: Unique invoice number per user (GST compliance — no duplicates)
-  @@unique([userId, invoiceNo])
+  // 🔒 M6 / #354: the shop's OWN numbers are unique per shop, deleted ones included (Rule 46);
+  // a purchase's number is the supplier's, unique per supplier among live bills. Both are
+  // partial unique indexes Prisma cannot express — see migration 20261103100000.
+  @@index([userId, invoiceNo])
   // Performance: list transactions per user filtered by date and/or type
   // Used by: dashboard, ledger (sales/purchases), reports
   @@index([userId, date])
@@ -1289,6 +1291,10 @@ model Gstr2bInvoice {
   gstr2bImportId  String
   gstr2bImport    Gstr2bImport @relation(fields: [gstr2bImportId], references: [id], onDelete: Cascade)
   userId          String // denormalized for tenant-scoped queries without join
+  /// 9a-1: "invoice" (b2b, b2ba) | "credit-note" | "debit-note" (cdnr, cdnra) — a note is never matched as a bill.
+  docType         String       @default("invoice")
+  /// 9a-1: for a corrected bill or note (b2ba / cdnra), the number it replaces.
+  originalNumber  String?
   supplierGstin   String // ctin from 2B (supplier's GSTIN)
   invoiceNumber   String // inum from 2B (supplier's invoice number)
   invoiceDate     String? // idt from 2B (invoice date, raw string from portal)

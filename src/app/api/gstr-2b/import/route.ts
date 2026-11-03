@@ -132,8 +132,12 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // === The bill lines, read by the one parser ===
-    const parsedInvoices = parsed.lines
+    // === The lines, read by the one parser ===
+    // 9a-1: bills (b2b, b2ba) and suppliers' notes (cdnr, cdnra) are all stored; the
+    // import's totals and count stay the bills', as before.
+    const allLines = parsed.lines
+    const parsedInvoices = allLines.filter((l) => l.docType === 'invoice')
+    const noteCount = allLines.length - parsedInvoices.length
 
     // Compute summary totals
     /*
@@ -146,11 +150,11 @@ export async function POST(req: NextRequest) {
      * A silent no-op dressed as success is worse here than an error, because
      * the consequence is paying tax they did not owe.
      */
-    if (!parsed.hasB2b && parsedInvoices.length === 0) {
+    if (!parsed.hasDocuments && allLines.length === 0) {
       return NextResponse.json({
         error: 'No purchase invoices found in this file',
         message:
-          'This file has no B2B section, so there is nothing to match against. Download GSTR-2B for this month from the GST portal and upload that file — not GSTR-2A or a summary PDF.',
+          'This file has no bills or notes from suppliers, so there is nothing to match against. Download GSTR-2B for this month from the GST portal and upload that file — not GSTR-2A or a summary PDF.',
       }, { status: 400 })
     }
 
@@ -188,8 +192,10 @@ export async function POST(req: NextRequest) {
         cgstTotal,
         sgstTotal,
         invoices: {
-          create: parsedInvoices.map(inv => ({
+          create: allLines.map(inv => ({
             userId,
+            docType: inv.docType,
+            originalNumber: inv.originalNumber,
             supplierGstin: inv.supplierGstin,
             invoiceNumber: inv.invoiceNumber,
             invoiceDate: inv.invoiceDate,
@@ -229,12 +235,13 @@ export async function POST(req: NextRequest) {
         id: gstr2bImport.id,
         monthYear: gstr2bImport.monthYear,
         invoiceCount: parsedInvoices.length,
+        noteCount,
         taxableTotal,
         igstTotal,
         cgstTotal,
         sgstTotal,
       },
-      message: `GSTR-2B imported successfully. ${parsedInvoices.length} invoice(s) found. Taxable: Rs. ${taxableTotal.toFixed(2)}, Total ITC: Rs. ${roundMoney(igstTotal + cgstTotal + sgstTotal).toFixed(2)}.`,
+      message: `GSTR-2B imported successfully. ${parsedInvoices.length} invoice(s)${noteCount ? ` and ${noteCount} credit/debit note(s)` : ''} found. Taxable: Rs. ${taxableTotal.toFixed(2)}, Total ITC: Rs. ${roundMoney(igstTotal + cgstTotal + sgstTotal).toFixed(2)}.`,
     })
   } catch (err) {
     return apiError(err, 'Failed to import GSTR-2B', 500)
