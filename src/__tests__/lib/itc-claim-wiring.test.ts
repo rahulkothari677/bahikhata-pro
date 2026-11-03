@@ -6,13 +6,27 @@ import { readCode } from '@/test-support/read-source'
 
 const threeB = readCode('src/app/api/gstr-3b/route.ts')
 const recon = readCode('src/app/api/gstr-2b/reconcile/route.ts')
+// 9a-2: both routes load the month through one loader; the candidates live there.
+const context = readCode('src/lib/gstr2b-context.ts')
+const match = readCode('src/lib/gstr2b-match.ts')
 
 test('the 3B claim comes from claimForPeriod, over unclaimed purchases inside the s.16(4) window', () => {
   expect(threeB).toContain('itcClaim = claimForPeriod(')
-  expect(threeB).toMatch(/OR: \[\{ itcClaimedIn: null \}, \{ itcClaimedIn: fp \}\]/)
-  expect(threeB).toContain('earliestClaimableBill(fp)')
+  // The candidates: the shared loader, not a query of the route's own.
+  expect(threeB).toContain('loadTwoBMonth(userId, monthYearOf(periodStart))')
+  expect(threeB).toContain('const purchases = gstr2b.purchases')
+  expect(context).toMatch(/OR: \[\{ itcClaimedIn: null \}, \{ itcClaimedIn: fp \}\]/)
+  expect(context).toContain('earliestClaimableBill(fp)')
   // The old book-tax-on-match loop is gone.
   expect(threeB).not.toMatch(/in2b\.has\(/)
+})
+
+test('9a-2: the 2B screen and GSTR-3B read the same month the same way', () => {
+  expect(recon).toContain('loadTwoBMonth(userId, monthYear)')
+  // The screen no longer queries purchases itself (it used to take only the month's own bills).
+  expect(recon).not.toMatch(/db\.transaction\.findMany/)
+  // GSTR-3B claims against the screen's pairings, and keeps earlier "no credit" bills out of "waiting".
+  expect(threeB).toMatch(/claimLines\(gstr2b\),\s+[\s\S]{0,120}gstr2b\.noCreditKeys/)
 })
 
 test('"Mark as filed" stamps the claimed purchases, never re-stamping another period\'s', () => {
@@ -21,12 +35,13 @@ test('"Mark as filed" stamps the claimed purchases, never re-stamping another pe
   expect(threeB).toContain('data: { itcClaimedIn: monthYear }')
 })
 
-test('one match key: neither route builds its own GSTIN|invoice key', () => {
-  for (const [name, src] of [['3B', threeB], ['reconcile', recon]] as const) {
+test('one match key: no route or matcher builds its own GSTIN|invoice key', () => {
+  for (const [name, src] of [['3B', threeB], ['reconcile', recon], ['match', match], ['context', context]] as const) {
     expect({ name, ownKey: /toUpperCase\(\)\}\|\$\{/.test(src) }).toEqual({ name, ownKey: false })
   }
-  expect(recon).toContain('itcMatchKey(p.party.gstin, p.invoiceNo)')
-  expect(recon).toContain('itcMatchKey(inv.supplierGstin, inv.invoiceNumber)')
+  // The matcher keys both sides with itcMatchKey — the key GSTR-3B claims by.
+  expect(match).toContain('itcMatchKey(p.gstin, p.invoiceNo)')
+  expect(match).toContain('itcMatchKey(line.supplierGstin, line.invoiceNumber)')
 })
 
 /*

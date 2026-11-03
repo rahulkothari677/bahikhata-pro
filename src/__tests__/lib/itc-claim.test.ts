@@ -45,6 +45,20 @@ describe('9a-1: a bill 2B marks "ITC not available" (#353)', () => {
   })
 })
 
+describe('9a-2: a bill an EARLIER 2B marked "no credit"', () => {
+  it('stays "no credit" in a later month, not "waiting for the supplier"', () => {
+    const oct = p({ id: 'oct', billFp: '102026', invoiceNo: 'S-102' })
+    const r = claimForPeriod('112026', [oct], [], new Set([itcMatchKey(SUP, 'S-102')]))
+    expect(r.notAvailable.map((x) => x.id)).toEqual(['oct'])
+    expect(r.stillWaiting).toEqual([])
+  })
+  it('a later 2B that now shows it WITH credit claims it', () => {
+    const oct = p({ id: 'oct', billFp: '102026', invoiceNo: 'S-102' })
+    const r = claimForPeriod('112026', [oct], [line({ invoiceNumber: 'S-102' })], new Set([itcMatchKey(SUP, 'S-102')]))
+    expect(r.claimed.map((c) => c.id)).toEqual(['oct'])
+  })
+})
+
 describe('#117: a supplier who files late — claimed in the month it appears, never lost, never twice', () => {
   const june = p({ id: 'june', billFp: '062026' })
   test('June\'s 2B does not have it: June defers it', () => {

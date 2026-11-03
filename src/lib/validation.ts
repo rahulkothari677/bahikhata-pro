@@ -1,5 +1,20 @@
 import { z } from 'zod'
 import { isCountUnit } from './units'
+import { checkGstin } from './gst-states'
+
+/**
+ * #355 (3 Nov 2026): a GSTIN is checked on the server too. The form checked it
+ * (StateField → checkGstin), but the API took any text up to 15 characters, so a
+ * party saved another way could carry "08ZZTSTAAAA1Z5" (14 characters) — GSTR-1
+ * would send it and the portal refuse it, and 2B matching would never find the
+ * supplier. Empty clears it. A wrong check character stays a warning (checkGstin:
+ * ok with checksumOk false), as on the form — old records can carry one.
+ */
+const gstinField = z.string().max(15).superRefine((v, ctx) => {
+  if (!v.trim()) return
+  const c = checkGstin(v)
+  if (!c.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: c.reason ?? 'This is not a valid GSTIN.' })
+})
 
 /**
  * 🔒 AUDIT FIX H7 (v2 audit): Zod validation schemas for API routes.
@@ -288,7 +303,7 @@ export const createPartySchema = z.object({
   type: z.enum(['customer', 'supplier', 'both']).optional().default('customer'),
   phone: z.string().max(20).nullable().optional(),
   email: z.string().email('Invalid email').max(200).nullable().optional().or(z.literal('')),
-  gstin: z.string().max(15).nullable().optional(),
+  gstin: gstinField.nullable().optional(),
   address: z.string().max(1000).nullable().optional(),
   state: z.string().max(100).nullable().optional(),
   openingBalance: z.coerce.number()
@@ -467,7 +482,7 @@ export const updatePartySchema = z.object({
   type: z.enum(['customer', 'supplier', 'both']).optional(),
   phone: z.string().max(20).nullable().optional(),
   email: z.string().email('Invalid email').max(200).nullable().optional().or(z.literal('')),
-  gstin: z.string().max(15).nullable().optional(),
+  gstin: gstinField.nullable().optional(),
   address: z.string().max(1000).nullable().optional(),
   state: z.string().max(100).nullable().optional(),
   openingBalance: z.coerce.number()
@@ -527,7 +542,7 @@ export const createDocumentSchema = z.object({
 // Shop create schema (POST /api/shops)
 export const createShopSchema = z.object({
   name: z.string().min(1, 'name is required').max(200),
-  gstin: z.string().max(15).optional(),
+  gstin: gstinField.optional(),
   address: z.string().max(2000).optional(),
   phone: z.string().max(20).optional(),
   state: z.string().max(100).optional(),

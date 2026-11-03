@@ -3,42 +3,26 @@ import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney } from '@/lib/money'
-import { istMonthStartOffset } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { imsWindow, IMS_ACTIONS } from '@/lib/ims-deadline'
-import { itcMatchKey } from '@/lib/itc-claim'
+import { loadTwoBMonth } from '@/lib/gstr2b-context'
+import type { MatchLine, MatchPurchase, Pair } from '@/lib/gstr2b-match'
 
 /**
  * GET /api/gstr-2b/reconcile?month=2026-07
  *
- * V17-Ext Tier 3 Step 3: Reconciles GSTR-2B invoices against purchase
- * transactions to determine ITC eligibility.
+ * A month's GSTR-2B against the books. 9a-2: the matching is lib/gstr2b-match.ts
+ * (the one rule — see its header for the order a 2B bill finds its purchase), over
+ * the purchases lib/gstr2b-context.ts loads — the same ones GSTR-3B claims from,
+ * so a supplier's late-filed bill from an earlier month is matched, not "missing".
  *
- * Matching algorithm:
- *   For each 2B invoice, find a purchase Transaction where:
- *     1. type = 'purchase' AND deletedAt IS NULL
- *     2. party.gstin = 2B invoice's supplierGstin (case-insensitive)
- *     3. invoiceNo = 2B invoice's invoiceNumber (case-insensitive)
- *     4. |totalAmount - 2B total| <= 0.05 (₹0.05 tolerance for float drift)
- *
- * Three reconciliation outcomes:
- *   ✅ matched       — 2B invoice has a corresponding purchase (eligible ITC)
- *   ⚠️ booksOnly     — purchase in books but NOT in 2B (ITC not yet available)
- *   ❌ twoBOnly      — 2B invoice but NO purchase in books (missing purchase)
- *
- * Returns:
- *   {
- *     monthYear, hasImport,
- *     summary: { matched, booksOnly, twoBOnly, matchedItc, deferredItc, missingItc },
- *     matched: [{ ...2bInvoice, ...purchase }],
- *     booksOnly: [{ ...purchase }],
- *     twoBOnly: [{ ...2bInvoice }]
- *   }
+ * Returns the shape the screen and CSV export have always read —
+ *   summary, matched (incl. amount_mismatch and itc_not_available rows),
+ *   booksOnly (waiting for suppliers), twoBOnly (not in your books)
+ * — plus `groups`: every 2B document in exactly one group with its reason
+ * (matched, amountDiffers, noCredit, sameBill, notInBooks, notMine, notes, waiting).
  */
 export const maxDuration = 60
-
-// ₹0.05 tolerance for amount comparison (matches gstr-export reconciliation)
-const AMOUNT_TOLERANCE = 0.05
 
 export async function GET(req: NextRequest) {
   try {
@@ -65,19 +49,10 @@ export async function GET(req: NextRequest) {
     // Convert to monthYear (MMYYYY) for DB lookup
     const monthYear = String(month).padStart(2, '0') + String(year)
 
-    // === Check if a 2B import exists for this month ===
-    const gstr2bImport = await db.gstr2bImport.findUnique({
-      where: { userId_monthYear: { userId, monthYear } },
-      include: {
-        invoices: {
-          // 9a-1: bills only — a supplier's credit note matched as a bill would read "not in your books".
-          where: { docType: 'invoice' },
-          orderBy: { supplierGstin: 'asc' },
-        },
-      },
-    })
+    // === This month's 2B against the books — the one loader GSTR-3B uses too (9a-2) ===
+    const twoB = await loadTwoBMonth(userId, monthYear)
 
-    if (!gstr2bImport) {
+    if (!twoB) {
       return NextResponse.json({
         monthYear,
         hasImport: false,
@@ -89,141 +64,52 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // === Fetch all purchases for this month (with party GSTIN) ===
-    const periodStart = istMonthStartOffset(new Date(Date.UTC(year, month - 1, 15)), 0)
-    const periodEnd = istMonthStartOffset(new Date(Date.UTC(year, month - 1, 15)), 1)
-
-    const purchases = await db.transaction.findMany({
-      where: {
-        userId,
-        type: 'purchase',
-        deletedAt: null,
-        date: { gte: periodStart, lt: periodEnd },
-      },
-      include: {
-        party: {
-          select: { id: true, name: true, gstin: true },
-        },
-      },
+    const { sort } = twoB
+    const tax = (x: { cgst: number; sgst: number; igst: number }) => roundMoney(x.cgst + x.sgst + x.igst)
+    const lineOut = (l: MatchLine) => ({
+      id: l.id, docType: l.docType, supplierGstin: l.supplierGstin, invoiceNumber: l.invoiceNumber,
+      originalNumber: l.originalNumber, invoiceDate: l.invoiceDate, taxableValue: l.taxableValue,
+      igst: l.igst, cgst: l.cgst, sgst: l.sgst, totalAmount: l.totalAmount,
+      isReverseCharge: l.isReverseCharge, itcAvailable: l.itcAvailable, itcReason: l.itcReason,
+    })
+    const purchaseOut = (p: MatchPurchase) => ({
+      purchaseId: p.id, invoiceNumber: p.invoiceNo, purchaseDate: p.date, partyName: p.supplier || 'Unknown',
+      partyGstin: p.gstin || '', igst: p.igst, cgst: p.cgst, sgst: p.sgst, totalAmount: p.totalAmount,
+    })
+    // The shape the screen and the CSV export have always read, one row per paired bill.
+    const pairOut = (pr: Pair, status: string, difference = 0) => ({
+      supplierGstin: pr.line.supplierGstin, invoiceNumber: pr.line.invoiceNumber, invoiceDate: pr.line.invoiceDate,
+      twoBTaxable: pr.line.taxableValue, twoBIgst: pr.line.igst, twoBCgst: pr.line.cgst, twoBSgst: pr.line.sgst,
+      twoBTotal: pr.line.totalAmount, isReverseCharge: pr.line.isReverseCharge,
+      purchaseId: pr.purchase.id, purchaseDate: pr.purchase.date, purchaseTotal: pr.purchase.totalAmount,
+      purchaseInvoiceNo: pr.purchase.invoiceNo, purchaseCgst: pr.purchase.cgst, purchaseSgst: pr.purchase.sgst,
+      purchaseIgst: pr.purchase.igst, partyName: pr.purchase.supplier || 'Unknown',
+      amountMatch: status !== 'amount_mismatch', amountDifference: difference,
+      itcAvailable: pr.line.itcAvailable, itcReason: pr.line.itcReason, via: pr.via, status,
     })
 
-    // === Build lookup maps for fast matching ===
-    // Key: "SUPPLIER_GSTIN|INVOICE_NO" (uppercased for case-insensitive match)
-    const purchaseMap = new Map<string, any>()
-    for (const p of purchases) {
-      if (p.party?.gstin && p.invoiceNo) {
-        const key = itcMatchKey(p.party.gstin, p.invoiceNo) // 8d: the same key GSTR-3B claims by
-        purchaseMap.set(key, p)
-      }
-    }
+    const matched = [
+      ...sort.matched.map((p) => pairOut(p, 'matched')),
+      ...sort.amountDiffers.map((p) => pairOut(p, 'amount_mismatch', p.difference)),
+      // #353: 2B says no credit on this bill (itcavl N) — never counted as eligible.
+      ...sort.noCredit.map((p) => pairOut(p, 'itc_not_available')),
+    ]
+    const twoBOnly = sort.notInBooks.map((l) => ({ ...lineOut(l), status: 'missing_in_books' }))
+    const booksOnly = sort.waiting.map((p) => ({ ...purchaseOut(p), status: 'not_in_2b' }))
 
-    // Track which purchases were matched (for booksOnly list)
-    const matchedPurchaseIds = new Set<string>()
-
-    // === Match each 2B invoice against purchases ===
-    const matched: any[] = []
-    const twoBOnly: any[] = []
-
-    for (const inv of gstr2bImport.invoices) {
-      const key = itcMatchKey(inv.supplierGstin, inv.invoiceNumber)
-      const purchase = purchaseMap.get(key)
-
-      if (purchase) {
-        // Found a matching purchase — check amount tolerance
-        const amountDiff = Math.abs(roundMoney(purchase.totalAmount) - roundMoney(inv.totalAmount))
-        const isAmountMatch = amountDiff <= AMOUNT_TOLERANCE
-
-        matchedPurchaseIds.add(purchase.id)
-        matched.push({
-          // 2B invoice data
-          supplierGstin: inv.supplierGstin,
-          invoiceNumber: inv.invoiceNumber,
-          invoiceDate: inv.invoiceDate,
-          twoBTaxable: inv.taxableValue,
-          twoBIgst: inv.igst,
-          twoBCgst: inv.cgst,
-          twoBSgst: inv.sgst,
-          twoBTotal: inv.totalAmount,
-          isReverseCharge: inv.isReverseCharge,
-          // Purchase data (from books)
-          purchaseId: purchase.id,
-          purchaseDate: purchase.date,
-          purchaseTotal: purchase.totalAmount,
-          purchaseCgst: purchase.cgst,
-          purchaseSgst: purchase.sgst,
-          purchaseIgst: purchase.igst,
-          partyName: purchase.party?.name || 'Unknown',
-          // Match quality
-          amountMatch: isAmountMatch,
-          amountDifference: roundMoney(amountDiff),
-          // #353: 2B says no credit on this bill (itcavl N, reason rsn) — never counted as eligible.
-          itcAvailable: inv.itcAvailable,
-          itcReason: inv.itcReason,
-          status: !inv.itcAvailable ? 'itc_not_available' : isAmountMatch ? 'matched' : 'amount_mismatch',
-        })
-      } else {
-        // 2B invoice has no matching purchase in books
-        twoBOnly.push({
-          supplierGstin: inv.supplierGstin,
-          invoiceNumber: inv.invoiceNumber,
-          invoiceDate: inv.invoiceDate,
-          taxableValue: inv.taxableValue,
-          igst: inv.igst,
-          cgst: inv.cgst,
-          sgst: inv.sgst,
-          totalAmount: inv.totalAmount,
-          isReverseCharge: inv.isReverseCharge,
-          status: 'missing_in_books',
-        })
-      }
-    }
-
-    // === Find purchases NOT in 2B (booksOnly) ===
-    const booksOnly: any[] = []
-    for (const p of purchases) {
-      if (p.party?.gstin && p.invoiceNo && !matchedPurchaseIds.has(p.id)) {
-        booksOnly.push({
-          purchaseId: p.id,
-          invoiceNumber: p.invoiceNo,
-          purchaseDate: p.date,
-          partyName: p.party?.name || 'Unknown',
-          partyGstin: p.party?.gstin || '',
-          taxableValue: roundMoney(p.subtotal - (p.discountAmount || 0)),
-          igst: p.igst,
-          cgst: p.cgst,
-          sgst: p.sgst,
-          totalAmount: p.totalAmount,
-          status: 'not_in_2b',
-        })
-      }
-    }
-
-    // === Compute summary totals ===
-    const matchedItc = roundMoney(
-      matched.filter((m) => m.itcAvailable).reduce((s, m) => s + m.twoBIgst + m.twoBCgst + m.twoBSgst, 0)
-    )
-    const deferredItc = roundMoney(
-      booksOnly.reduce((s, b) => s + b.igst + b.cgst + b.sgst, 0)
-    )
-    const missingItc = roundMoney(
-      twoBOnly.reduce((s, t) => s + t.igst + t.cgst + t.sgst, 0)
-    )
+    // === Summary totals (eligible credit: matched and amount-differs pairs, never no-credit) ===
+    const matchedItc = roundMoney([...sort.matched, ...sort.amountDiffers].reduce((s, p) => s + tax(p.line), 0))
+    const deferredItc = roundMoney(sort.waiting.reduce((s, p) => s + tax(p), 0))
+    const missingItc = roundMoney(sort.notInBooks.reduce((s, l) => s + tax(l), 0))
 
     /*
      * ── IMS: when this stops being a choice (#40) ─────────────────────────
      *
-     * Everything above says what does NOT line up. It cannot say what that now
-     * costs, because the reconciliation predates IMS.
-     *
      * Under the substituted Section 38 an invoice nobody acts on is DEEMED
      * ACCEPTED when GSTR-2B generates on the 14th — accepted along with the tax
-     * treatment the supplier gave it. So the same twoBOnly row that used to
-     * mean "you forgot to enter a bill" can now also mean "somebody billed your
-     * GSTIN for something that is not yours, and you have until the 14th to
-     * say so".
-     *
-     * One extra query, for a filing status already stored. Nothing here is
-     * estimated from a date.
+     * treatment the supplier gave it. So a "not in your books" row can mean
+     * "somebody billed your GSTIN for something that is not yours, and you have
+     * until the 14th to say so".
      */
     const own3b = await db.gstReturn.findUnique({
       where: { userId_monthYear: { userId, monthYear } },
@@ -234,23 +120,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       monthYear,
       hasImport: true,
-      /*
-       * Carried alongside the existing shape rather than replacing it — the 2B
-       * screen, the CSV export and the notice-risk route all read these fields,
-       * and IMS adds a meaning to them rather than changing what they count.
-       */
       ims: {
         ...ims,
         generationDate: ims.generationDate.toISOString(),
         actions: IMS_ACTIONS,
       },
       importInfo: {
-        importedAt: gstr2bImport.importedAt,
-        invoiceCount: gstr2bImport.invoiceCount,
-        taxableTotal: gstr2bImport.taxableTotal,
-        igstTotal: gstr2bImport.igstTotal,
-        cgstTotal: gstr2bImport.cgstTotal,
-        sgstTotal: gstr2bImport.sgstTotal,
+        importedAt: twoB.importRow.importedAt,
+        invoiceCount: twoB.importRow.invoiceCount,
+        taxableTotal: twoB.importRow.taxableTotal,
+        igstTotal: twoB.importRow.igstTotal,
+        cgstTotal: twoB.importRow.cgstTotal,
+        sgstTotal: twoB.importRow.sgstTotal,
       },
       summary: {
         matched: matched.length,
@@ -259,12 +140,26 @@ export async function GET(req: NextRequest) {
         matchedItc,
         deferredItc,
         missingItc,
-        totalPurchases: purchases.length,
-        totalTwoBInvoices: gstr2bImport.invoices.length,
+        totalPurchases: twoB.purchases.length,
+        totalTwoBInvoices: twoB.lines.filter((l) => l.docType === 'invoice').length,
       },
       matched,
       booksOnly,
       twoBOnly,
+      /*
+       * 9a-2: every 2B document in exactly one group, with its reason — what the
+       * supplier-bills screen (9a-3) draws. Counts and credit add up to the 2B.
+       */
+      groups: {
+        matched: sort.matched.map((p) => pairOut(p, 'matched')),
+        amountDiffers: sort.amountDiffers.map((p) => pairOut(p, 'amount_mismatch', p.difference)),
+        noCredit: sort.noCredit.map((p) => pairOut(p, 'itc_not_available')),
+        sameBill: sort.sameBill.map((s) => ({ line: lineOut(s.line), candidates: s.candidates.map(purchaseOut) })),
+        notInBooks: sort.notInBooks.map(lineOut),
+        notMine: sort.notMine.map(lineOut),
+        notes: sort.notes.map(lineOut),
+        waiting: sort.waiting.map(purchaseOut),
+      },
     })
   } catch (err) {
     return apiError(err, 'Failed to reconcile GSTR-2B', 500)

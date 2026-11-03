@@ -148,7 +148,13 @@ const tax = (p: { cgst: number; sgst: number; igst: number }) => roundMoney(p.cg
  *                   unclaimed or claimed in THIS period (a filed month recomputes to the same answer)
  * @param twoB       this period's GSTR-2B lines
  */
-export function claimForPeriod(fp: string, purchases: ItcPurchase[], twoB: TwoBLine[]): ItcClaim {
+export function claimForPeriod(
+  fp: string,
+  purchases: ItcPurchase[],
+  twoB: TwoBLine[],
+  /** 9a-2: keys of bills an EARLIER month's 2B marked "no credit" — not "waiting" when absent from this 2B. */
+  noCreditKeys: ReadonlySet<string> = new Set(),
+): ItcClaim {
   const in2b = new Map<string, TwoBLine>()
   for (const l of twoB) in2b.set(itcMatchKey(l.supplierGstin, l.invoiceNumber), l)
 
@@ -165,6 +171,7 @@ export function claimForPeriod(fp: string, purchases: ItcPurchase[], twoB: TwoBL
 
     const line = in2b.get(itcMatchKey(p.gstin, p.invoiceNo))
     if (!line) {
+      if (noCreditKeys.has(itcMatchKey(p.gstin, p.invoiceNo))) { notAvailable.push(p); continue }
       if (p.billFp === fp) deferred.push(p)
       else stillWaiting.push(p)
       continue

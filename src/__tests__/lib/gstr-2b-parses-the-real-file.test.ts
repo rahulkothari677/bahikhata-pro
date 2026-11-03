@@ -17,6 +17,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { parseGstr2b } from '@/lib/gstr2b-parse'
+import { claimLines, earlierPeriods } from '@/lib/gstr2b-context'
 
 /** One bill exactly as the GSTR-2B GET response lays it out (keys as published). */
 const TWO_B_BILL = {
@@ -123,19 +124,23 @@ describe('one parser', () => {
     expect(route).not.toMatch(/itm_det|\.itms\b|inv\.rchrg|inv\.inum/)
   })
 
-  it('GSTR-3B reads 2B bills only, and hands each one its credit flag', () => {
-    const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gstr-3b/route.ts'), 'utf8')
-    expect(route).toMatch(/include: \{ invoices: \{ where: \{ docType: 'invoice' \} \} \}/)
-    // The 2B lines handed to the claim: anchored on the call, then on its 2B argument.
-    const at = route.indexOf('itcClaim = claimForPeriod(')
-    expect(at).toBeGreaterThan(0)
-    const twoBArg = route.slice(route.indexOf('gstr2b.invoices.map(', at), route.indexOf('gstr2b.invoices.map(', at) + 300)
-    expect(twoBArg).toMatch(/^gstr2b\.invoices\.map\(/)
-    expect(twoBArg).toMatch(/itcAvailable: i\.itcAvailable/)
+  it('9a-2: earlier "no credit" bills are looked up only in months whose bills can still be claimed (s.16(4))', () => {
+    const nov = earlierPeriods('112026')
+    expect([nov.length, nov[0], nov[nov.length - 1]]).toEqual([7, '042026', '102026'])
+    const aug = earlierPeriods('082026')
+    expect([aug.length, aug[0], aug[aug.length - 1]]).toEqual([16, '042025', '072026'])
   })
 
-  it('the 2B matcher reads bills only', () => {
-    const route = fs.readFileSync(path.join(process.cwd(), 'src/app/api/gstr-2b/reconcile/route.ts'), 'utf8')
-    expect(route).toMatch(/invoices: \{[\s\S]{0,200}where: \{ docType: 'invoice' \}/)
+  // 9a-2: both routes read the month through lib/gstr2b-context.ts; the rules are tested there.
+  it('what GSTR-3B claims against: bills only, each with its credit flag', () => {
+    const line = (id: string, docType: string, itcAvailable = true) => ({
+      id, docType, supplierGstin: 'G', invoiceNumber: id, originalNumber: null, invoiceDate: null,
+      taxableValue: 100, cgst: 9, sgst: 9, igst: 0, totalAmount: 118, itcAvailable, itcReason: null, isReverseCharge: false,
+    })
+    const month = {
+      lines: [line('B1', 'invoice'), line('B2', 'invoice', false), line('CN-1', 'credit-note')],
+      sort: { claimNumber: new Map([['B1', 'MY-B1']]) },
+    } as unknown as Parameters<typeof claimLines>[0]
+    expect(claimLines(month).map((l) => [l.invoiceNumber, l.itcAvailable])).toEqual([['MY-B1', true], ['B2', false]])
   })
 })

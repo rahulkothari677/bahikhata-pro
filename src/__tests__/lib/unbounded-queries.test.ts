@@ -32,6 +32,15 @@ const SCAN_DIRS = [path.join(SRC, 'app', 'api'), path.join(SRC, 'lib')]
  * is safe. Keyed by "<relative path>:<model>".
  */
 const ACCEPTED: Record<string, string> = {
+  // — Supplier bills / GSTR-2B (9a-2) ———————————————————————————————————————
+  'lib/gstr2b-context.ts:gstr2bDecision':
+    'The shop\'s answers about THIS month\'s 2B documents (documentNumber IN the file\'s numbers) — bounded by one '
+    + '2B. A cap would drop an answer and re-ask a question the shop already settled, or un-pair a bill GSTR-3B '
+    + 'claims through. Five-column select.',
+  'lib/gstr2b-context.ts:gstr2bInvoice':
+    '"No credit" bills from earlier 2Bs, limited to the periods whose bills can still be claimed (earlierPeriods: '
+    + 's.16(4), at most ~19 months) and to itcAvailable=false — a few rows a month. A cap would let a no-credit '
+    + 'bill read "waiting for the supplier" again. Two-column select.',
   // — Bill dues (8f-2) ——————————————————————————————————————————————————
   'lib/invoice-credits.ts:transaction':
     'Notes against the bills the caller passes (originalTransactionId IN ids) — bounded by that list, which is '

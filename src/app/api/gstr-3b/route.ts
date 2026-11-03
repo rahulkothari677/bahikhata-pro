@@ -13,6 +13,7 @@ import { logAudit } from '@/lib/audit'
 import { LINE_TAXABLE_SQL } from '@/lib/line-taxable-sql'
 import { setOffGst } from '@/lib/gst-setoff'
 import { claimForPeriod, earliestClaimableBill } from '@/lib/itc-claim'
+import { loadTwoBMonth, claimLines } from '@/lib/gstr2b-context'
 
 /**
  * GET /api/gstr-3b?month=2026-07
@@ -327,11 +328,8 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
   const blockedItcIgst = roundMoney(blockedAgg._sum.igst || 0)
   const blockedItcCount = blockedAgg._count
 
-  const gstr2b = await db.gstr2bImport.findFirst({
-    where: { userId, monthYear: monthYearOf(periodStart) },
-    // 9a-1: bills only; suppliers' notes reduce credit through the shop's own entries.
-    include: { invoices: { where: { docType: 'invoice' } } },
-  })
+  // 9a-2: the month's 2B against the books, loaded the one way the supplier-bills screen loads it.
+  const gstr2b = await loadTwoBMonth(userId, monthYearOf(periodStart))
 
   /*
    * #132 (8e): Table 4's value is the TAXED lines only. A 0% line carries no
@@ -377,21 +375,8 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
   let itcClaim: ReturnType<typeof claimForPeriod> | null = null
   if (gstr2b) {
     const fp = monthYearOf(periodStart)
-    const earliest = earliestClaimableBill(fp)
-    // Bounded by s.16(4): nothing older than last April (April–October) or this April can still be claimed.
-    const from = istMonthStartOffset(new Date(Date.UTC(earliest.year, earliest.month - 1, 15)), 0)
-    const purchases = await db.transaction.findMany({
-      where: {
-        userId, type: 'purchase', deletedAt: null, isReverseCharge: false,
-        date: { gte: from, lt: periodEnd },
-        // Section 17(5): credit on these is blocked outright, so they never
-        // enter the claim — before Rule 36(4) matching is even considered.
-        itcBlockedReason: null,
-        // Not claimed by another period's filed 3B (#117).
-        OR: [{ itcClaimedIn: null }, { itcClaimedIn: fp }],
-      },
-      select: { id: true, date: true, subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true, invoiceNo: true, itcClaimedIn: true, party: { select: { gstin: true, name: true } } },
-    })
+    // The candidates (s.16(4) window, not blocked, not claimed elsewhere) come from lib/gstr2b-context.ts.
+    const purchases = gstr2b.purchases
     itcClaim = claimForPeriod(
       fp,
       purchases.map((p) => ({
@@ -405,8 +390,11 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
         supplier: p.party?.name || null,
       })),
       // #353 / 9a-1: a bill 2B marks "ITC not available" (itcavl N) is never claimed — claimForPeriod
-      // puts it in its own bucket, not "waiting for the supplier".
-      gstr2b.invoices.map((i) => ({ supplierGstin: i.supplierGstin, invoiceNumber: i.invoiceNumber, taxableValue: i.taxableValue, cgst: i.cgst, sgst: i.sgst, igst: i.igst, itcAvailable: i.itcAvailable })),
+      // puts it in its own bucket, not "waiting for the supplier". 9a-2: bills only, each carrying the
+      // number of the purchase the screen paired it with (corrected bill, or the shop's "same bill").
+      claimLines(gstr2b),
+      // 9a-2: a bill an earlier 2B marked "no credit" stays there, not "waiting".
+      gstr2b.noCreditKeys,
     )
     const t = itcClaim.totals.claim
     itcTaxableValue = t.taxable; itcCgst = t.cgst; itcSgst = t.sgst; itcIgst = t.igst

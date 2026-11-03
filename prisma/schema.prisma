@@ -58,6 +58,7 @@ model User {
   gstReturns          GstReturn[]
   gstr1Snapshots      Gstr1Snapshot[]
   gstr2bImports       Gstr2bImport[]
+  gstr2bDecisions     Gstr2bDecision[]
   bankStatements      BankStatement[]
   bankTransactions    BankTransaction[]
   referralsMade       Referral[]        @relation("Referral_referrerIdToUser")
@@ -1312,6 +1313,24 @@ model Gstr2bInvoice {
 
   @@index([gstr2bImportId])
   @@index([userId, supplierGstin, invoiceNumber])
+  @@index([userId])
+}
+
+/// 9a-2: the shop's answer about one 2B document, kept by the supplier's GSTIN and the
+/// document's number — so it survives a re-import of the month and later months.
+/// decision: "same-bill" | "different-bills" (both about purchaseId) | "not-mine" (purchaseId "").
+model Gstr2bDecision {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supplierGstin  String
+  docType        String   @default("invoice")
+  documentNumber String
+  decision       String
+  purchaseId     String   @default("")
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, supplierGstin, docType, documentNumber, decision, purchaseId], map: "Gstr2bDecision_doc_answer_key")
   @@index([userId])
 }
 
