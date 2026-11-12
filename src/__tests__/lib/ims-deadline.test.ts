@@ -54,6 +54,18 @@ describe('the date that arrives on its own', () => {
   })
 })
 
+describe('9b-2: a quarterly (QRMP) filer has one 2B per quarter (IMS FAQ Q28)', () => {
+  const day = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  it('any month of Oct–Dec counts down to 14 January, not the 14th after that month', () => {
+    for (const m of ['102026', '112026', '122026']) {
+      expect(day(imsWindow(m, false, new Date(2026, 10, 20), 'quarterly').generationDate)).toBe('2027-01-14')
+    }
+  })
+  it('a monthly filer is unchanged', () => {
+    expect(day(imsWindow('102026', false, new Date(2026, 10, 1)).generationDate)).toBe('2026-11-14')
+  })
+})
+
 describe('a filed GSTR-3B closes the period whatever the calendar says', () => {
   test('checked BEFORE the day count', () => {
     /*

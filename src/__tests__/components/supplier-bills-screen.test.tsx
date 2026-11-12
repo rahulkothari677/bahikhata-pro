@@ -163,6 +163,31 @@ describe('the supplier-bills screen (9a-3)', () => {
     expect(showsForGstStatus(entry, 'composition')).toBe(false)
   })
 
+  it('9b-2: a quarterly filer sees the quarter — "Oct–Dec 2026", only December’s 2B asked for, back a quarter at a time', async () => {
+    mockSetting = { gstRegistered: true, gstFilingFrequency: 'quarterly' }
+    jest.useFakeTimers({ now: new Date(2026, 10, 12, 12), doNotFake: ['setTimeout', 'setInterval', 'queueMicrotask', 'nextTick', 'setImmediate'] })
+    try {
+      mount()
+      await waitFor(() => expect(screen.getByText('Oct–Dec 2026')).toBeTruthy())
+      const months = () => fetchMock.mock.calls.map((c) => String(c[0])).filter((u) => u.startsWith('/api/gstr-2b/reconcile')).map((u) => new URL(u, 'http://x').searchParams.get('month'))
+      await waitFor(() => expect(months()).toContain('2026-12'))
+      expect(months()).not.toContain('2026-11')
+      fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+      await waitFor(() => expect(screen.getByText(/^Jul–Sept? 2026$/)).toBeTruthy()) // en-IN writes "Sept"
+      await waitFor(() => expect(months()).toContain('2026-09'))
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('9b-2: a credit note says until when it can stay Pending', async () => {
+    fetchMock.mockImplementation(async (url: string) => (String(url).startsWith('/api/gstr-2b/reconcile')
+      ? { ok: true, json: async () => ({ ...payload, notesPendingUntil: '2026-12-20T00:00:00.000Z' }) }
+      : { ok: true, json: async () => ({ success: true }) }))
+    mount()
+    await waitFor(() => expect(screen.getByText(/Decide by 20 Dec 2026/)).toBeTruthy())
+  })
+
   it('calm when fine: everything matched → no countdown, no decision list', async () => {
     const calm = { ...payload, groups: { ...payload.groups, amountDiffers: [], sameBill: [], notInBooks: [] } }
     fetchMock.mockImplementation(async () => ({ ok: true, json: async () => calm }))

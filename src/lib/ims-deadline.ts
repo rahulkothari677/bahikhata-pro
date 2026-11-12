@@ -58,6 +58,7 @@
  * least sure of, so nothing here depends on it — the countdown is to the 14th,
  * and the 3B date is described rather than computed.
  */
+import { quarterEndOf, twoBGenerationDate, type FilingFrequency } from '@/lib/gst-due-dates'
 
 /** GSTR-2B generates on the 14th of the month AFTER the tax period. */
 export const IMS_GENERATION_DAY = 14
@@ -106,14 +107,12 @@ export function imsWindow(
   monthYear: string,
   gstr3bFiled: boolean,
   asOn: Date = new Date(),
+  /** 9b-2: a quarterly (QRMP) filer has one 2B per quarter, on the 14th after it (IMS FAQ Q28). */
+  frequency: FilingFrequency = 'monthly',
 ): ImsWindow {
-  const month = Number(monthYear.slice(0, 2))
-  const year = Number(monthYear.slice(2))
-  /* The 14th of the FOLLOWING month. `month` is 1-based from the portal, so
-     passing it unchanged to a 0-based Date constructor already advances one
-     month — which is the behaviour wanted here, and is why it is spelled out
-     rather than left to look like an off-by-one. */
-  const generationDate = new Date(year, month, IMS_GENERATION_DAY)
+  // The 14th after the period — for a quarterly filer, after the quarter (lib/gst-due-dates.ts).
+  const period = frequency === 'quarterly' ? quarterEndOf(monthYear) : monthYear
+  const generationDate = twoBGenerationDate(period, frequency)!
   const daysLeft = daysBetween(asOn, generationDate)
 
   /*

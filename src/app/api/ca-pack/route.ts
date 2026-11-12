@@ -9,6 +9,7 @@ import { buildCaPack, type CaPackWarning } from '@/lib/ca-pack'
 import { assessItcReversal, needsAttention, RULE_37_DAYS, WARN_WITHIN_DAYS, debitNotesForItc } from '@/lib/itc-180-day'
 import { reviewProduct } from '@/lib/exempt-reclassification'
 import { imsWindow } from '@/lib/ims-deadline'
+import { filingFrequency } from '@/lib/gst-due-dates'
 
 /**
  * #33 — the month's pack, for a CA who will not create an account.
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
     const monthYear = String(month).padStart(2, '0') + String(year)
 
     const [setting, snap1, snap3b] = await Promise.all([
-      db.setting.findUnique({ where: { userId }, select: { shopName: true, gstin: true } }),
+      db.setting.findUnique({ where: { userId }, select: { shopName: true, gstin: true, gstFilingFrequency: true } }),
       db.gstr1Snapshot.findUnique({ where: { userId_monthYear: { userId, monthYear } } }),
       db.gstReturn.findUnique({ where: { userId_monthYear: { userId, monthYear } } }),
     ])
@@ -145,7 +146,8 @@ export async function GET(req: NextRequest) {
      *    14th the shopkeeper cannot change what was deemed accepted from here,
      *    so listing it would be noise on a pack about a closed month.
      */
-    const ims = imsWindow(monthYear, snap3b?.filingStatus === 'filed', today)
+    // 9b-2: a quarterly filer's 2B comes once a quarter.
+    const ims = imsWindow(monthYear, snap3b?.filingStatus === 'filed', today, filingFrequency(setting))
     if (ims.state === 'closing' || ims.state === 'open') {
       const twoB = await db.gstr2bImport.findUnique({
         where: { userId_monthYear: { userId, monthYear } },

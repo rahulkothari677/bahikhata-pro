@@ -34,6 +34,7 @@ import { InfoHint } from '@/components/common/InfoHint'
 import { Notice } from '@/components/ui/notice'
 import { useSetting } from '@/hooks/use-setting'
 import { gstStatus } from '@/lib/shop-tax'
+import { filingFrequency } from '@/lib/gst-due-dates'
 import { useAppStore } from '@/store/app-store'
 import { whatsAppUrl } from '@/lib/whatsapp-link'
 import { purchasePresetFrom, returnPresetFrom, askSupplierText, remindSupplierText } from '@/lib/supplier-bills'
@@ -41,7 +42,7 @@ import { purchasePresetFrom, returnPresetFrom, askSupplierText, remindSupplierTe
 export function Gstr2bReconciliation() {
   const queryClient = useQueryClient()
   const now = new Date()
-  const [month, setMonth] = useState(
+  const [picked, setMonth] = useState(
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   )
   const [uploading, setUploading] = useState(false)
@@ -50,6 +51,13 @@ export function Gstr2bReconciliation() {
   // claims no input credit (s.10(4)) and is not an IMS user (IMS FAQ Q9).
   const { setting } = useSetting()
   const composition = gstStatus(setting) === 'composition'
+  /*
+   * 9b-2: a quarterly (QRMP) filer has one 2B per quarter (IMS FAQ Q28), filed under the
+   * quarter's last month — so the screen always sits on that month (worked out here,
+   * before the first request) and the switch moves a quarter at a time.
+   */
+  const quarterly = filingFrequency(setting) === 'quarterly'
+  const month = quarterly ? `${picked.slice(0, 5)}${String(Math.ceil(Number(picked.slice(5)) / 3) * 3).padStart(2, '0')}` : picked
 
   // 🔒 Hooks first — always called unconditionally
   const { data, isLoading, error } = useQuery({
@@ -71,7 +79,7 @@ export function Gstr2bReconciliation() {
 
   const goToMonth = (delta: number) => {
     const [y, m] = month.split('-').map(Number)
-    const d = new Date(y, m - 1 + delta, 1)
+    const d = new Date(y, m - 1 + delta * (quarterly ? 3 : 1), 1)
     setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
@@ -183,7 +191,13 @@ export function Gstr2bReconciliation() {
   const groups = data?.groups as Groups | undefined
   const refresh = () => { void queryClient.invalidateQueries({ queryKey: ['gstr-2b-reconcile', month] }) }
   const summary = data?.summary
-  const monthLabel = new Date(month + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+  const monthLabel = quarterly
+    ? (() => {
+        const end = Number(month.slice(5))
+        const short = (m: number) => new Date(2000, m - 1, 1).toLocaleDateString('en-IN', { month: 'short' })
+        return `${short(end - 2)}–${short(end)} ${month.slice(0, 4)}`
+      })()
+    : new Date(month + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 
   return (
     <div className="space-y-4">
@@ -304,6 +318,10 @@ function SupplierBills({ data, groups, month, onChanged }: { data: any; groups: 
   const [busy, setBusy] = useState<string | null>(null)
   const ims = data?.ims
 
+  // 9b-2: how long a supplier's credit note can stay Pending (lib/gst-due-dates.ts, from the shop's filing frequency).
+  const pendingUntil = data?.notesPendingUntil
+    ? new Date(data.notesPendingUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null
   const readyTax = groups.matched.reduce((s, p) => s + pairTax(p), 0)
   const waitingTax = groups.waiting.reduce((s, b) => s + tax(b), 0)
   const decisions = groups.amountDiffers.length + groups.notInBooks.length + groups.sameBill.length
@@ -418,7 +436,8 @@ function SupplierBills({ data, groups, month, onChanged }: { data: any; groups: 
             <Row key={`note-${l.id}`} title={`${nameOf(l)} · ${l.invoiceNumber}`} amount={l.totalAmount}
               why={<><Chip tone="check">Credit note · not in your books</Chip>
                 <span className="text-xs text-muted-foreground">Portal: accept, reduce credit {formatINR(tax(l))}</span>
-                <InfoHint label={`about credit note ${l.invoiceNumber}`} text={`On the portal, accept it and say "Yes" to reducing credit, by ${formatINR(tax(l))} — or "No" if you never took credit on that bill. A credit note can stay Pending only until your next GSTR-3B; after that it counts as accepted.`} /></>}
+                {pendingUntil && <Chip tone="check">Decide by {pendingUntil}</Chip>}
+                <InfoHint label={`about credit note ${l.invoiceNumber}`} text={`On the portal, accept it and say "Yes" to reducing credit, by ${formatINR(tax(l))} — or "No" if you never took credit on that bill. A credit note can stay Pending only until ${pendingUntil ?? 'your next GSTR-3B'}; after that it counts as accepted.`} /></>}
             >
               <Act primary onClick={() => recordNote(l)}>Record it</Act>
             </Row>

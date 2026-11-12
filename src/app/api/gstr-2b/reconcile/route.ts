@@ -6,6 +6,8 @@ import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { imsWindow, IMS_ACTIONS } from '@/lib/ims-deadline'
 import { loadTwoBMonth } from '@/lib/gstr2b-context'
+import { filingFrequency, pendingDeadline } from '@/lib/gst-due-dates'
+import { stateCodeOf } from '@/lib/gst-states'
 import { isBillDoc, type MatchLine, type MatchPurchase, type Pair } from '@/lib/gstr2b-match'
 
 /**
@@ -113,15 +115,24 @@ export async function GET(req: NextRequest) {
      * "somebody billed your GSTIN for something that is not yours, and you have
      * until the 14th to say so".
      */
-    const own3b = await db.gstReturn.findUnique({
-      where: { userId_monthYear: { userId, monthYear } },
-      select: { filingStatus: true },
-    })
-    const ims = imsWindow(monthYear, own3b?.filingStatus === 'filed')
+    const [own3b, shop] = await Promise.all([
+      db.gstReturn.findUnique({
+        where: { userId_monthYear: { userId, monthYear } },
+        select: { filingStatus: true },
+      }),
+      db.setting.findUnique({ where: { userId }, select: { gstFilingFrequency: true, gstin: true, state: true } }),
+    ])
+    // 9b-2: the shop's filing frequency sets the 2B date and the notes' Pending deadline.
+    const freq = filingFrequency(shop)
+    const ims = imsWindow(monthYear, own3b?.filingStatus === 'filed', new Date(), freq)
+    const pendingUntil = pendingDeadline(monthYear, freq, stateCodeOf({ gstin: shop?.gstin ?? null, state: shop?.state ?? null }))
 
     return NextResponse.json({
       monthYear,
       hasImport: true,
+      filingFrequency: freq,
+      // 9b-2: how long a supplier's credit note in this 2B can stay Pending (null before Oct 2025).
+      notesPendingUntil: pendingUntil ? pendingUntil.toISOString() : null,
       ims: {
         ...ims,
         generationDate: ims.generationDate.toISOString(),
