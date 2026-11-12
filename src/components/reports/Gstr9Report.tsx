@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge'
 import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Info, CalendarDays } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { Notice } from '@/components/ui/notice'
 
 /** "042026" → "Apr 2026", for naming the months that are missing. */
 function monthLabel(my: string): string {
@@ -31,10 +32,13 @@ function monthLabel(my: string): string {
   return `${names[Number(my.slice(0, 2)) - 1]} ${my.slice(2)}`
 }
 
-/** The FY containing today, April–March. */
-function currentFy(): string {
-  const d = new Date()
-  const start = d.getMonth() + 1 >= 4 ? d.getFullYear() : d.getFullYear() - 1
+/**
+ * The last FINISHED financial year (April–March) — the one a GSTR-9 can be filed
+ * for. 9c-1: it opened on the year still running (in Nov 2026, FY 2026-27, a
+ * year with five months to go), while the return due was FY 2025-26's.
+ */
+export function lastFinishedFy(d: Date = new Date()): string {
+  const start = d.getMonth() + 1 >= 4 ? d.getFullYear() - 1 : d.getFullYear() - 2
   return `${start}-${String((start + 1) % 100).padStart(2, '0')}`
 }
 
@@ -53,7 +57,7 @@ function Row({ label, value, tax, bold, indent }: {
 }
 
 export function Gstr9Report() {
-  const [fy, setFy] = useState(currentFy())
+  const [fy, setFy] = useState(lastFinishedFy())
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['gstr-9', fy],
@@ -144,6 +148,18 @@ export function Gstr9Report() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 9c-1 (#124): filing before 30 November ends the year's corrections, credit and credit notes early. */}
+      {data.filing.earlyFiling && (
+        <Notice
+          level="act"
+          title={`Filing before ${data.filing.earlyFiling.closesOn} closes ${fy} early`}
+          info={`Sales corrections (s.37(3)), credit claims (s.16(4)) and credit notes (s.34(2)) for ${fy} each end on ${data.filing.earlyFiling.closesOn}, or on the day GSTR-9 is filed if that is earlier. GSTR-9 is due ${data.filing.dueDate}, so filing in December loses nothing.`}
+          data-testid="gstr9-early-warning"
+        >
+          No corrections, credit claims or credit notes for {fy} after you file.
+        </Notice>
       )}
 
       {/* ── Is it even required? ─────────────────────────────────────── */}

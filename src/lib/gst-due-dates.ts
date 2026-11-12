@@ -146,6 +146,9 @@ const fpOf = (month: number, year: number) => String(month).padStart(2, '0') + S
 /** GSTR-4 for the year ending March of fyEndYear: 30 June after it (from FY 2024-25, Notification 12/2024-CT). */
 export const gstr4Due = (fyEndYear: number) => new Date(fyEndYear, 5, 30)
 
+/** GSTR-9 / 9C for the year starting April of fyStartYear: 31 December after it (s.44; Rule 80). */
+export const gstr9Due = (fyStartYear: number) => new Date(fyStartYear + 1, 11, 31)
+
 /**
  * 9b-4: every return due for the periods around asOn — the last three months
  * and this one, for a regular shop (returnsDue, by its frequency); the last two

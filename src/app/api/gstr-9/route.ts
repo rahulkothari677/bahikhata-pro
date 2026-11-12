@@ -4,6 +4,8 @@ import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
 import { buildGstr9, financialYearMonths } from '@/lib/gstr9-builder'
+import { amendmentDeadline } from '@/lib/gstr1-amendments'
+import { gstr9Due } from '@/lib/gst-due-dates'
 
 /**
  * GSTR-9 — the annual return.
@@ -98,6 +100,16 @@ export async function GET(req: NextRequest) {
     })
 
     const turnover = result.table5.totalTurnoverN
+    const fyStart = Number(fy.split('-')[0])
+    /*
+     * 9c-1 (#124): filing GSTR-9 early ends three rights for the year early — sales
+     * corrections (s.37(3)), credit claims (s.16(4)), credit notes (s.34(2)). Each
+     * ends on 30 November after the year or when the annual return is filed, if
+     * earlier. amendmentDeadline holds that date; asked for the year's last month.
+     */
+    const cutoff = amendmentDeadline(`03${fyStart + 1}`)
+    // Only for a year that has ended — a year still running has no GSTR-9 to file yet.
+    const yearEnded = new Date() >= new Date(fyStart + 1, 3, 1)
     return NextResponse.json({
       ...result,
       gstin: setting?.gstin || null,
@@ -105,7 +117,11 @@ export async function GET(req: NextRequest) {
         turnover,
         mandatoryAbove: GSTR9_MANDATORY_ABOVE,
         isMandatory: turnover > GSTR9_MANDATORY_ABOVE,
-        dueDate: `31 December ${Number(fy.split('-')[0]) + 1}`,
+        dueDate: gstr9Due(fyStart).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
+        earlyFiling: cutoff.expired || !yearEnded ? null : {
+          closesOn: cutoff.novemberCutoff.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+          daysLeft: cutoff.daysLeft,
+        },
       },
     })
   } catch (err) {
