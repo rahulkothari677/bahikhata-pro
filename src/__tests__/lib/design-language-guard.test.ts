@@ -40,7 +40,7 @@ const SRC = path.resolve(process.cwd(), 'src')
 const CSS = fs.readFileSync(path.join(SRC, 'app/globals.css'), 'utf8')
 
 /** Ceiling for raw meaning-colour shades in src/. Lower it; never raise it. */
-const RAW_COLOUR_CEILING = 2239  // 8b–8c: the item form boxes and the "needs amending" card left raw shades (was 2303; 2375 before 7h)
+const RAW_COLOUR_CEILING = 2172  // #356: the dead GstTaxPage took 67 with it (was 2239 after 8b–8c; 2303; 2375 before 7h)
 
 function sourceFiles(): { rel: string; code: string }[] {
   const out: { rel: string; code: string }[] = []
