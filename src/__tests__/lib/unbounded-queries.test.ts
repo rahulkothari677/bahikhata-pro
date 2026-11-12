@@ -32,6 +32,12 @@ const SCAN_DIRS = [path.join(SRC, 'app', 'api'), path.join(SRC, 'lib')]
  * is safe. Keyed by "<relative path>:<model>".
  */
 const ACCEPTED: Record<string, string> = {
+  // — Due dates (9b-4) ——————————————————————————————————————————————————————
+  'app/api/gst-due-dates/route.ts:gstr1Snapshot':
+    'Filed GSTR-1s for the periods the list covers (monthYear IN at most four periods; one row per period per shop '
+    + 'by the unique key) — at most four rows. One-column select.',
+  'app/api/gst-due-dates/route.ts:gstReturn':
+    'Filed GSTR-3Bs for the same at most four periods (unique per shop and period) — at most four rows. One-column select.',
   // — Supplier bills / GSTR-2B (9a-2) ———————————————————————————————————————
   'lib/gstr2b-context.ts:gstr2bDecision':
     'The shop\'s answers about THIS month\'s 2B documents (documentNumber IN the file\'s numbers) — bounded by one '

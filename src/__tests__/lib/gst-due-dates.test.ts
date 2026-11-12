@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {
   filingFrequency, returnsDue, gstr3bDue, twoBGenerationDate, nextPeriod, pendingDeadline,
-  isQuarterEnd, quarterEndOf, quarterMonths,
+  isQuarterEnd, quarterEndOf, quarterMonths, duesAround, dueRows, gstr4Due,
 } from '@/lib/gst-due-dates'
 
 const day = (d: Date | null) => (d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null)
@@ -81,5 +81,58 @@ describe('how long a supplier’s credit note can stay Pending (the law report�
   })
   it('a 2B period before October 2025 has no Pending option', () => {
     expect(pendingDeadline('092025', 'monthly', '08')).toBeNull()
+  })
+})
+
+describe('9b-4: every return due around today, from one place', () => {
+  const nov = { year: 2026, month: 11 }
+  const list = (items: ReturnType<typeof duesAround>) => items.map((i) => `${i.form} ${i.fp} ${day(i.date)}`)
+
+  it('a monthly shop: GSTR-1 on the 11th and GSTR-3B on the 20th, for Aug to Nov', () => {
+    const items = duesAround(nov, { scheme: 'regular', freq: 'monthly', stateCode: '08' })
+    expect(items).toHaveLength(8)
+    expect(list(items).slice(-4)).toEqual([
+      'GSTR-1 102026 2026-11-11', 'GSTR-3B 102026 2026-11-20',
+      'GSTR-1 112026 2026-12-11', 'GSTR-3B 112026 2026-12-20',
+    ])
+  })
+
+  it('a quarterly shop in Rajasthan (Group B): IFF and PMT-06 for Oct and Nov, the quarter on the 13th and 24th', () => {
+    const items = duesAround({ year: 2026, month: 12 }, { scheme: 'regular', freq: 'quarterly', stateCode: '08' })
+    expect(list(items).slice(-6)).toEqual([
+      'IFF 102026 2026-11-13', 'PMT-06 102026 2026-11-25',
+      'IFF 112026 2026-12-13', 'PMT-06 112026 2026-12-25',
+      'GSTR-1 122026 2027-01-13', 'GSTR-3B 122026 2027-01-24',
+    ])
+  })
+
+  it('a composition shop: CMP-08 on the 18th after each quarter, GSTR-4 on 30 June', () => {
+    const items = duesAround(nov, { scheme: 'composition', freq: 'monthly', stateCode: '08' })
+    expect(list(items)).toEqual([
+      'GSTR-4 032026 2026-06-30',
+      'CMP-08 062026 2026-07-18',
+      'CMP-08 092026 2026-10-18',
+      'CMP-08 122026 2027-01-18',
+    ])
+    expect(day(gstr4Due(2027))).toBe('2027-06-30')
+  })
+
+  it('the list: an unfiled GSTR-3B past its date is late; filed returns drop; then the next three', () => {
+    const items = duesAround(nov, { scheme: 'regular', freq: 'monthly', stateCode: '08' })
+    const filed = new Set(['GSTR-1|082026', 'GSTR-3B|082026', 'GSTR-1|092026', 'GSTR-3B|092026', 'GSTR-1|102026'])
+    const rows = dueRows(items, filed, '2026-11-22')
+    expect(rows.map((r) => `${r.form} ${r.fp} ${r.status} ${r.daysLeft}`)).toEqual([
+      'GSTR-3B 102026 overdue -2',
+      'GSTR-1 112026 due 19',
+      'GSTR-3B 112026 due 28',
+    ])
+  })
+
+  it('a form the app cannot track is never called late — only shown while ahead', () => {
+    const items = duesAround({ year: 2026, month: 12 }, { scheme: 'regular', freq: 'quarterly', stateCode: '08' })
+    const rows = dueRows(items, new Set(), '2026-12-01')
+    expect(rows.filter((r) => r.status === 'overdue').map((r) => r.form)).not.toContain('PMT-06')
+    expect(rows.filter((r) => r.status === 'overdue').map((r) => r.form)).not.toContain('IFF')
+    expect(rows.find((r) => r.status === 'due')).toMatchObject({ form: 'IFF', fp: '112026', daysLeft: 12 })
   })
 })

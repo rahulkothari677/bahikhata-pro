@@ -311,6 +311,9 @@ interface AppState {
   // report type AND hides all other tabs (singleReportType mode).
   pendingReportType: string | null
   setPendingReportType: (type: string | null) => void
+  // 9b-4: the month ("YYYY-MM") a return screen opens on — set by the Due dates list.
+  pendingReportMonth: string | null
+  setPendingReportMonth: (month: string | null) => void
   // 🔒 V21-014 (Phase 6): Account section — when non-null, AccountScreen
   // renders a DEDICATED page for that section (no tabs, no menu).
   // When null, shows the account menu (profile header + 10 items).
@@ -511,6 +514,8 @@ export const useAppStore = create<AppState>()(
       // 🔒 V22-2 (Phase 2 fix)
       pendingReportType: null,
       setPendingReportType: (type) => set({ pendingReportType: type }),
+      pendingReportMonth: null,
+      setPendingReportMonth: (month) => set({ pendingReportMonth: month }),
       // 🔒 V21-014 (Phase 6)
       accountSection: null,
       setAccountSection: (section) => set({ accountSection: section }),

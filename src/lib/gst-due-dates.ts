@@ -20,6 +20,8 @@
  * notified extension is a setting change, not a rule.
  */
 
+import { cmp08DueDate } from '@/lib/composition-scheme'
+
 export type FilingFrequency = 'monthly' | 'quarterly'
 
 /**
@@ -131,4 +133,89 @@ export function pendingDeadline(twoBPeriod: string, freq: FilingFrequency, state
   if (year * 12 + month < 2025 * 12 + 10) return null
   const own = freq === 'quarterly' ? quarterEndOf(twoBPeriod) : twoBPeriod
   return gstr3bDue(nextPeriod(own, freq), freq, stateCode)
+}
+
+/** A return due for one period — what the "Due dates" list shows. */
+export interface DueItem extends DueDate {
+  /** The period it is for: "MMYYYY"; for GSTR-4 the year's last month ("032026"). */
+  fp: string
+}
+
+const fpOf = (month: number, year: number) => String(month).padStart(2, '0') + String(year)
+
+/** GSTR-4 for the year ending March of fyEndYear: 30 June after it (from FY 2024-25, Notification 12/2024-CT). */
+export const gstr4Due = (fyEndYear: number) => new Date(fyEndYear, 5, 30)
+
+/**
+ * 9b-4: every return due for the periods around asOn — the last three months
+ * and this one, for a regular shop (returnsDue, by its frequency); the last two
+ * quarters and this one plus the year's GSTR-4, for a composition shop. Sorted
+ * by date. Which are filed, overdue or next is the caller's question.
+ *
+ *   CMP-08  18th of the month after the quarter   Rule 62(1)(i) — cmp08DueDate
+ *   GSTR-4  30 June after the year (from FY 2024-25)   Rule 62; Notification 12/2024-CT
+ */
+export function duesAround(
+  asOn: { year: number; month: number },
+  shop: { scheme: 'regular' | 'composition'; freq: FilingFrequency; stateCode: string | null | undefined },
+): DueItem[] {
+  const items: DueItem[] = []
+  const at = (back: number) => {
+    const n = asOn.year * 12 + (asOn.month - 1) - back
+    return { month: (n % 12) + 1, year: Math.floor(n / 12) }
+  }
+  if (shop.scheme === 'regular') {
+    for (let back = 3; back >= 0; back--) {
+      const { month, year } = at(back)
+      const fp = fpOf(month, year)
+      for (const d of returnsDue(fp, shop.freq, shop.stateCode)) items.push({ ...d, fp })
+    }
+  } else {
+    for (const back of [6, 3, 0]) {
+      const { month, year } = at(back)
+      const qEnd = Math.ceil(month / 3) * 3
+      items.push({ form: 'CMP-08', fp: fpOf(qEnd, year), date: cmp08DueDate(year, qEnd), basis: 'Rule 62(1)(i)' })
+    }
+    // The financial year that ended most recently: April–March, due 30 June after it.
+    const fyEnd = asOn.month >= 4 ? asOn.year : asOn.year - 1
+    items.push({ form: 'GSTR-4', fp: fpOf(3, fyEnd), date: gstr4Due(fyEnd), basis: 'Rule 62; Notification 12/2024-CT' })
+  }
+  return items.sort((a, b) => a.date.getTime() - b.date.getTime())
+}
+
+/** Returns whose filing the app stores (Gstr1Snapshot, GstReturn); the rest it cannot know. */
+const TRACKED_FORMS = new Set(['GSTR-1', 'GSTR-3B'])
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+export interface DueRow extends DueItem {
+  /** The due day, "YYYY-MM-DD". */
+  day: string
+  status: 'overdue' | 'due'
+  /** Days from today to the due day; negative when overdue. */
+  daysLeft: number
+}
+
+/**
+ * 9b-4: what the "Due dates" list shows. A GSTR-1 or GSTR-3B past its date and
+ * not marked filed comes first ('overdue': the screen says "Not marked filed",
+ * since the app knows a filing only from Mark as Filed). Then the next
+ * three not filed, by date. A form the app does not track (IFF, PMT-06, CMP-08,
+ * GSTR-4) is shown only while ahead: once past, filed or not is unknown, and a
+ * guess either way would be wrong for someone.
+ *
+ * @param filed "FORM|MMYYYY" for each return filed
+ * @param today "YYYY-MM-DD" in India
+ */
+export function dueRows(items: DueItem[], filed: Set<string>, today: string): DueRow[] {
+  const toDays = (day: string) => Math.round(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10)) / 86_400_000)
+  const t = toDays(today)
+  const open = items
+    .map((i) => ({ ...i, day: ymd(i.date) }))
+    .filter((i) => !(TRACKED_FORMS.has(i.form) && filed.has(`${i.form}|${i.fp}`)))
+  const overdue = open.filter((i) => i.day < today && TRACKED_FORMS.has(i.form))
+  const ahead = open.filter((i) => i.day >= today).slice(0, 3)
+  return [
+    ...overdue.map((i) => ({ ...i, status: 'overdue' as const, daysLeft: toDays(i.day) - t })),
+    ...ahead.map((i) => ({ ...i, status: 'due' as const, daysLeft: toDays(i.day) - t })),
+  ]
 }

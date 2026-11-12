@@ -25,6 +25,7 @@ import { ChevronRight } from 'lucide-react'
 import { useTranslation } from '@/hooks/use-translation'
 import { gstStatus } from '@/lib/shop-tax'
 import { useSetting } from '@/hooks/use-setting'
+import { GstDueDates } from '@/components/reports/GstDueDates'
 
 /** The reports of each section, in the registry's order, after the shop's GST status (Phase 1c-2). */
 export function reportSections(all: NavDestination[], shopGst: ReturnType<typeof gstStatus> | undefined): { group: ReportGroup; reports: NavDestination[] }[] {
@@ -49,6 +50,8 @@ export function ReportsHub() {
       {sections.map(({ group, reports }) => (
         <section key={group} aria-labelledby={`reports-${group}`} className="space-y-2">
           <h3 id={`reports-${group}`} className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t(`reports.group.${group}`)}</h3>
+          {/* 9b-4: every return's due date, in one place, above the returns themselves. */}
+          {group === 'gst' && <GstDueDates />}
           <ul className="rounded-2xl bg-card border border-border/60 shadow-card divide-y divide-border/60 overflow-hidden">
             {reports.map((report) => {
               const Icon = report.icon

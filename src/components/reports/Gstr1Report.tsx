@@ -28,6 +28,7 @@ import { readError } from '@/lib/read-error'
 import { Notice } from '@/components/ui/notice'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
+import { useOpeningMonth } from '@/hooks/use-opening-month'
 import {
   ChevronLeft, ChevronRight, Download, FileCheck, Save,
   FileText, Loader2, AlertCircle, FileJson, Table, RefreshCw,
@@ -35,8 +36,8 @@ import {
 
 export function Gstr1Report() {
   const queryClient = useQueryClient()
-  const now = new Date()
-  const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  // 9b-4: opens on the month the Due dates list asked for, else this month.
+  const [month, setMonth] = useState(useOpeningMonth())
   const [activeSection, setActiveSection] = useState<string>('b2b')
   const [saving, setSaving] = useState(false)
 

@@ -43,6 +43,7 @@ import { formatINR, cn } from '@/lib/utils'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
+import { useOpeningMonth } from '@/hooks/use-opening-month'
 import { ItcClaimNotes } from '@/components/reports/ItcClaimNotes'
 import {
   ChevronLeft, ChevronRight, Download, FileCheck, Save,
@@ -53,10 +54,8 @@ export function Gstr3bReport() {
   const queryClient = useQueryClient()
 
   // Month state — format "YYYY-MM" (e.g. "2026-07")
-  const now = new Date()
-  const [month, setMonth] = useState(
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  )
+  // 9b-4: opens on the month the Due dates list asked for, else this month.
+  const [month, setMonth] = useState(useOpeningMonth())
   const [saving, setSaving] = useState(false)
 
   /*

@@ -6,6 +6,7 @@ import { apiError } from '@/lib/api-error'
 import { roundMoney } from '@/lib/money'
 import { compositionTaxFor, COMPOSITION_RATES, type CompositionCategory } from '@/lib/composition-scheme'
 import { compositionWindow, sliceForComposition } from '@/lib/composition-window'
+import { gstr4Due } from '@/lib/gst-due-dates'
 
 /**
  * GSTR-4 — a composition dealer's ANNUAL return.
@@ -172,7 +173,7 @@ export async function GET(req: NextRequest) {
         : null,
       category,
       categoryLabel: COMPOSITION_RATES[category].label,
-      dueDate: new Date(startYear + 1, 5, 30).toISOString(),   // 30 June following
+      dueDate: gstr4Due(startYear + 1).toISOString(),   // 30 June following (lib/gst-due-dates.ts)
       table6: { turnover: outward.turnover, rate: outward.rate, cgst: outward.cgst, sgst: outward.sgst, total: outward.total },
       table4RcmInward: { taxableValue: roundMoney(rcm._sum.subtotal || 0), tax: rcmTax },
       table5PaidViaCmp08: { quarters, total: paidTotal },
