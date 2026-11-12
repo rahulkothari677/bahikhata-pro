@@ -10,9 +10,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Gstr2bReconciliation } from '@/components/reports/Gstr2bReconciliation'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useAppStore } from '@/store/app-store'
+import { NAV_REGISTRY, showsForGstStatus } from '@/lib/nav-registry'
 
 jest.mock('@/lib/offline-fetch', () => ({ offlineFetch: jest.fn() }))
 jest.mock('sonner', () => ({ toast: { success: jest.fn(), error: jest.fn() } }))
+let mockSetting: Record<string, unknown> = { gstRegistered: true }
+jest.mock('@/hooks/use-setting', () => ({ useSetting: () => ({ setting: mockSetting, hideProfit: false }) }))
 
 beforeAll(() => {
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })) as never
@@ -69,6 +72,7 @@ beforeEach(() => {
     ? { ok: true, json: async () => payload }
     : { ok: true, json: async () => ({ success: true }) }))
   delete (window as any).__ledgerPreset
+  mockSetting = { gstRegistered: true }
 })
 
 describe('the supplier-bills screen (9a-3)', () => {
@@ -143,6 +147,20 @@ describe('the supplier-bills screen (9a-3)', () => {
     first.unmount() // off to the purchase form…
     render(view())  // …and back
     await waitFor(() => expect(calls()).toBe(2))
+  })
+
+  it('9a-5: a composition shop is told this is not for it — no 2B fetched, no credit actions', async () => {
+    mockSetting = { gstRegistered: true, compositionCategory: 'trader' }
+    mount()
+    expect(screen.getByTestId('supplier-bills-composition').textContent).toMatch(/Supplier bills are for regular GST shops/)
+    expect(screen.queryByTestId('credit-ready')).toBeNull()
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).startsWith('/api/gstr-2b/reconcile'))).toBe(false)
+  })
+
+  it('9a-5: the reports list and search hide Supplier bills from a composition shop, show it to a regular one', () => {
+    const entry = NAV_REGISTRY.find((d) => d.id === 'gstr-2b')!
+    expect(showsForGstStatus(entry, 'regular')).toBe(true)
+    expect(showsForGstStatus(entry, 'composition')).toBe(false)
   })
 
   it('calm when fine: everything matched → no countdown, no decision list', async () => {

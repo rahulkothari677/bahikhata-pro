@@ -31,6 +31,9 @@ import { haptic } from '@/lib/haptic'
 import { ChevronLeft, ChevronRight, Upload, Download, Loader2, CheckCircle2, FileCheck, FileX, Clock } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { InfoHint } from '@/components/common/InfoHint'
+import { Notice } from '@/components/ui/notice'
+import { useSetting } from '@/hooks/use-setting'
+import { gstStatus } from '@/lib/shop-tax'
 import { useAppStore } from '@/store/app-store'
 import { whatsAppUrl } from '@/lib/whatsapp-link'
 import { purchasePresetFrom, returnPresetFrom, askSupplierText, remindSupplierText } from '@/lib/supplier-bills'
@@ -43,10 +46,15 @@ export function Gstr2bReconciliation() {
   )
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // 9a-5: IMS and GSTR-2B credit are for a regular registration; a composition shop
+  // claims no input credit (s.10(4)) and is not an IMS user (IMS FAQ Q9).
+  const { setting } = useSetting()
+  const composition = gstStatus(setting) === 'composition'
 
   // 🔒 Hooks first — always called unconditionally
   const { data, isLoading, error } = useQuery({
     queryKey: ['gstr-2b-reconcile', month],
+    enabled: !composition,
     // 9a-4: "Add as purchase" and "Record it" send the shop to a form and back. Fetch fresh each
     // time the screen opens (showing the cached answer meanwhile), or the bill just entered read
     // "not in your books" for the app-wide 2-minute cache.
@@ -142,6 +150,14 @@ export function Gstr2bReconciliation() {
     a.click()
     URL.revokeObjectURL(url)
     sonnerToast.success('Reconciliation report downloaded')
+  }
+
+  if (composition) {
+    return (
+      <Notice level="note" title="Supplier bills are for regular GST shops" data-testid="supplier-bills-composition"
+        info="A composition shop does not claim input credit (Section 10(4)) and does not use IMS on the portal. Your returns are CMP-08 every quarter and GSTR-4 once a year — both under Reports."
+      />
+    )
   }
 
   if (isLoading) {
