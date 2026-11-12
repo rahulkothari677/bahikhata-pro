@@ -19,6 +19,8 @@ import {
   assessNoticeRisk,
   RULE_88C,
   RESPONSE_DAYS,
+  twoBCreditForRule88D,
+  gstr1aFixFor88C,
 } from '@/lib/notice-risk'
 
 describe('Rule 88C — GSTR-1 declares more tax than GSTR-3B pays', () => {
@@ -188,5 +190,43 @@ describe('the combined assessment', () => {
     expect(r.overall).toBe('clear')
     expect(r.anyNotice).toBe(false)
     expect(r.rules.every(x => x.consequence === null)).toBe(true)
+  })
+})
+
+describe('9b-3 (#357): the GSTR-2B credit Rule 88D compares', () => {
+  const g = (docType: string, tax: number, itcAvailable = true, isReverseCharge = false) => ({ docType, tax, itcAvailable, isReverseCharge })
+
+  test('bills and suppliers debit notes add, suppliers credit notes take away', () => {
+    // ₹1,800 + ₹90 - ₹180 = ₹1,710
+    expect(twoBCreditForRule88D([g('invoice', 1800), g('debit-note', 90), g('credit-note', 180)]))
+      .toEqual({ bills: 1890, notes: 180, net: 1710 })
+  })
+
+  test('a bill 2B marks "no credit" and a reverse-charge bill are not credit here', () => {
+    expect(twoBCreditForRule88D([g('invoice', 1000), g('invoice', 500, false), g('invoice', 300, true, true)]))
+      .toEqual({ bills: 1000, notes: 0, net: 1000 })
+  })
+
+  test('an empty file gives nothing', () => {
+    expect(twoBCreditForRule88D([])).toEqual({ bills: 0, notes: 0, net: 0 })
+  })
+})
+
+describe('9b-3 (#101): GSTR-1A offered for the 88C gap', () => {
+  const open = { window: { isOpen: true }, corrections: [
+    { inum: 'INV-0007', changes: ['taxable value'], fitsGstr1a: true },
+    { inum: 'INV-0009', changes: ['GSTIN'], fitsGstr1a: false },
+  ] }
+
+  test('a gap with the window open lists the bills GSTR-1A can carry, and counts the rest', () => {
+    expect(gstr1aFixFor88C({ excess: 180 }, open))
+      .toEqual({ bills: [{ inum: 'INV-0007', changes: ['taxable value'] }], blockedCount: 1 })
+  })
+
+  test('no gap, a shut window, or nothing that fits — no offer', () => {
+    expect(gstr1aFixFor88C({ excess: 0 }, open)).toBeNull()
+    expect(gstr1aFixFor88C({ excess: 180 }, { ...open, window: { isOpen: false } })).toBeNull()
+    expect(gstr1aFixFor88C({ excess: 180 }, { ...open, corrections: [open.corrections[1]] })).toBeNull()
+    expect(gstr1aFixFor88C({ excess: 180 }, null)).toBeNull()
   })
 })

@@ -32,7 +32,12 @@ test('GSTR-1 summary compared is sales only — no credit notes', () => {
 })
 
 test('the comparison reads exactly those two figures', () => {
-  expect(recon).toContain('gstr1InvoiceTax: g1.summary?.totalOutputTax || 0')
+  // 9b-3: GSTR-1 through gstr1Declared — the summary, or once filed the snapshot,
+  // which stores the SAME sales-only totals (`...totals`), so the basis is unchanged.
+  expect(recon).toContain('const declared = gstr1Declared(g1)')
+  expect(recon).toContain('gstr1InvoiceTax: declared.tax,')
+  expect(g1).toContain('filedTotalOutputTax: existingSnapshot.totalOutputTax,')
+  expect(g1.match(/\.\.\.totals,/g)?.length).toBe(2)
   expect(recon).toContain('gstr3bOutputTax: g3.totalOutputTax || 0')
 })
 

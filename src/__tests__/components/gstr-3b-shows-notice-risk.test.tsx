@@ -211,4 +211,26 @@ describe('GSTR-3B screen surfaces the notice risk', () => {
     // and it still points at the missing input
     expect(screen.getByText(/import your GSTR-2B/i)).toBeInTheDocument()
   })
+
+  it('9b-3 (#101): with GSTR-1A open, names the bills to file in it', async () => {
+    mockOfflineFetch.mockImplementation(route({
+      ...RISK_NOTICE,
+      rules: [{ ...RISK_NOTICE.rules[0], action: 'File GSTR-1A for this bill before you file GSTR-3B.' }],
+      gstr1aFix: { bills: [{ inum: 'INV-0007', changes: ['taxable value ₹1,000 → ₹800'] }], blockedCount: 2 },
+    }))
+    renderReport()
+
+    expect(await screen.findByText(/File GSTR-1A for this bill/)).toBeInTheDocument()
+    const fix = screen.getByTestId('gstr1a-fix')
+    expect(fix).toHaveTextContent('INV-0007')
+    expect(fix).toHaveTextContent('taxable value ₹1,000 → ₹800')
+    expect(fix).toHaveTextContent('2 more changes go in your next GSTR-1.')
+  })
+
+  it('9b-3: no GSTR-1A list when the route offers none', async () => {
+    mockOfflineFetch.mockImplementation(route(RISK_NOTICE))
+    renderReport()
+    expect(await screen.findByText(/Rule 88C · DRC-01B/)).toBeInTheDocument()
+    expect(screen.queryByTestId('gstr1a-fix')).not.toBeInTheDocument()
+  })
 })

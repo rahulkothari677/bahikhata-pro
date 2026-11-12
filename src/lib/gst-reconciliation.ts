@@ -91,6 +91,23 @@ export interface ReconciliationInput {
   nilExemptNonGst: number
 }
 
+/**
+ * 9b-3: the GSTR-1 figure the comparisons use. Once GSTR-1 is filed it is the
+ * FILED return (its snapshot, same totals as the summary) — the portal compares
+ * that with 3B (Rule 88C), not the books as edited since. Before filing, the
+ * books are what will be filed. /api/gst-reconciliation and /api/notice-risk
+ * both read it here, so the two cards on the GSTR-3B screen cannot disagree.
+ */
+export function gstr1Declared(g1: {
+  summary?: { totalOutputTax?: number; totalTaxableValue?: number } | null
+  snapshot?: { filingStatus?: string; filedTotalOutputTax?: number; filedTotalTaxableValue?: number } | null
+}): { tax: number; taxable: number; filed: boolean } {
+  if (g1.snapshot?.filingStatus === 'filed') {
+    return { tax: g1.snapshot.filedTotalOutputTax || 0, taxable: g1.snapshot.filedTotalTaxableValue || 0, filed: true }
+  }
+  return { tax: g1.summary?.totalOutputTax || 0, taxable: g1.summary?.totalTaxableValue || 0, filed: false }
+}
+
 export function reconcileReturns(input: ReconciliationInput): ReconciliationResult {
   const items: ReconcilingItem[] = []
 

@@ -37,6 +37,7 @@
  * @see lib/gst-reconciliation.ts — explains WHY the two returns differ
  */
 import { roundMoney } from '@/lib/money'
+import { isBillDoc } from '@/lib/gstr2b-match'
 
 /*
  * ⚠️ THESE ARE A GUIDE, NOT THE NOTIFIED RULE. Corrected 29 Aug 2026.
@@ -239,4 +240,55 @@ export function assessNoticeRisk(input: {
     : rules.some(r => r.level === 'difference') ? 'difference' : 'clear'
 
   return { rules, overall, anyNotice }
+}
+
+/**
+ * 9b-3 (#357): the input credit GSTR-2B gives, as Rule 88D compares it.
+ *
+ * The import's own totals add every bill in the file, so a bill 2B marks
+ * "no credit" (itcavl N) and a reverse-charge bill (claimed in 3B 4A(3), not
+ * here) both counted as credit, and a supplier's credit note took nothing
+ * away. 2B's "ITC available" is bills and suppliers' debit notes with credit,
+ * less suppliers' credit notes with credit (GSTN IMS FAQ Q15: an accepted
+ * credit note is "- Full Amount" of ITC).
+ *
+ * `bills` is the side the shop's own purchase bills are held against
+ * (Rule 36(4)); `net` is what 3B's net credit is compared with.
+ */
+export function twoBCreditForRule88D(
+  groups: Array<{ docType: string; itcAvailable: boolean; isReverseCharge: boolean; tax: number }>,
+): { bills: number; notes: number; net: number } {
+  let bills = 0
+  let notes = 0
+  for (const g of groups) {
+    if (!g.itcAvailable || g.isReverseCharge) continue
+    if (isBillDoc(g.docType)) bills += g.tax
+    else if (g.docType === 'credit-note') notes += g.tax
+  }
+  bills = roundMoney(bills)
+  notes = roundMoney(notes)
+  return { bills, notes, net: roundMoney(bills - notes) }
+}
+
+/**
+ * 9b-3 (#101): when GSTR-1 declared more than 3B pays and GSTR-1A is still
+ * open, the bills that changed since filing are the fix — GSTR-1A puts the
+ * right figure on record before 3B (whose Table 3.1 follows GSTR-1/1A since
+ * the July 2025 period). A GSTIN change cannot go in GSTR-1A; it waits for
+ * the next GSTR-1's amendments (correctionFitsGstr1a).
+ *
+ * Null when there is no gap, the window is shut, or nothing fits GSTR-1A —
+ * the card then keeps its general advice.
+ */
+export function gstr1aFixFor88C(
+  rule88C: Pick<RuleAssessment, 'excess'>,
+  gstr1a: {
+    window: { isOpen: boolean }
+    corrections: Array<{ inum: string; changes: string[]; fitsGstr1a: boolean }>
+  } | null | undefined,
+): { bills: Array<{ inum: string; changes: string[] }>; blockedCount: number } | null {
+  if (!(rule88C.excess > 0) || !gstr1a?.window.isOpen) return null
+  const bills = gstr1a.corrections.filter((c) => c.fitsGstr1a).map((c) => ({ inum: c.inum, changes: c.changes }))
+  if (bills.length === 0) return null
+  return { bills, blockedCount: gstr1a.corrections.length - bills.length }
 }

@@ -5,7 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { istMonthStartOffset } from '@/lib/timezone'
 import { stateCodeOf } from '@/lib/gst'
 import { apiError } from '@/lib/api-error'
-import { reconcileReturns } from '@/lib/gst-reconciliation'
+import { reconcileReturns, gstr1Declared } from '@/lib/gst-reconciliation'
 import { getAdvancesForPeriod } from '@/lib/advances-for-period'
 
 /**
@@ -59,9 +59,11 @@ export async function GET(req: NextRequest) {
     const shopStateCode = stateCodeOf(setting)
     const { totals } = await getAdvancesForPeriod(userId, periodStart, periodEnd, shopStateCode)
 
+    // 9b-3: the filed GSTR-1 once it is filed — the same figure the notice-risk card uses.
+    const declared = gstr1Declared(g1)
     const result = reconcileReturns({
-      gstr1InvoiceTax: g1.summary?.totalOutputTax || 0,
-      gstr1InvoiceTaxable: g1.summary?.totalTaxableValue || 0,
+      gstr1InvoiceTax: declared.tax,
+      gstr1InvoiceTaxable: declared.taxable,
       gstr3bOutputTax: g3.totalOutputTax || 0,
       gstr3bTaxable:
         (g3.outwardTaxableValue || 0) + (g3.nilRatedValue || 0) + (g3.exemptValue || 0) + (g3.nonGstValue || 0),

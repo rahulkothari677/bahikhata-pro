@@ -177,6 +177,23 @@ export function NoticeRisk({ month }: { month: string }) {
                     <span className="font-semibold">What to do:</span> {r.action}
                   </p>
                 )}
+                {/* 9b-3 (#101): the bills GSTR-1A carries — the ones changed since GSTR-1 was filed. */}
+                {r.rule === '88C' && data.gstr1aFix && (
+                  <div className="mt-2" data-testid="gstr1a-fix">
+                    <ul className="space-y-1">
+                      {data.gstr1aFix.bills.map((b: { inum: string; changes: string[] }) => (
+                        <li key={b.inum} className={`text-xs ${tone.body}`}>
+                          <span className="font-mono font-medium">{b.inum}</span> — {b.changes.join(', ')}
+                        </li>
+                      ))}
+                    </ul>
+                    {data.gstr1aFix.blockedCount > 0 && (
+                      <p className={`text-xs mt-1.5 ${tone.body} opacity-80`}>
+                        {data.gstr1aFix.blockedCount === 1 ? '1 more change goes' : `${data.gstr1aFix.blockedCount} more changes go`} in your next GSTR-1.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
