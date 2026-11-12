@@ -930,6 +930,13 @@ model Setting {
    * liability that outlives the figures that created it.
    */
   eInvoiceApplicable Boolean?
+  /**
+   * 9b-1 (#106): how the shop files GSTR-1 and GSTR-3B — "monthly" or
+   * "quarterly" (QRMP). NULL means not answered and reads as monthly, which is
+   * what the app always assumed. The portal's own choice decides it; the shop
+   * mirrors it here. Every return date comes from lib/gst-due-dates.ts with this.
+   */
+  gstFilingFrequency String?
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================

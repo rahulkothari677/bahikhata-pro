@@ -107,6 +107,17 @@ export async function PUT(req: NextRequest) {
     }
 
     /*
+     * 9b-1 (#106): monthly or quarterly (QRMP) filing. null clears it back to
+     * "not answered" (read as monthly). Anything else is refused, never guessed.
+     */
+    if (body.gstFilingFrequency !== undefined) {
+      const f = body.gstFilingFrequency
+      if (f === null || f === '') sanitized.gstFilingFrequency = null
+      else if (f === 'monthly' || f === 'quarterly') sanitized.gstFilingFrequency = f
+      else return NextResponse.json({ error: 'gstFilingFrequency must be "monthly" or "quarterly"' }, { status: 400 })
+    }
+
+    /*
      * Composition scheme registration. NULL means the regular scheme.
      *
      * Only the four categories the law defines are accepted. A free string

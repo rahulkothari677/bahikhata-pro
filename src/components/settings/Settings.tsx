@@ -19,6 +19,7 @@ import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
 import { Target, Download, Upload, Calendar, Clock, Coins, PackageX, UserX, FileText} from 'lucide-react'
+import { ChipRow } from '@/components/common/ChipRow'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
@@ -218,6 +219,8 @@ export function Settings({
   const [roundOffEnabled, setRoundOffEnabled] = useState(false)
   // null = never answered, which is deliberately distinct from false.
   const [eInvoiceApplicable, setEInvoiceApplicable] = useState<boolean | null>(null)
+  // 9b-1 (#106): monthly or quarterly (QRMP) filing; null = not answered (read as monthly).
+  const [filingFreq, setFilingFreq] = useState<'monthly' | 'quarterly' | null>(null)
   /*
    * COMPOSITION SCHEME (#42). These had NO surface at all: the scheme could
    * only be switched on by calling the API by hand, while the Reports screen
@@ -316,6 +319,7 @@ export function Settings({
       })
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
       setEInvoiceApplicable(data.setting.eInvoiceApplicable ?? null)
+      setFilingFreq(data.setting.gstFilingFrequency === 'quarterly' || data.setting.gstFilingFrequency === 'monthly' ? data.setting.gstFilingFrequency : null)
       setCompositionCategory(data.setting.compositionCategory ?? null)
       setGstRegistered(!!data.setting.gstRegistered || !!data.setting.compositionCategory)
       /* <input type="date"> speaks YYYY-MM-DD only; anything else renders blank
@@ -460,6 +464,26 @@ export function Settings({
       // server rejected.
       queryClient.invalidateQueries({ queryKey: ['setting'] })
       sonnerToast.error(e?.message || "Couldn't save that setting")
+    }
+  }
+
+  const persistFilingFreq = async (next: 'monthly' | 'quarterly') => {
+    const prev = filingFreq
+    setFilingFreq(next)
+    try {
+      const r = await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gstFilingFrequency: next }),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      if (!r.ok) throw new Error(await readError(r))
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      sonnerToast.success(next === 'quarterly' ? 'Set to quarterly filing' : 'Set to monthly filing')
+    } catch (e: any) {
+      setFilingFreq(prev)
+      sonnerToast.error(e?.message || 'Could not save how you file')
     }
   }
 
@@ -1181,6 +1205,26 @@ export function Settings({
               <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
                 Add your GSTIN below — it must be printed on every bill.
               </p>
+            )}
+
+            {/* 9b-1 (#106): how a regular shop files — every return date follows it (lib/gst-due-dates.ts). */}
+            {gstRegistered && !compositionCategory && (
+              <div className="mt-3" data-testid="filing-frequency">
+                <p className="text-sm font-medium inline-flex items-center gap-1">
+                  I file GST returns
+                  <InfoHint
+                    label="how you file"
+                    text="Choose what you chose on the GST portal. Quarterly (QRMP) is for turnover up to ₹5 crore: GSTR-1 and GSTR-3B once a quarter, and tax paid monthly on the 25th (PMT-06). Every date EkBook shows follows this."
+                  />
+                </p>
+                <ChipRow
+                  ariaLabel="I file GST returns"
+                  chips={[{ value: 'monthly', label: 'Monthly' }, { value: 'quarterly', label: 'Quarterly (QRMP)' }]}
+                  value={filingFreq ?? ''}
+                  onChange={(v) => persistFilingFreq(v as 'monthly' | 'quarterly')}
+                />
+                {filingFreq === null && <p className="text-xs text-muted-foreground">Not answered yet — monthly dates are shown.</p>}
+              </div>
             )}
 
             {/*
@@ -2349,6 +2393,7 @@ export function Settings({
             />
           </div>
           )}
+
 
 
         </CardContent>

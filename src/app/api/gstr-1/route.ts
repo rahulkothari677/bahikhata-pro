@@ -15,6 +15,7 @@ import {
   type Correction, type CurrentDoc, type IncludedCorrections,
 } from '@/lib/gstr1-amendments'
 import { gstr1aWindow, correctionFitsGstr1a } from '@/lib/gstr1a-window'
+import { filingFrequency } from '@/lib/gst-due-dates'
 import { buildGstr1, documentRow, type Gstr1Transaction, type ShopInfo, type OriginalInvoiceLookup } from '@/lib/gstr1-builder'
 import { getPriorFYBounds } from '@/lib/fiscal-year'
 
@@ -390,14 +391,12 @@ export async function GET(req: NextRequest) {
         where: { userId_monthYear: { userId, monthYear } },
         select: { filingStatus: true },
       })
+      // 9b-1 (#106, #102): the shop's stored frequency — a quarterly filer amends the quarter.
+      const freqRow = await db.setting.findUnique({ where: { userId }, select: { gstFilingFrequency: true } })
       const window = gstr1aWindow({
         gstr1Filed: true,
         gstr3bFiled: own3b?.filingStatus === 'filed',
-        /*
-         * Frequency is not stored anywhere yet, so this passes null and the
-         * window answers for a monthly filer — logged as the known limit.
-         */
-        filingFrequency: null,
+        filingFrequency: filingFrequency(freqRow),
       })
 
       /*
