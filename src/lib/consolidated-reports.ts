@@ -198,6 +198,7 @@ function computeShopAggregates(
       inputTax = roundMoney(inputTax - tax)
     } else if (t.type === 'expense') {
       expenses = roundMoney(expenses + expenseCost(t))   // 9c-3: cost, not cash
+      inputTax = roundMoney(inputTax + tax)              // 9c-3: an expense bill's GST is input tax, as a purchase's
     } else if (t.type === 'income') {
       income = roundMoney(income + t.totalAmount)
     }

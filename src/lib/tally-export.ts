@@ -11,6 +11,7 @@
  *   → downloads .xml file
  */
 
+import { expenseCost } from '@/lib/expense-cost'
 import { formatINR } from './utils'
 import { formatDate } from './utils'
 import { shareOrDownload } from './csv-export'
@@ -31,6 +32,8 @@ export async function exportToTally(
   const vouchers = filtered.map(t => {
     const isSale = t.type === 'sale'
     const isPurchase = t.type === 'purchase'
+    // 9c-3 (#159): an expense's GST is input tax, posted like a purchase's (debit).
+    const taxIsInput = isPurchase || t.type === 'expense'
     const isCreditNote = t.type === 'credit-note'
     const isDebitNote = t.type === 'debit-note'
     // 🔒 V17 Audit Phase 4: Added Credit Note and Debit Note voucher types.
@@ -86,7 +89,7 @@ export async function exportToTally(
             ? `<LEDGERNAME>Purchase Account</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-taxableAmount).toFixed(2)}</AMOUNT>`
             : t.type === 'income'
               ? `<LEDGERNAME>${escapeXml(t.category || 'Other Income')}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-t.totalAmount).toFixed(2)}</AMOUNT>`
-              : `<LEDGERNAME>${escapeXml(t.category || 'Indirect Expenses')}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.totalAmount.toFixed(2)}</AMOUNT>`
+              : `<LEDGERNAME>${escapeXml(t.category || 'Indirect Expenses')}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${expenseCost(t).toFixed(2)}</AMOUNT>`
 
     // Tax ledgers — for credit notes, REVERSE the tax direction
     const taxLedgers: string[] = []
@@ -102,9 +105,9 @@ export async function exportToTally(
       if (t.igst > 0) taxLedgers.push(`<LEDGERNAME>IGST</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-t.igst).toFixed(2)}</AMOUNT>`)
     } else {
       // Normal sale/purchase: CREDIT tax (for sales) or DEBIT tax (for purchases)
-      if (t.cgst > 0) taxLedgers.push(`<LEDGERNAME>CGST</LEDGERNAME><ISDEEMEDPOSITIVE>${isPurchase ? 'No' : 'Yes'}</ISDEEMEDPOSITIVE><AMOUNT>${(isPurchase ? t.cgst : -t.cgst).toFixed(2)}</AMOUNT>`)
-      if (t.sgst > 0) taxLedgers.push(`<LEDGERNAME>SGST</LEDGERNAME><ISDEEMEDPOSITIVE>${isPurchase ? 'No' : 'Yes'}</ISDEEMEDPOSITIVE><AMOUNT>${(isPurchase ? t.sgst : -t.sgst).toFixed(2)}</AMOUNT>`)
-      if (t.igst > 0) taxLedgers.push(`<LEDGERNAME>IGST</LEDGERNAME><ISDEEMEDPOSITIVE>${isPurchase ? 'No' : 'Yes'}</ISDEEMEDPOSITIVE><AMOUNT>${(isPurchase ? t.igst : -t.igst).toFixed(2)}</AMOUNT>`)
+      if (t.cgst > 0) taxLedgers.push(`<LEDGERNAME>CGST</LEDGERNAME><ISDEEMEDPOSITIVE>${taxIsInput ? 'No' : 'Yes'}</ISDEEMEDPOSITIVE><AMOUNT>${(taxIsInput ? t.cgst : -t.cgst).toFixed(2)}</AMOUNT>`)
+      if (t.sgst > 0) taxLedgers.push(`<LEDGERNAME>SGST</LEDGERNAME><ISDEEMEDPOSITIVE>${taxIsInput ? 'No' : 'Yes'}</ISDEEMEDPOSITIVE><AMOUNT>${(taxIsInput ? t.sgst : -t.sgst).toFixed(2)}</AMOUNT>`)
+      if (t.igst > 0) taxLedgers.push(`<LEDGERNAME>IGST</LEDGERNAME><ISDEEMEDPOSITIVE>${taxIsInput ? 'No' : 'Yes'}</ISDEEMEDPOSITIVE><AMOUNT>${(taxIsInput ? t.igst : -t.igst).toFixed(2)}</AMOUNT>`)
     }
 
     // Round Off ledger — makes the voucher balance when totalAmount ≠ (taxable + tax)

@@ -8,6 +8,7 @@
  * Now both read this: the same candidate purchases, the same stored answers, the
  * same sorting (lib/gstr2b-match.ts).
  */
+import { INWARD_TAX_TYPES } from '@/lib/expense-cost'
 import { db } from '@/lib/db'
 import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset } from '@/lib/timezone'
@@ -38,7 +39,7 @@ export async function claimCandidates(userId: string, fp: string) {
   const earliest = earliestClaimableBill(fp)
   return db.transaction.findMany({
     where: {
-      userId, type: 'purchase', deletedAt: null, isReverseCharge: false,
+      userId, type: { in: INWARD_TAX_TYPES }, deletedAt: null, isReverseCharge: false,
       // Bounded by s.16(4): nothing older than last April (April–October) or this April can still be claimed.
       date: { gte: periodFrom(earliest.year, earliest.month, 0), lt: periodFrom(year, month, 1) },
       // Section 17(5): credit on these is blocked outright, so they never enter the claim.

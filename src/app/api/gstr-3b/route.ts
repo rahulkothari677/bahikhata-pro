@@ -1,3 +1,4 @@
+import { INWARD_TAX_TYPES } from '@/lib/expense-cost'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
@@ -78,7 +79,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       _count: true,
     }),
     db.transaction.aggregate({
-      where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
+      where: { userId, type: { in: INWARD_TAX_TYPES }, deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
       _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
       _count: true,
     }),
@@ -167,7 +168,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     `,
     db.transaction.aggregate({
       where: {
-        userId, type: 'purchase', deletedAt: null, isReverseCharge: false,
+        userId, type: { in: INWARD_TAX_TYPES }, deletedAt: null, isReverseCharge: false,
         date: { gte: periodStart, lt: periodEnd },
         // Section 17(5): credit on these is blocked outright, so they never
         // enter the claim — before Rule 36(4) matching is even considered.
@@ -177,7 +178,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       _count: true,
     }),
     db.transaction.aggregate({
-      where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
+      where: { userId, type: { in: INWARD_TAX_TYPES }, deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
       _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
       _count: true,
     }),
@@ -315,7 +316,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
    */
   const blockedAgg = await db.transaction.aggregate({
     where: {
-      userId, type: 'purchase', deletedAt: null, isReverseCharge: false,
+      userId, type: { in: INWARD_TAX_TYPES }, deletedAt: null, isReverseCharge: false,
       date: { gte: periodStart, lt: periodEnd },
       itcBlockedReason: { not: null },
     },
@@ -346,10 +347,17 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'purchase'
       AND t."date" >= ${taxedFrom} AND t."date" < ${periodEnd} AND ti."gstRate" > 0
     GROUP BY ti."transactionId"
+    UNION ALL
+    -- 9c-3 (#159): an expense with GST has no lines; its taxed value is its amount before GST.
+    SELECT t.id, t."subtotal"::text AS "taxedPaise"
+    FROM "Transaction" t
+    WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'expense'
+      AND t."date" >= ${taxedFrom} AND t."date" < ${periodEnd}
+      AND (t."cgst" + t."sgst" + t."igst") > 0
   `
   const taxedById = new Map(taxedRows.map((r) => [r.id, fromPaise(Number(r.taxedPaise))]))
   const itcPeriodIds = await db.transaction.findMany({
-    where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: false, itcBlockedReason: null, date: { gte: periodStart, lt: periodEnd } },
+    where: { userId, type: { in: INWARD_TAX_TYPES }, deletedAt: null, isReverseCharge: false, itcBlockedReason: null, date: { gte: periodStart, lt: periodEnd } },
     select: { id: true },
   })
   const bookItcTaxable = roundMoney(itcPeriodIds.reduce((s, p) => s + (taxedById.get(p.id) || 0), 0))

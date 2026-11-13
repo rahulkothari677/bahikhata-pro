@@ -21,6 +21,7 @@ import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
 import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
 import { gstStatus, chargesGstOnSales, claimsInputCredit } from '@/lib/shop-tax'
+import { expenseAmounts, expenseTakesGst } from '@/lib/expense-cost'
 import { purchaseCostPerUnit, linesAboveMrp, mrpRefusalMessage } from '@/lib/unit-profit'
 import { mrpCheckLines } from '@/lib/line-items'
 import { normalizeToUnit, normalizeUnitName } from '@/lib/units'
@@ -402,6 +403,21 @@ export async function POST(req: NextRequest) {
       // of the zod-validated value. Use validation.data.totalAmount (already
       // coerced to number by z.coerce.number()).
       const amount = validation.data.totalAmount || 0
+      /*
+       * 9c-3 (#159): an expense with a GST bill. A regular shop's GST is split
+       * out (it claims it back) at the bill's place of supply; the cost is the
+       * amount before GST (lib/expense-cost.ts). Any other shop is refused GST
+       * details — its expense is one amount, GST included.
+       */
+      const expenseGst = type === 'expense' ? (validation.data as any).expenseGst : null
+      let gstAmounts: ReturnType<typeof expenseAmounts> | null = null
+      if (expenseGst) {
+        const s = await db.setting.findUnique({ where: { userId }, select: { gstRegistered: true, compositionCategory: true } })
+        if (!expenseTakesGst(gstStatus(s))) {
+          return NextResponse.json({ error: 'GST not claimable', message: 'Only a regular GST shop records GST on an expense. Enter the full amount you paid.' }, { status: 400 })
+        }
+        gstAmounts = expenseAmounts({ ...expenseGst, interState: !!isInterState })
+      }
       // 🔒 V26 R2 (Phase 5): Wrap income/expense create in try/catch for P2002.
       // Was: no clientMutationId in the data block → dedup lookup at :189 could
       // never match → queued income/expense replays duplicated. Now: store the
@@ -415,9 +431,19 @@ export async function POST(req: NextRequest) {
             partyId: partyId || null,  // 🔒 V19-005 FIX: was missing — income/expense can be linked to a party
             category: category || null,
             date: new Date(date || new Date()),
-            subtotal: amount,
-            totalAmount: amount,
-            paidAmount: amount,
+            ...(gstAmounts ? {
+              subtotal: gstAmounts.subtotal,
+              cgst: gstAmounts.cgst, sgst: gstAmounts.sgst, igst: gstAmounts.igst,
+              totalAmount: gstAmounts.totalAmount,
+              paidAmount: gstAmounts.totalAmount,
+              isReverseCharge: gstAmounts.isReverseCharge,
+              isInterState: !!isInterState,
+              placeOfSupply,
+            } : {
+              subtotal: amount,
+              totalAmount: amount,
+              paidAmount: amount,
+            }),
             paymentMode: paymentMode || 'cash',
             notes: notes || null,
             invoiceNo: invoiceNo || null,

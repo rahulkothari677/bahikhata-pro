@@ -7,6 +7,7 @@ import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibility'
 import { roundMoney, toMoney } from '@/lib/money'
 import { deriveInterStateStatus, billPlaceOfSupply } from '@/lib/gst'
+import { expenseAmounts, expenseTakesGst } from '@/lib/expense-cost'
 import { resolveBillDelivery, shipToChoiceRefusal } from '@/lib/bill-delivery'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
@@ -345,6 +346,29 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const resolvedPayeePhone =
         validation.data.payeePhone !== undefined ? (validation.data.payeePhone || null) : existing.payeePhone
 
+      // 9c-3 (#159): same rule as POST — a regular shop only.
+      const expenseGst = type === 'expense' ? (validation.data as any).expenseGst : null
+      let gstAmounts: ReturnType<typeof expenseAmounts> | null = null
+      /*
+       * An edit that does not SEND the GST bill (the bill screen's edit sends only
+       * an amount) must not wipe it: undefined keeps the stored split; null clears
+       * it. Changing the amount of a GST expense without its bill would turn the
+       * cash (GST included) into the cost, so it is refused.
+       */
+      const hadGst = type === 'expense' && (
+        (existing.cgst || 0) + (existing.sgst || 0) + (existing.igst || 0) > 0 || !!existing.isReverseCharge)
+      const keepStoredGst = type === 'expense' && expenseGst === undefined && hadGst
+      if (keepStoredGst && roundMoney(amount) !== roundMoney(existing.totalAmount)) {
+        return NextResponse.json({ error: 'Edit the GST bill', message: 'This expense has a GST bill. Change its amount from Add Expense with the GST details, or delete and add it again.' }, { status: 400 })
+      }
+      if (expenseGst) {
+        const s = await db.setting.findUnique({ where: { userId }, select: { gstRegistered: true, compositionCategory: true } })
+        if (!expenseTakesGst(gstStatus(s))) {
+          return NextResponse.json({ error: 'GST not claimable', message: 'Only a regular GST shop records GST on an expense. Enter the full amount you paid.' }, { status: 400 })
+        }
+        gstAmounts = expenseAmounts({ ...expenseGst, interState: !!isInterState })
+      }
+
       const transaction = await db.transaction.update({
         where: { id },
         data: {
@@ -353,9 +377,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           payeePhone: resolvedPayeePhone,
           category: category || null,
           date: new Date(date || new Date()),
-          subtotal: amount,
-          totalAmount: amount,
-          paidAmount: amount,
+          // 9c-3 (#159): the GST bill, split for a regular shop (lib/expense-cost.ts); else one amount, no GST.
+          ...(gstAmounts ? {
+            subtotal: gstAmounts.subtotal,
+            cgst: gstAmounts.cgst, sgst: gstAmounts.sgst, igst: gstAmounts.igst,
+            totalAmount: gstAmounts.totalAmount,
+            paidAmount: gstAmounts.totalAmount,
+            isReverseCharge: gstAmounts.isReverseCharge,
+            isInterState: !!isInterState,
+            placeOfSupply,
+          } : keepStoredGst ? {} : {
+            subtotal: amount,
+            totalAmount: amount,
+            paidAmount: amount,
+            ...(type === 'expense' ? { cgst: 0, sgst: 0, igst: 0, isReverseCharge: false } : {}),
+          }),
           paymentMode: paymentMode || 'cash',
           notes: notes || null,
           // 🔒 An OMITTED field must not erase a stored one. `invoiceNo || null`

@@ -27,7 +27,14 @@ import {
   Target, Edit2, X, Repeat, Calendar,
 } from 'lucide-react'
 import { istDateString } from '@/lib/timezone'
-import { expenseCost } from '@/lib/expense-cost'
+import { expenseCost, expenseTakesGst } from '@/lib/expense-cost'
+import { useSetting } from '@/hooks/use-setting'
+import { gstStatus } from '@/lib/shop-tax'
+import { rcmCasesFor } from '@/lib/rcm-cases'
+import { GST_RATE_SLABS } from '@/lib/gst-rates'
+import { roundMoney } from '@/lib/money'
+import { Switch } from '@/components/ui/switch'
+import { InfoHint } from '@/components/common/InfoHint'
 
 const EXPENSE_CATEGORIES = ['Rent', 'Salary', 'Electricity', 'Water', 'Telephone', 'Internet', 'Transport', 'Packaging', 'Marketing', 'Maintenance', 'Bank Charges', 'Insurance', 'Taxes', 'Miscellaneous']
 const INCOME_CATEGORIES = ['Commission', 'Interest', 'Rent Received', 'Scrap Sale', 'Discount Received', 'Refund', 'Miscellaneous']
@@ -462,6 +469,12 @@ export function IncomeExpense() {
                           )}>
                             {isIncome ? '+' : '-'}{formatINR(txn.totalAmount)}
                           </p>
+                          {/* 9c-3: what was paid, above; the GST in it comes back as credit. */}
+                          {!isIncome && ((txn.cgst || 0) + (txn.sgst || 0) + (txn.igst || 0)) > 0 && (
+                            <p className="text-xs text-muted-foreground tabular-nums">
+                              {txn.isReverseCharge ? 'reverse charge ' : 'incl. '}{formatINR(roundMoney((txn.cgst || 0) + (txn.sgst || 0) + (txn.igst || 0)))} GST
+                            </p>
+                          )}
                         </div>
                         <Button aria-label="Delete entry"
                           variant="ghost"
@@ -761,9 +774,31 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
   const [payeeName, setPayeeName] = useState('')
   const [payeePhone, setPayeePhone] = useState('')
   const [saving, setSaving] = useState(false)
+  // 9c-3 (#159): a regular GST shop's expense bill — the GST comes back as credit (lib/expense-cost.ts).
+  const { setting } = useSetting()
+  const canGst = isExpense && expenseTakesGst(gstStatus(setting))
+  const [gstOn, setGstOn] = useState(false)
+  const [gstRate, setGstRate] = useState(18)
+  const [reverseCharge, setReverseCharge] = useState(false)
+  const [supplierId, setSupplierId] = useState('')
+  const [billNo, setBillNo] = useState('')
+  const { data: partiesData } = useQuery({
+    queryKey: ['parties'],
+    queryFn: async () => (await offlineFetch('/api/parties')).json(),
+    enabled: canGst && gstOn,
+  })
+  const suppliers: Array<{ id: string; name: string; gstin?: string | null }> =
+    (partiesData?.parties || []).filter((p: { type: string }) => p.type === 'supplier' || p.type === 'both')
+  const amountNum = parseFloat(amount) || 0
+  const gstTax = roundMoney(amountNum * gstRate / 100)
 
   useEffect(() => {
     if (open) {
+      setGstOn(false)
+      setGstRate(18)
+      setReverseCharge(false)
+      setSupplierId('')
+      setBillNo('')
       setAmount('')
       setCategory('')
       setCustomCategory('')
@@ -803,6 +838,12 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
           notes,
           payeeName: payeeName.trim() || null,
           payeePhone: payeePhone.trim() || null,
+          // 9c-3: the amount typed is before GST; the server splits and totals it.
+          ...(canGst && gstOn ? {
+            expenseGst: { amountBeforeGst: amt, rate: gstRate, reverseCharge },
+            partyId: supplierId || null,
+            invoiceNo: billNo.trim() || null,
+          } : {}),
         }),
         offline: { invalidate: ['/api/transactions', '/api/dashboard'] },
       })
@@ -834,7 +875,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
-            <Label htmlFor="field-amount-2">Amount (₹) *</Label>
+            <Label htmlFor="field-amount-2">{canGst && gstOn ? 'Amount before GST (₹) *' : 'Amount (₹) *'}</Label>
             <NumberField id="field-amount-2"
               value={amount}
               onValueChange={setAmount}
@@ -845,6 +886,64 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
               decimals={2}
             />
           </div>
+
+          {/* 9c-3 (#159): the GST on the bill, for a regular GST shop — it comes back as credit. */}
+          {canGst && (
+            <div className="rounded-lg bg-muted/30 p-3 space-y-3" data-testid="expense-gst">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center min-w-0">
+                  <Label htmlFor="field-expense-gst" className="text-sm">GST bill</Label>
+                  <InfoHint
+                    label="GST on an expense"
+                    text="Type the amount before GST. The GST is claimed back in GSTR-3B like a purchase's (it is checked against GSTR-2B when you import it), so profit counts the amount before GST. Pick the supplier and their bill number so GSTR-2B can match it."
+                    className="ml-1"
+                  />
+                </div>
+                <Switch id="field-expense-gst" checked={gstOn} onCheckedChange={setGstOn} />
+              </div>
+              {gstOn && (
+                <>
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="GST rate">
+                    {GST_RATE_SLABS.filter((r) => r > 0).map((r) => (
+                      <button key={r} type="button" onClick={() => setGstRate(r)} aria-pressed={gstRate === r}
+                        className={cn('hit-48 min-h-10 rounded-full border px-3 text-xs font-medium',
+                          gstRate === r ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background hover:bg-muted')}>
+                        {r}%
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="field-expense-rcm" className="text-sm">Reverse charge</Label>
+                    <Switch id="field-expense-rcm" checked={reverseCharge} onCheckedChange={setReverseCharge} />
+                  </div>
+                  {reverseCharge && (
+                    <div className="flex flex-wrap gap-2" role="group" aria-label="What is it for?">
+                      {rcmCasesFor('regular').map((c) => (
+                        <button key={c.id} type="button" onClick={() => setGstRate(c.rate)}
+                          className="hit-48 min-h-10 rounded-full border border-border bg-background px-3 text-xs font-medium hover:bg-muted">
+                          {c.label} · {c.rate}%
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select value={supplierId} onValueChange={setSupplierId}>
+                      <SelectTrigger aria-label="Supplier"><SelectValue placeholder="Supplier" /></SelectTrigger>
+                      <SelectContent>
+                        {suppliers.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input value={billNo} onChange={(e) => setBillNo(e.target.value)} placeholder="Their bill no." aria-label="Supplier's bill number" />
+                  </div>
+                  <p className="text-sm tabular-nums" data-testid="expense-gst-line">
+                    {reverseCharge
+                      ? <>You pay {formatINR(amountNum)} · {formatINR(gstTax)} GST you owe, back as credit</>
+                      : <>GST {formatINR(gstTax)} · You pay <span className="font-semibold">{formatINR(roundMoney(amountNum + gstTax))}</span></>}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Category with custom option */}
           <div>

@@ -134,6 +134,12 @@ export const createTransactionSchema = z.object({
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
   payeeAddress: z.string().max(300, 'Address too long').nullable().optional(),  // 9c-4 (#123)
+  // 9c-3 (#159): an expense's GST bill — a regular shop only (lib/expense-cost.ts).
+  expenseGst: z.object({
+    amountBeforeGst: z.coerce.number().min(0).max(100000000),
+    rate: z.coerce.number().min(0).max(100),
+    reverseCharge: z.boolean().optional().default(false),
+  }).nullable().optional(),
   totalAmount: z.coerce.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense only — 🔒 N9: validated
   // V17-Ext Tier 3: Credit/Debit Notes fields
   originalTransactionId: z.string().nullable().optional(),
@@ -208,6 +214,12 @@ export const updateTransactionSchema = z.object({
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
   payeeAddress: z.string().max(300, 'Address too long').nullable().optional(),  // 9c-4 (#123)
+  // 9c-3 (#159): an expense's GST bill — a regular shop only (lib/expense-cost.ts).
+  expenseGst: z.object({
+    amountBeforeGst: z.coerce.number().min(0).max(100000000),
+    rate: z.coerce.number().min(0).max(100),
+    reverseCharge: z.boolean().optional().default(false),
+  }).nullable().optional(),
   totalAmount: z.coerce.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense — 🔒 FIX M5
   // V17-Ext Tier 3: Credit/Debit Notes fields
   // 🔒 R11-4 (Round 11): NO default on affectsStock/noteReason/noteType/
