@@ -1,3 +1,4 @@
+import { expenseCost } from '@/lib/expense-cost'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db, withConnectionRetry } from '@/lib/db'
@@ -323,7 +324,8 @@ async function profitSection({ userId, w }: Ctx) {
   const sale = sums('sale'), ret = sums('credit-note')
   const netSales = netSalesTaxable(sale, ret)
   const profit = netSalesProfit(sale, ret)
-  const income = sums('income').totalAmount, expenses = sums('expense').totalAmount
+  // 9c-3: an expense's cost (lib/expense-cost.ts) — Home and Reports read the same.
+  const income = sums('income').totalAmount, expenses = expenseCost(sums('expense'))
   const rows = cats.map((c) => ({ id: c.category, sales: p2r(c.sales), profit: p2r(c.profit) }))
   // The rows add up to the Home figures; whatever does not is shown, never spread or dropped.
   const unmatched = { sales: remainder(netSales, rows.map((r) => r.sales)), profit: remainder(profit, rows.map((r) => r.profit)) }

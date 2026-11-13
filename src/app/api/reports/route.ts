@@ -24,6 +24,7 @@ import { isNoCostLine, lineCost, marginOnCosted } from '@/lib/unit-profit'
 import { oldestDueSaleSql } from '@/lib/invoice-due-sql'
 import { gstStatus, chargesGstOnSales } from '@/lib/shop-tax'
 import { billPartyName } from '@/lib/walk-in-party'
+import { expenseCost } from '@/lib/expense-cost'
 
 // ⏱️ Vercel serverless timeout — reports can aggregate thousands of
 // transactions and generate large responses. Set explicit maxDuration.
@@ -146,7 +147,7 @@ export async function GET(req: NextRequest) {
             type: 'expense',
             date: { gte: from, lte: to },
           }),
-          _sum: { totalAmount: true },
+          _sum: { subtotal: true },
         }),
         // Income by category
         db.transaction.groupBy({
@@ -195,13 +196,14 @@ export async function GET(req: NextRequest) {
 
       const grossProfit = netSalesProfit(saleAgg, creditNoteAgg)
       const totalRevenue = netSalesTaxable(saleAgg, creditNoteAgg)
-      const totalExpenses = roundMoney(sumOf('expense'))
+      // 9c-3: an expense's cost, not its cash — the GST a regular shop claims back is not a cost (lib/expense-cost.ts).
+      const totalExpenses = roundMoney(kpiAgg.filter(r => r.type === 'expense').reduce((s, r) => s + expenseCost(r._sum), 0))
       const otherIncome = roundMoney(sumOf('income'))
       const netProfit = roundMoney(grossProfit + otherIncome - totalExpenses)
       const purchaseTotal = netPurchasesTaxable(purchaseAgg, debitNoteAgg)
 
       const expensesByCategory = expensesByCatAgg
-        .map(r => ({ name: r.category || 'Other', value: roundMoney(r._sum.totalAmount || 0) }))
+        .map(r => ({ name: r.category || 'Other', value: roundMoney(expenseCost(r._sum)) }))
         .sort((a, b) => b.value - a.value)
 
       const incomeByCategory = incomeByCatAgg
@@ -1319,10 +1321,10 @@ export async function GET(req: NextRequest) {
       pushAccount('GST Output Payable', 'credit', sale.gst - creditNote.gst)
       // Purchases → Debit at TAXABLE value, net of debit notes
       pushAccount('Purchases Account (taxable)', 'debit', purchase.taxable - debitNote.taxable)
-      // GST paid on purchases → an ASSET (input tax credit)
-      pushAccount('GST Input Credit', 'debit', purchase.gst - debitNote.gst)
-      // Expenses → Debit
-      pushAccount('Expenses Account', 'debit', expense.totalAmount)
+      // GST paid on purchases and (9c-3) on expense bills → an ASSET (input tax credit)
+      pushAccount('GST Input Credit', 'debit', purchase.gst - debitNote.gst + expense.gst)
+      // Expenses → Debit, at their cost (lib/expense-cost.ts) — the GST sits in Input Credit above
+      pushAccount('Expenses Account', 'debit', expenseCost({ subtotal: expense.taxable }))
       // Income → Credit
       pushAccount('Other Income Account', 'credit', income.totalAmount)
       // Sundry Debtors/Creditors — all-time, from the canonical balance helper

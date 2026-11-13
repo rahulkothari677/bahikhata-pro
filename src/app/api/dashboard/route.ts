@@ -287,12 +287,13 @@ export async function GET(req: NextRequest) {
             COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${lastWeek.from} AND "date" <= ${lastWeek.to} THEN 1 END) AS lastweek_count,
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfMonth} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric
             - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfMonth} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS month_revenue,
-            COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${startOfMonth} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS month_expenses,
+            -- 9c-3: an expense's COST ("subtotal", lib/expense-cost.ts), not its cash.
+            COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${startOfMonth} AND "date" <= ${now} THEN "subtotal" ELSE 0 END), 0)::numeric AS month_expenses,
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
             - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
             COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric
             + COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS range_profit,
-            COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_expenses,
+            COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric AS range_expenses,
             COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_purchases,
             COALESCE(SUM(CASE WHEN "type" = 'income' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_income,
             COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN 1 END) AS range_sale_count,

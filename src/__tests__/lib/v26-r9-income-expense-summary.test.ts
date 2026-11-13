@@ -19,7 +19,7 @@ import { computeIncomeExpenseSummary } from '@/lib/income-expense-summary'
 
 // ─── Fixture: 250 income rows + 250 expense rows ──────────────────────────
 // All income: ₹100 each → total income = ₹25,000
-// All expense: ₹50 each → total expense = ₹12,500
+// All expense: ₹50 each → total expense = ₹12,500 (9c-3: an expense's cost is its subtotal — lib/expense-cost.ts)
 // Net cashflow = ₹12,500
 // (The old client-side code with limit=200 would have summed only 200 of each,
 //  yielding ₹20,000 / ₹10,000 — a ₹5,000 / ₹2,500 understatement.)
@@ -37,7 +37,7 @@ describe('computeIncomeExpenseSummary [R9-3]', () => {
         return Promise.resolve({ _sum: { totalAmount: INCOME_TOTAL }, _count: INCOME_COUNT })
       }
       if (args.where.type === 'expense') {
-        return Promise.resolve({ _sum: { totalAmount: EXPENSE_TOTAL }, _count: EXPENSE_COUNT })
+        return Promise.resolve({ _sum: { subtotal: EXPENSE_TOTAL }, _count: EXPENSE_COUNT })
       }
       return Promise.resolve({ _sum: { totalAmount: 0 }, _count: 0 })
     })
@@ -51,8 +51,8 @@ describe('computeIncomeExpenseSummary [R9-3]', () => {
       }
       if (args.where.type === 'expense') {
         return Promise.resolve([
-          { category: 'Rent', _sum: { totalAmount: 5000 }, _count: 1 },
-          { category: 'Salary', _sum: { totalAmount: 7500 }, _count: 249 },
+          { category: 'Rent', _sum: { subtotal: 5000 }, _count: 1 },
+          { category: 'Salary', _sum: { subtotal: 7500 }, _count: 249 },
         ])
       }
       return Promise.resolve([])
@@ -112,7 +112,7 @@ describe('computeIncomeExpenseSummary [R9-3]', () => {
     ;(jest.spyOn(db.transaction, 'groupBy') as unknown as jest.Mock).mockImplementation((args: any) => {
       if (args.where.type === 'expense') {
         return Promise.resolve([
-          { category: null, _sum: { totalAmount: 5000 }, _count: 5 },
+          { category: null, _sum: { subtotal: 5000 }, _count: 5 },
         ])
       }
       return Promise.resolve([])

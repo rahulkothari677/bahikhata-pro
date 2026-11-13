@@ -1,3 +1,4 @@
+import { expenseCost } from '@/lib/expense-cost'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
@@ -1558,12 +1559,12 @@ export async function POST(req: NextRequest) {
         })
 
         const [sum, catGroups] = await Promise.all([
-          db.transaction.aggregate({ where: expenseWhere, _sum: { totalAmount: true }, _count: true }),
+          db.transaction.aggregate({ where: expenseWhere, _sum: { subtotal: true }, _count: true }),   // 9c-3: cost (lib/expense-cost.ts)
           db.transaction.groupBy({
             by: ['category'],
             where: expenseWhere,
-            _sum: { totalAmount: true },
-            orderBy: { _sum: { totalAmount: 'desc' } },
+            _sum: { subtotal: true },
+            orderBy: { _sum: { subtotal: 'desc' } },
           }),
         ])
 
@@ -1571,7 +1572,7 @@ export async function POST(req: NextRequest) {
         // on what was counted.
         const rows = await db.transaction.findMany({
           where: expenseWhere,
-          select: { id: true, category: true, totalAmount: true, date: true, notes: true },
+          select: { id: true, category: true, subtotal: true, date: true, notes: true },
           orderBy: { date: 'desc' },
           take: 20,
         })
@@ -1605,14 +1606,14 @@ export async function POST(req: NextRequest) {
           })
         }
 
-        const total = roundMoney(sum._sum.totalAmount || 0)
+        const total = roundMoney(expenseCost(sum._sum))
 
         // Where the money went, as words. The breakdown is what a shopkeeper
         // acts on, but it belongs in the sentence — see below for why it is
         // not the receipts.
         const groups: [string, number][] = catGroups.map(g => [
           g.category || 'Uncategorised',
-          roundMoney(g._sum.totalAmount || 0),
+          roundMoney(expenseCost(g._sum)),
         ])
         const breakdown = groups.map(([n, v]) => `${n} ${money(v)}`).join(', ')
 
@@ -1647,7 +1648,7 @@ export async function POST(req: NextRequest) {
             kind: 'transaction' as const,
             id: r.id,
             label: r.category || 'Uncategorised',
-            amount: r.totalAmount,
+            amount: expenseCost(r),
             date: r.date,
           })),
         })

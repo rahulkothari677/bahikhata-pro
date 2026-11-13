@@ -15,6 +15,7 @@
  * it here for aggregation.
  */
 
+import { expenseCost } from '@/lib/expense-cost'
 import { roundMoney } from '@/lib/money'
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -196,7 +197,7 @@ function computeShopAggregates(
       // Debit notes REDUCE input tax (purchase return)
       inputTax = roundMoney(inputTax - tax)
     } else if (t.type === 'expense') {
-      expenses = roundMoney(expenses + t.totalAmount)
+      expenses = roundMoney(expenses + expenseCost(t))   // 9c-3: cost, not cash
     } else if (t.type === 'income') {
       income = roundMoney(income + t.totalAmount)
     }

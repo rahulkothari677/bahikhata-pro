@@ -14,6 +14,7 @@
  * Returns all money values in RUPEES (the money extension converts paise →
  * rupees on read via Prisma's aggregate / groupBy).
  */
+import { expenseCost } from '@/lib/expense-cost'
 import { db, withConnectionRetry } from '@/lib/db'
 import { istDateString } from '@/lib/timezone'
 
@@ -56,7 +57,7 @@ export async function computeIncomeExpenseSummary(
           deletedAt: null,
           date: { gte: from, lte: to },
         },
-        _sum: { totalAmount: true },
+        _sum: { subtotal: true },   // 9c-3: cost (lib/expense-cost.ts)
         _count: true,
       }),
       db.transaction.groupBy({
@@ -79,9 +80,9 @@ export async function computeIncomeExpenseSummary(
           deletedAt: null,
           date: { gte: from, lte: to },
         },
-        _sum: { totalAmount: true },
+        _sum: { subtotal: true },   // 9c-3: cost (lib/expense-cost.ts)
         _count: true,
-        orderBy: { _sum: { totalAmount: 'desc' } },
+        orderBy: { _sum: { subtotal: 'desc' } },
       }),
       db.transaction.count({
         where: {
@@ -97,7 +98,7 @@ export async function computeIncomeExpenseSummary(
   // Profit visibility: zero out totals if the user's role hides profit.
   // Per-category breakdowns are also zeroed (they reveal the same data).
   const totalIncome = hideProfit ? 0 : (incomeAgg._sum.totalAmount ?? 0)
-  const totalExpense = hideProfit ? 0 : (expenseAgg._sum.totalAmount ?? 0)
+  const totalExpense = hideProfit ? 0 : expenseCost(expenseAgg._sum)
   const incomeCats = hideProfit
     ? []
     : incomeByCat.map((r) => ({
@@ -109,7 +110,7 @@ export async function computeIncomeExpenseSummary(
     ? []
     : expenseByCat.map((r) => ({
         category: r.category || 'Other',
-        total: r._sum.totalAmount ?? 0,
+        total: expenseCost(r._sum),
         count: r._count,
       }))
 

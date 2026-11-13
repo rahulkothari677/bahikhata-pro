@@ -27,6 +27,7 @@ import {
   Target, Edit2, X, Repeat, Calendar,
 } from 'lucide-react'
 import { istDateString } from '@/lib/timezone'
+import { expenseCost } from '@/lib/expense-cost'
 
 const EXPENSE_CATEGORIES = ['Rent', 'Salary', 'Electricity', 'Water', 'Telephone', 'Internet', 'Transport', 'Packaging', 'Marketing', 'Maintenance', 'Bank Charges', 'Insurance', 'Taxes', 'Miscellaneous']
 const INCOME_CATEGORIES = ['Commission', 'Interest', 'Rent Received', 'Scrap Sale', 'Discount Received', 'Refund', 'Miscellaneous']
@@ -141,7 +142,7 @@ export function IncomeExpense() {
         const expensesByCategory = new Map<string, number>()
         txns.filter(txn => txn.type === 'expense').forEach(txn => {
           const cat = txn.category || 'Other'
-          expensesByCategory.set(cat, (expensesByCategory.get(cat) || 0) + txn.totalAmount)
+          expensesByCategory.set(cat, (expensesByCategory.get(cat) || 0) + expenseCost(txn))   // 9c-3: cost, as the summary
         })
         return Array.from(expensesByCategory.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4)
       })()

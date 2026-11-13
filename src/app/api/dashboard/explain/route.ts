@@ -1,3 +1,4 @@
+import { expenseCost } from '@/lib/expense-cost'
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
@@ -129,7 +130,7 @@ export async function GET(req: NextRequest) {
         netSales: netSalesTaxable(of('sale'), of('credit-note')),
         profit: netSalesProfit(of('sale'), of('credit-note')),
         income: of('income').totalAmount,
-        expenses: of('expense').totalAmount,
+        expenses: expenseCost(of('expense')),   // 9c-3: cost (lib/expense-cost.ts), as Home
       })
       const current = { ...parts(now), noCost }
       proof = profitProof(current)
@@ -151,21 +152,22 @@ export async function GET(req: NextRequest) {
     } else if (metric === 'expenses') {
       const expenseWhere = activeTransactionWhere(userId, { type: 'expense', date: { gte: w.from, lte: w.to } })
       const [agg, latest, prev] = await withConnectionRetry(() => Promise.all([
-        db.transaction.aggregate({ where: expenseWhere, _sum: { totalAmount: true }, _count: true }),
+        db.transaction.aggregate({ where: expenseWhere, _sum: { subtotal: true }, _count: true }),
         db.transaction.findMany({
           where: expenseWhere,
           orderBy: { date: 'desc' },
           take: PROOF_LIST_LIMIT,
-          select: { totalAmount: true, category: true, payeeName: true, date: true },
+          select: { subtotal: true, category: true, payeeName: true, date: true },
         }),
         sumsByType(userId, w.prevFrom, w.prevTo, ['expense']),
       ]))
+      // 9c-3: Home's Expenses figure is each expense's cost (lib/expense-cost.ts); the proof adds the same.
       const items: ProofRow[] = latest.map((e) => ({
-        label: e.category || e.payeeName || '—', date: e.date.toISOString(), amount: roundMoney(e.totalAmount),
+        label: e.category || e.payeeName || '—', date: e.date.toISOString(), amount: roundMoney(expenseCost(e)),
       }))
       count = agg._count
-      proof = listProof(items, roundMoney(agg._sum.totalAmount ?? 0), agg._count)
-      compare = roundMoney(prev('expense').totalAmount)
+      proof = listProof(items, roundMoney(expenseCost(agg._sum)), agg._count)
+      compare = roundMoney(expenseCost(prev('expense')))
     } else if (metric === 'stock') {
       // Stock value: the dashboard route's own SQL (goods only, oversold counts
       // as 0, rounded per product), listed most valuable first. A snapshot —
