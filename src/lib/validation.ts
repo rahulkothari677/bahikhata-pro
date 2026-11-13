@@ -133,6 +133,7 @@ export const createTransactionSchema = z.object({
   paidAmount: z.coerce.number().min(0).optional(),
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
+  payeeAddress: z.string().max(300, 'Address too long').nullable().optional(),  // 9c-4 (#123)
   totalAmount: z.coerce.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense only — 🔒 N9: validated
   // V17-Ext Tier 3: Credit/Debit Notes fields
   originalTransactionId: z.string().nullable().optional(),
@@ -206,6 +207,7 @@ export const updateTransactionSchema = z.object({
   paidAmount: z.coerce.number().min(0).optional(),
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
+  payeeAddress: z.string().max(300, 'Address too long').nullable().optional(),  // 9c-4 (#123)
   totalAmount: z.coerce.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense — 🔒 FIX M5
   // V17-Ext Tier 3: Credit/Debit Notes fields
   // 🔒 R11-4 (Round 11): NO default on affectsStock/noteReason/noteType/

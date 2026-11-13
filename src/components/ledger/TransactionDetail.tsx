@@ -40,7 +40,7 @@ import { amountToWords } from '@/lib/amount-to-words'
 import { resolveInvoiceDesign } from '@/lib/invoice-presets'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
 import { stateCodeOf } from '@/lib/gst-states'
-import { buildInvoiceDocument, invoiceShopFromSetting, placeOfSupplyLines } from '@/lib/invoice-document'
+import { buildInvoiceDocument, invoiceShopFromSetting, placeOfSupplyLines, noteRecipient } from '@/lib/invoice-document'
 import { CustomFieldInputs } from '@/components/common/CustomFieldInputs'
 import type { CustomFieldDef } from '@/lib/custom-fields'
 import { haptic } from '@/lib/haptic'
@@ -757,6 +757,16 @@ export function TransactionDetail() {
                     {txn.party.address && (
                       <p className="text-xs text-muted-foreground pt-2 border-t border-border">{txn.party.address}</p>
                     )}
+                    {/* 9c-4 (#123): a counter return's customer — the same rule the printed note uses. */}
+                    {(() => {
+                      const r = noteRecipient(txn as Parameters<typeof noteRecipient>[0])
+                      return r ? (
+                        <p className="text-sm pt-2 border-t border-border" data-testid="counter-return-recipient">
+                          Refunded to <span className="font-medium">{r.name}</span>
+                          {r.address ? <span className="text-muted-foreground"> · {r.address}</span> : null}
+                        </p>
+                      ) : null
+                    })()}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">{noPartyName(txn.type)}</p>
@@ -1798,6 +1808,7 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
   const shopStatus = gstStatus(setting)
   // Phase 2c (#114): the same place-of-supply and ship-to lines as the PDF.
   const supplyLines = placeOfSupplyLines(txn, { gstin: setting?.gstin, state: setting?.state })
+  const printRecipient = noteRecipient(txn)
   const shopGstin = shopStatus === 'unregistered' ? null : setting?.gstin
   const heading = documentTitle(txn.type, shopStatus)
   const billShowsGst = billCarriesGstColumns(txn, shopStatus)
@@ -1837,7 +1848,9 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
         <div className="rounded-lg border border-gray-200 p-3 bg-gray-50">
           {/* #202: a purchase's party is the supplier it came FROM; none is a cash purchase. */}
           <p className="text-xs text-gray-500 mb-1.5 font-semibold">{isSupplierSide(txn.type) ? 'Supplier' : 'Bill To'}</p>
-          <p className="font-bold text-sm">{txn.party?.name || noPartyName(txn.type)}</p>
+          {/* 9c-4 (#123): a counter return prints the person refunded (Rule 53(1A)), like the PDF. */}
+          <p className="font-bold text-sm">{printRecipient?.name || txn.party?.name || noPartyName(txn.type)}</p>
+          {printRecipient?.address && <p className="text-xs text-gray-700 mt-0.5">{printRecipient.address}</p>}
           {txn.party?.phone && <p className="text-xs text-gray-700 mt-0.5">{txn.party.phone}</p>}
           {txn.party?.gstin && <p className="text-xs text-gray-700 font-mono mt-0.5">GSTIN: {txn.party.gstin}</p>}
           {txn.party?.address && <p className="text-xs text-gray-700 mt-0.5">{txn.party.address}</p>}

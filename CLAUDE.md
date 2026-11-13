@@ -291,6 +291,10 @@ save.
   `python -I - <<'X'`** and hung the shell for two minutes; it was stopped
   and the file restored from its backup. Break-tests are a script file
   (`break_guards.sh` shape: back up, sed, check the file changed, run, restore).
+  **13 Nov (9c-4): an empty `python -I - <<'EOF'` sat in front of a plain
+  `grep` on the tasklog** and hung the shell for two minutes; nothing ran. It
+  came after a long run of correct commands. A look-up in a file is the Grep
+  tool. Before sending any command, read its FIRST line.
 - **Never `git stash` to compare with main.** `src/lib/utils.ts` shows as
   modified after every checkout (line endings), so `git stash pop` refuses to
   restore and the whole phase sits in the stash. Phase 4a: 90 files stuck

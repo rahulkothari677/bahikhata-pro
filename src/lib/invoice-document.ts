@@ -27,7 +27,7 @@ import { isVisible, VISIBILITY_TOGGLES, type InvoiceVisibility } from './invoice
 import { readCustomValues, type CustomFieldValue } from './custom-fields'
 import { gstStatus, documentTitle, type GstStatus } from './shop-tax'
 import { billPlaceOfSupply, resolveStateCode, stateNameForCode } from './gst-states'
-import { isSupplierSide, noPartyName } from './walk-in-party'
+import { isSupplierSide, noPartyName, isWalkInParty } from './walk-in-party'
 
 export interface InvoiceDocumentItem {
   name: string
@@ -303,6 +303,9 @@ export interface InvoiceSource {
   date: string | Date
   type?: string | null
   party?: InvoiceParty | null
+  /** 9c-4 (#123): on a counter return, who was refunded and where (Transaction.payeeName / payeeAddress). */
+  payeeName?: string | null
+  payeeAddress?: string | null
   items: SourceItem[]
   subtotal: number
   discountAmount: number
@@ -505,7 +508,7 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
       showSignatureBox: isVisible('showSignatureBox', visibility),
       showReceiverSignature: isVisible('showReceiverSignature', visibility),
     },
-    party: src.party ?? null,
+    party: noteRecipient(src) ?? src.party ?? null,
     partyHeading: isSupplierSide(src.type) ? 'Supplier' : 'Bill To',
     noPartyName: noPartyName(src.type),
 
@@ -582,6 +585,20 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
  * 15 Aug.
  */
 /**
+ * 9c-4 (#123): on a counter return — a credit note filed under the shop's Walk-in
+ * Customer, or under no customer — the person refunded, as the note's buyer.
+ * Rule 53(1A) asks an unregistered recipient's name and address. Null when the
+ * note has a real customer (who prints as themselves) or no name was given.
+ */
+export function noteRecipient(src: Pick<InvoiceSource, 'type' | 'party' | 'payeeName' | 'payeeAddress'>): InvoiceParty | null {
+  if (src.type !== 'credit-note') return null
+  if (src.party && !isWalkInParty(src.party)) return null
+  const name = (src.payeeName || '').trim()
+  if (!name) return null
+  return { name, address: (src.payeeAddress || '').trim() || null }
+}
+
+/**
  * The bill's place-of-supply and ship-to lines. (Phase 2c, #114)
  *
  * Was: the party's state exactly as typed ("RJ"), even on a courier sale to
@@ -589,11 +606,14 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
  * name and code, plus the delivery address when the goods went elsewhere.
  */
 export function placeOfSupplyLines(
-  src: Pick<InvoiceSource, 'party' | 'isInterState' | 'placeOfSupply' | 'deliveryState' | 'deliveryAddress'>,
+  src: Pick<InvoiceSource, 'party' | 'isInterState' | 'placeOfSupply' | 'deliveryState' | 'deliveryAddress'> & { type?: string | null },
   shop: Pick<InvoiceShop, 'gstin' | 'state'>,
 ): { placeOfSupply: string | null; shipTo: string | null } {
   const deliveryCode = resolveStateCode(src.deliveryState)
-  const show = !!(src.party?.gstin || src.isInterState || deliveryCode)
+  // 9c-4 (#123): a credit note to a buyer with no GSTIN always names the State and its
+  // code — Rule 53(1A), no value limit (unlike Rule 46(e)'s ₹50,000 on an invoice).
+  const noteToUnregistered = src.type === 'credit-note' && !src.party?.gstin
+  const show = !!(src.party?.gstin || src.isInterState || deliveryCode || noteToUnregistered)
   const pos = show ? billPlaceOfSupply({ ...src, party: src.party ?? null }, shop) : null
   const named = (code: string | null) => (code ? `${stateNameForCode(code)} (${code})` : null)
   const address = (src.deliveryAddress || '').trim()

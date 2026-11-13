@@ -160,6 +160,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const isNote = isCreditNote || isDebitNote
   // V17-Ext Tier 3: Note-specific fields
   const [noteReason, setNoteReason] = useState<string>('')
+  // 9c-4 (#123): a counter return's customer — Rule 53(1A) asks their name and address.
+  const [refundToName, setRefundToName] = useState('')
+  const [refundToAddress, setRefundToAddress] = useState('')
   const [affectsStock, setAffectsStock] = useState(false)
   const [originalTransactionId, setOriginalTransactionId] = useState<string | null>(null)
   /*
@@ -1511,6 +1514,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           noteType: isCreditNote ? 'C' : isDebitNote ? 'D' : undefined,
           noteReason: noteReason || undefined,
           affectsStock: affectsStock || undefined,
+          // 9c-4 (#123): only on a counter return (no customer picked).
+          ...(isCreditNote && !partyId ? { payeeName: refundToName.trim() || null, payeeAddress: refundToAddress.trim() || null } : {}),
           items: items.map((i, idx) => {
             const p = i.productId ? productMap.get(i.productId) : null
             return {
@@ -2697,6 +2702,23 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       {NOTE_REASONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
                     </select>
                   </div>
+                  {/* 9c-4 (#123): a counter return names the customer on the credit note (Rule 53(1A)). */}
+                  {isCreditNote && !partyId && (
+                    <div className="grid gap-2" data-testid="counter-return-customer">
+                      <div className="flex items-center">
+                        <Label className="text-xs" htmlFor="field-refund-name">Customer’s name</Label>
+                        <InfoHint
+                          text="A credit note to a customer without a GSTIN shows their name, address and State (Rule 53(1A)). The State is the bill’s place of supply."
+                          label="customer on the credit note"
+                          className="ml-1"
+                        />
+                      </div>
+                      <Input id="field-refund-name" value={refundToName} maxLength={200}
+                        onChange={(e) => { markDirty(); setRefundToName(e.target.value) }} placeholder="Name" />
+                      <Input id="field-refund-address" value={refundToAddress} maxLength={300} aria-label="Customer’s address"
+                        onChange={(e) => { markDirty(); setRefundToAddress(e.target.value) }} placeholder="Address (optional)" />
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"

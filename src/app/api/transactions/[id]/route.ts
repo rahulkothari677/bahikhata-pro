@@ -864,6 +864,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           deliveryState: delivery.deliveryState,
           deliveryAddress: delivery.deliveryAddress,
           notes: notes || null,
+          // 9c-4 (#123): a counter return's recipient (Rule 53(1A)) — kept unless the edit sends it.
+          ...(type === 'credit-note' ? {
+            payeeName: validation.data.payeeName !== undefined ? (String(validation.data.payeeName ?? '').trim() || null) : existing.payeeName,
+            payeeAddress: (validation.data as any).payeeAddress !== undefined ? (String((validation.data as any).payeeAddress ?? '').trim() || null) : existing.payeeAddress,
+          } : {}),
           // 🔒 An OMITTED field must not erase a stored one. `invoiceNo || null`
           // turned "not sent" into "clear it", so any edit that did not
           // re-send the number wiped it — and on a FILED invoice that destroys

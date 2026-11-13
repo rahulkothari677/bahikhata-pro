@@ -305,6 +305,8 @@ export async function POST(req: NextRequest) {
     const partyId: string | null = (isNoteType(type) && !requestedPartyId)
       ? await getOrCreateWalkInParty(db, userId)
       : requestedPartyId
+    // 9c-4 (#123): a credit note to no saved customer — a counter return.
+    const counterReturn = type === 'credit-note' && !requestedPartyId
 
     // 🔒 FIX H1: Check staff permission based on transaction type
     // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
@@ -936,6 +938,12 @@ export async function POST(req: NextRequest) {
            * makes that a rule instead of an expectation.
            */
           isReverseCharge: type === 'purchase' ? !!isReverseCharge : false,
+          // 9c-4 (#123): a counter return names who was refunded — Rule 53(1A) (name and
+          // address of an unregistered recipient). Only then; a saved customer carries their own.
+          ...(counterReturn ? {
+            payeeName: String(payeeName ?? '').trim() || null,
+            payeeAddress: String(validation.data.payeeAddress ?? '').trim() || null,
+          } : {}),
           // Section 17(5) applies only to purchases — a sale has no input
           // credit to block, so the field is forced null there rather than
           // trusted from the client.

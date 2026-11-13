@@ -305,6 +305,9 @@ model Transaction {
   // Payee info for income/expense (who you paid or received from)
   payeeName       String? // name of person you paid / received from
   payeePhone      String? // mobile number of payee
+  /// 9c-4 (#123): on a counter return (credit note, no customer saved), the address of the
+  /// person refunded — Rule 53(1A) asks an unregistered recipient's name (payeeName) and address.
+  payeeAddress    String?
   // 🔒 V13 L4: Staff accountability — records which user (owner or staff)
   // created this transaction. Null for transactions created before this
   // field was added. Used for audit trail and fraud investigation in
