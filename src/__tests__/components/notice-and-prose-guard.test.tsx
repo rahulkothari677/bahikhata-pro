@@ -28,7 +28,7 @@ import { adHocWarningBoxCount } from '@/test-support/design-rules'
 import { stripComments } from '@/test-support/read-source'
 
 const SRC = path.resolve(process.cwd(), 'src')
-const PROSE_CEILING = 2073 // 8h (#201): the item form's two checkbox explanations went behind ⓘ (was 2117; 2176 before 8c)
+const PROSE_CEILING = 2022 // 9c-2 (#126): the reverse-charge hint went (was 2073). 8h (#201): the item form's two checkbox explanations went behind ⓘ (was 2117; 2176 before 8c)
 const BOX_CEILING = 63 // 8c: the amber "needs amending" card went (8b: 65, the item form's two boxes; was 76)
 /** Legal and marketing pages: long text is their job. */
 const NOT_SCREENS = ['app/terms', 'app/privacy', 'app/landing', 'app/dev']

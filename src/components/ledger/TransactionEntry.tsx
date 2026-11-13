@@ -81,6 +81,7 @@ import { resolveLineIncludesGst } from '@/lib/refill-line'
 import { originalLinesOf, setReturnedQty, returnAll, type OriginalLine } from '@/lib/return-lines'
 import { lineTaxable } from '@/lib/line-taxable'
 import { gstStatus, chargesGstOnSales, claimsInputCredit, isOutwardDocument } from '@/lib/shop-tax'
+import { rcmCasesFor, selfInvoiceDue, type RcmCase } from '@/lib/rcm-cases'
 import { purchaseCostPerUnit, purchaseRateFromCost, isNoCostLine, marginOnCosted, linesAboveMrp, lineAboveMrp, customerPaysPerUnit } from '@/lib/unit-profit'
 import { quantityForAmount } from '@/lib/loose-amount'
 import { nextQtyFor, nextLabel, looseLabel, isLooseUnit, type NextQty } from '@/lib/loose-entry'
@@ -676,6 +677,18 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   }, [])
 
   const selectedParty = allParties.find(p => p.id === partyId)
+
+  /*
+   * 9c-2 (#126): a reverse-charge case sets its rate on every line, or — on an
+   * empty bill — adds the one line it is for, ready for the amount.
+   */
+  const applyRcmCase = (c: RcmCase) => {
+    setItems((prev) => prev.length > 0
+      ? prev.map((i) => ({ ...i, gstRate: c.rate }))
+      : [{ productId: '', productName: c.lineName, quantity: 1, unitPrice: 0, gstRate: c.rate, gstTreatment: null, unit: 'pcs' }])
+  }
+  // Rule 47A: a self-invoice within 30 days when the supplier has no GSTIN — only once a supplier is picked.
+  const rcmSelfInvoiceDue = isReverseCharge && selectedParty ? selfInvoiceDue(date, selectedParty.gstin) : null
 
   // 🔒 R10-1 (2026-07-22): mirror the SERVER's inter-state rule on screen.
   //
@@ -3171,11 +3184,38 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     />
                   </div>
                   {isReverseCharge && (
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-                      {formatINR(totalGst)} will be added to what you owe in GSTR-3B, and claimed
-                      back as credit in the same return. Usual for transport, legal services, and
-                      unregistered suppliers.
-                    </p>
+                    <>
+                      {/* 9c-2 (#126): the cases a shop meets, each with its rate (lib/rcm-cases.ts).
+                          The old line named "unregistered suppliers" — goods from one are NOT reverse
+                          charge for a shop (s.9(4) covers only real-estate promoters). */}
+                      <div className="flex flex-wrap gap-2 mt-2" role="group" aria-label="What is it for?" data-testid="rcm-cases">
+                        {rcmCasesFor(shopGstStatus).map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => { markDirty(); applyRcmCase(c) }}
+                            className="hit-48 min-h-10 rounded-full border border-border bg-background px-3 text-xs font-medium hover:bg-muted"
+                          >
+                            {c.label} · {c.rate}%
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {formatINR(totalGst)} goes in GSTR-3B as tax you pay
+                        {shopGstStatus === 'regular' ? ', and comes back as credit once paid' : ''}.
+                      </p>
+                      {rcmSelfInvoiceDue && (
+                        <p className="text-xs text-check mt-1.5" data-testid="rcm-self-invoice">
+                          Supplier not registered: make a self-invoice by{' '}
+                          {rcmSelfInvoiceDue.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          <InfoHint
+                            text="Rule 47A (from 1 Nov 2024): when the supplier is not registered, you issue the invoice yourself within 30 days of receiving the goods or service."
+                            label="self-invoice"
+                            className="ml-1"
+                          />
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
